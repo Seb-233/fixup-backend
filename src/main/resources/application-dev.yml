@@ -1,0 +1,5 @@
+# Foundation profile without external integrations.
+spring:
+  config:
+    activate:
+      on-profile: dev
