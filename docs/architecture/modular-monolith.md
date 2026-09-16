@@ -1,4 +1,8 @@
-# Reglas del monolito modular
+# Arquitectura del monolito modular
+
+FixUp se ejecuta como una aplicación Spring Boot bajo el paquete raíz `com.fixup`. Spring Modulith interpreta cada subpaquete directo como un módulo cerrado.
+
+## Reglas de módulos
 
 1. Cada módulo es dueño de sus datos y reglas.
 2. Ningún módulo accede a repositorios internos ajenos.

@@ -1,101 +1,122 @@
 # FixUp Backend
 
-Base BACK-000 de un monolito modular bajo `com.fixup`. Sin casos de uso, controladores, entidades, migraciones ni integraciones reales.
+## 1. Descripción
 
-## Herramientas y dependencias
+Backend de FixUp desarrollado como monolito modular con Java, Spring Boot y Spring Modulith. El repositorio organiza los componentes del sistema bajo el paquete raíz `com.fixup`.
 
-Java 21 LTS, Maven 3.9.11 mediante Wrapper, Spring Boot 3.5.16, Spring Modulith 1.4.13 y Springdoc 2.8.17. Incluye Spring Web, Security, OAuth2 Resource Server, Data JPA, PostgreSQL, Flyway, Bean Validation y Actuator; JUnit, ArchUnit, Testcontainers y JaCoCo 0.8.14 para pruebas. Las versiones transitivas las administran los BOM de Boot y Modulith.
+## 2. Objetivo del backend
 
-Compatibilidad: [Spring Modulith](https://docs.spring.io/spring-modulith/reference/appendix.html) y [Springdoc](https://springdoc.org/v2/). Se eligió la línea Boot 3.5 con versiones estables compatibles y Java 21 LTS.
+Proporcionar una base técnica segura y mantenible para los servicios de FixUp, con responsabilidades separadas por módulo y reglas arquitectónicas verificables.
 
-## Preparación local
+## 3. Arquitectura
 
-Instalar un JDK 21 y configurar `JAVA_HOME` hacia el JDK, no un JRE. Verificar `java -version`. No se requiere Maven global. El primer uso del Wrapper requiere acceso a Maven Central.
+Cada módulo encapsula sus datos y reglas, y organiza su código en `api`, `application`, `domain`, `infrastructure` y `web`. La comunicación entre módulos utiliza contratos públicos de `api`; los efectos secundarios se coordinan mediante eventos. `shared` contiene elementos técnicos reutilizables.
 
-Linux/macOS o Git Bash:
+Spring Modulith verifica fronteras y ciclos. ArchUnit restringe dependencias de persistencia y evita que `shared` dependa de módulos del negocio. Consulta la [arquitectura del monolito modular](docs/architecture/modular-monolith.md).
+
+## 4. Tecnologías
+
+- Java 21 LTS y Maven 3.9.11 mediante Maven Wrapper.
+- Spring Boot 3.5.16 y Spring Modulith 1.4.13.
+- Spring Web, Security y OAuth2 Resource Server.
+- Spring Data JPA, PostgreSQL, Flyway y Bean Validation.
+- Actuator y Springdoc OpenAPI 2.8.17.
+- JUnit, ArchUnit, Testcontainers y JaCoCo 0.8.14.
+- Docker, Docker Compose y GitHub Actions.
+
+El archivo `pom.xml` define las dependencias y sus versiones; los BOM de Boot y Modulith administran las versiones transitivas.
+
+## 5. Requisitos previos
+
+Instalar JDK 21 y configurar `JAVA_HOME` hacia el JDK. Verificar `java -version`. No se requiere Maven global: el Wrapper descarga Maven desde Maven Central en su primera ejecución.
+
+Docker con contenedores Linux es opcional para ejecutar Compose. Las pruebas base no requieren Docker, PostgreSQL ni Auth0.
+
+## 6. Configuración local
+
+Copiar `.env.example` a `.env` para preparar las variables locales. El archivo de ejemplo contiene únicamente valores ficticios y `.env` está excluido de Git.
+
+Spring Boot y los scripts no cargan automáticamente `.env`; las variables deben exportarse en la terminal cuando se utilicen. Docker Compose sí carga ese archivo.
+
+Los perfiles disponibles son `dev` y `test`. La configuración mantiene desactivadas las conexiones externas de datasource, JPA, Flyway y OAuth2 Resource Server. Las propiedades de conexión usan variables de entorno sin credenciales incorporadas. CORS está declarado como configuración, sin habilitar acceso entre orígenes.
+
+## 7. Ejecución
+
+Linux, macOS o Git Bash:
 
 ```bash
-./mvnw clean verify
 ./scripts/start-local.sh
 ```
 
 PowerShell:
 
 ```powershell
-.\mvnw.cmd clean verify
 .\mvnw.cmd spring-boot:run "-Dspring-boot.run.profiles=dev"
 ```
 
-El servidor inicia en el puerto 8080. Toda solicitud queda denegada (403); no hay login, API pública, Swagger ni endpoints de Actuator activos. Las pruebas base no requieren Docker, base de datos ni Auth0.
+El servidor utiliza el puerto 8080. La configuración de seguridad deniega las solicitudes HTTP con 403. No hay login ni endpoints funcionales; Swagger y los endpoints de Actuator están desactivados.
 
-La autoconfiguración de datasource, JPA, Flyway, Resource Server y usuario generado está excluida explícitamente para BACK-000. Las propiedades de conexión usan variables sin valores por defecto. No se resuelven para conectarse en esta fase. CORS solo queda declarado, sin habilitar acceso entre orígenes.
-
-Para preparar la configuración futura, copiar `.env.example` a `.env` y mantener solo datos locales ficticios. Spring Boot y los scripts **no cargan automáticamente** archivos `.env`; exportar las variables en la terminal cuando una fase posterior active integraciones. Compose sí utiliza `.env`.
-
-## Docker opcional
-
-Instalar Docker con soporte para contenedores Linux:
+## 8. Pruebas
 
 ```bash
-cp .env.example .env
+./mvnw clean verify
+```
+
+En PowerShell, utilizar `.\mvnw.cmd clean verify`.
+
+La verificación compila, ejecuta pruebas, empaqueta el JAR y genera cobertura. `ModularityTest` exige los 14 módulos y ejecuta `ApplicationModules.verify()`. Las pruebas de contexto comprueban el arranque sin servicios externos y la denegación HTTP.
+
+Los resultados JUnit se encuentran en `target/surefire-reports/` y el reporte de cobertura en `target/site/jacoco/index.html`. GitHub Actions ejecuta la misma verificación y publica ambos reportes como artefactos.
+
+## 9. Docker
+
+Con `.env` preparado a partir del ejemplo:
+
+```bash
 docker compose -f compose.development.yml up --build backend
 docker compose -f compose.development.yml down
 ```
 
-Compose publica únicamente en loopback. PostgreSQL está preparado bajo el perfil opcional `database`:
+Compose publica los puertos únicamente en loopback. El servicio opcional PostgreSQL se inicia con:
 
 ```bash
 docker compose -f compose.development.yml --profile database up -d database
 ```
 
-El backend aún no se conecta a PostgreSQL. Al activarlo en una fase posterior, la URL dentro de Compose deberá usar el nombre de servicio `database`, no localhost. No hay tablas ni migraciones. El volumen conserva datos locales al ejecutar `down`.
+El backend tiene la conexión a PostgreSQL desactivada. Una conexión desde otro contenedor debe usar el nombre de servicio `database`, mientras que una conexión desde el host utiliza el puerto publicado. El volumen conserva los datos locales al ejecutar `down`. No se incluyen tablas ni migraciones de negocio.
 
-## Estructura
+## 10. Módulos
+
+Los 14 módulos son `shared`, `identityaccess`, `users`, `fixers`, `properties`, `media`, `requests`, `quotations`, `jobs`, `notifications`, `messaging`, `payments`, `contracts` y `analytics`.
 
 ```text
 src/main/java/com/fixup/
   FixupApplication.java
   shared/{configuration,errors,events,security,utilities}
-  identityaccess/  users/     fixers/       properties/
-  media/           requests/ quotations/   jobs/
-  notifications/   messaging/ payments/    contracts/  analytics/
-    {api,application,domain,infrastructure,web}/
+  <module>/{api,application,domain,infrastructure,web}
 src/main/resources/
-  application.yml  application-dev.yml  application-test.yml
-  db/migration/.gitkeep
-src/test/java/com/fixup/{architecture,unit,integration,e2e}/
-scripts/{build,test,start-local}.sh
-docs/module-rules.md
-.github/workflows/backend-ci.yml
-.mvn/wrapper/maven-wrapper.properties
-Dockerfile  compose.development.yml  mvnw  mvnw.cmd  pom.xml
+  application.yml
+  application-dev.yml
+  application-test.yml
+  db/migration/
+src/test/java/com/fixup/{architecture,unit,integration,e2e}
+scripts/
+docs/architecture/
 ```
 
-## Arquitectura y validación
+Los paquetes reservados se conservan mediante `package-info.java`, sin entidades ni servicios de negocio.
 
-Ver [reglas modulares](docs/module-rules.md). `ModularityTest` exige los 14 módulos y ejecuta `ApplicationModules.verify()`. ArchUnit impide acceso a persistencia desde web o API. Las reglas sobre paquetes todavía vacíos permiten ausencia de clases y se aplicarán al agregarlas. Las pruebas de contexto comprueban el arranque sin servicios externos y la denegación HTTP.
+## 11. Documentación adicional
 
-`./mvnw clean verify` compila, prueba, empaqueta y genera cobertura en `target/site/jacoco/index.html`. Los resultados JUnit están en `target/surefire-reports`. CI ejecuta lo mismo y publica ambos reportes. No se impone un porcentaje de cobertura artificial a esta estructura inicial.
+- [Arquitectura modular](docs/architecture/modular-monolith.md).
+- [Reglas de módulos](docs/module-rules.md).
+- [Guía de contribución](CONTRIBUTING.md).
+- [Política de seguridad](SECURITY.md).
 
-## Seguridad y contribuciones
+## 12. Contribución
 
-Solo se versiona `.env.example`, con valores ficticios. Nunca subir secretos, llaves, tokens, certificados privados, credenciales de servicios, dumps, datos personales o logs sensibles. No registrar contraseñas, tokens, Authorization, documentos, pagos, variables de entorno ni consultas con información sensible. `.gitignore` es una barrera inicial; revisar siempre el diff y los archivos preparados.
+Crear una rama temporal, validar los cambios y abrir un pull request hacia `develop`. Los cambios en ramas permanentes requieren revisión y CI exitoso. Consulta [CONTRIBUTING.md](CONTRIBUTING.md) para convenciones y validaciones.
 
-Si se expone un secreto: detener el trabajo, identificar el secreto y commit sin volver a mostrar su valor, informar y revocar/rotar la credencial. No reutilizarla ni intentar resolverlo borrando en otro commit. Esperar instrucciones antes de limpiar historia y volver a verificar el repositorio.
+## 13. Equipo
 
-Trabajar en ramas; BACK-000 usa `chore/backend-project-structure` y PR a `main`. Sin push directo, force push, reescritura de historia, autoaprobación ni merge sin revisión del orquestador. Usar commits coherentes con prefijos `chore(backend)`, `chore(modules)`, `test(architecture)`, `ci(backend)` o `docs(backend)`.
-
-Antes de revisión:
-
-```bash
-./mvnw clean verify
-git status
-git diff --check
-git ls-files | grep -E '(^|/)\.env($|\.)|\.pem$|\.key$|\.p12$|\.pfx$|\.jks$|\.keystore$|service-account.*\.json$'
-```
-
-La última comprobación solo puede listar `.env.example`.
-
-## Pendientes fuera de BACK-000
-
-Aprobar contratos OpenAPI y ASR antes de activar endpoints, autenticación, persistencia, eventos o lógica de negocio. Definir allowlists de dependencias por módulo según contratos aprobados. Testcontainers queda disponible; sus pruebas reales se agregarán cuando exista persistencia autorizada. El cierre de BACK-000 requiere CI remoto exitoso y revisión humana del PR.
+Proyecto desarrollado por el equipo de FixUp. La participación en el código puede consultarse en el [historial de contribuciones](https://github.com/Seb-233/fixup-backend/graphs/contributors).
