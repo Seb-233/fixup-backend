@@ -1,9 +1,9 @@
 name: Backend CI
 on:
   push:
-    branches: [main, chore/backend-project-structure]
+    branches: [main, develop, 'setup/**', 'feature/**', 'fix/**', 'test/**', 'docs/**', 'release/**', 'hotfix/**']
   pull_request:
-    branches: [main]
+    branches: [main, develop]
 permissions:
   contents: read
 jobs:
