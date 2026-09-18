@@ -2,15 +2,14 @@ package com.fixup.requests.application;
 
 import com.fixup.fixers.api.FixerEligibility;
 import com.fixup.fixers.api.FixerNotEligibleException;
+import com.fixup.fixers.api.Specialty;
 import com.fixup.identityaccess.api.CurrentActor;
 import com.fixup.identityaccess.api.Role;
 import com.fixup.identityaccess.api.UserStatus;
 import com.fixup.requests.api.RepairRequestAccessDeniedException;
-import com.fixup.requests.api.Specialty;
 import com.fixup.requests.domain.RepairRequest;
 import com.fixup.requests.domain.RepairRequests;
 import java.util.List;
-import java.util.Objects;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -39,23 +38,8 @@ public class ListOpenRepairRequests {
             throw new RepairRequestAccessDeniedException();
         }
 
-        var specialtyNames = eligibility.specialtiesOf(actor);
-        if (specialtyNames == null || specialtyNames.isEmpty()) {
-            return List.of();
-        }
-
-        var specialties = specialtyNames.stream()
-                .map(name -> {
-                    try {
-                        return Specialty.valueOf(name);
-                    } catch (IllegalArgumentException ex) {
-                        return null;
-                    }
-                })
-                .filter(Objects::nonNull)
-                .toList();
-
-        if (specialties.isEmpty()) {
+        var specialties = eligibility.specialtiesOf(actor);
+        if (specialties == null || specialties.isEmpty()) {
             return List.of();
         }
 

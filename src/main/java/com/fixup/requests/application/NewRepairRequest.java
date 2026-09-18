@@ -1,9 +1,9 @@
 package com.fixup.requests.application;
 
-import com.fixup.requests.api.Specialty;
+import com.fixup.fixers.api.Specialty;
 import java.util.List;
 
-/** The photo keys are produced by the client after uploading against a signed URL. */
+/** The photo keys are provisional storage keys. */
 public record NewRepairRequest(Specialty specialty, String title, String description,
         List<String> photoKeys) {
 }

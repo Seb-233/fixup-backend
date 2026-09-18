@@ -1,5 +1,6 @@
 package com.fixup.requests.api;
 
+import com.fixup.fixers.api.Specialty;
 import java.util.UUID;
 
 /**

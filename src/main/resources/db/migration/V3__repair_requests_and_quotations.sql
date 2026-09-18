@@ -60,3 +60,17 @@ CREATE TABLE quotations (
 
 CREATE INDEX ix_quotations_request ON quotations (request_id, amount);
 CREATE INDEX ix_quotations_fixer ON quotations (fixer_user_id, created_at DESC);
+
+-- Especialidades persistidas para cada Fixer (módulo fixers).
+-- Nota: se extiende esta migración provisionalmente en feature/fr-uc-18-quotations;
+-- su renumeración definitiva se realizará tras integrar los PR #26 y #27.
+CREATE TABLE fixer_specialties (
+    fixer_user_id UUID NOT NULL REFERENCES fixer_profiles(user_id) ON DELETE CASCADE,
+    specialty VARCHAR(50) NOT NULL,
+    PRIMARY KEY (fixer_user_id, specialty),
+    CONSTRAINT ck_fixer_specialty CHECK (
+        specialty IN ('PLUMBING', 'ELECTRICAL', 'PAINTING', 'CARPENTRY', 'MASONRY', 'GENERAL')
+    )
+);
+
+CREATE INDEX ix_fixer_specialties_specialty ON fixer_specialties (specialty);

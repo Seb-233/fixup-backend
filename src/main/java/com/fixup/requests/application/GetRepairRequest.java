@@ -52,7 +52,7 @@ public class GetRepairRequest {
             try {
                 eligibility.requireVerified(actor);
                 var specialties = eligibility.specialtiesOf(actor);
-                if (specialties != null && specialties.contains(request.specialty().name())) {
+                if (specialties != null && specialties.contains(request.specialty())) {
                     return;
                 }
             } catch (FixerNotEligibleException ex) {

@@ -1,7 +1,7 @@
 package com.fixup.requests.application;
 
 import com.fixup.requests.api.RepairRequestStatus;
-import com.fixup.requests.api.Specialty;
+import com.fixup.fixers.api.Specialty;
 import com.fixup.requests.domain.RepairRequest;
 import java.time.Instant;
 import java.util.List;

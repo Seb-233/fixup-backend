@@ -2,28 +2,20 @@ package com.fixup.fixers.application;
 
 import com.fixup.fixers.api.FixerEligibility;
 import com.fixup.fixers.api.FixerNotEligibleException;
+import com.fixup.fixers.api.Specialty;
 import com.fixup.fixers.domain.FixerProfiles;
 import com.fixup.identityaccess.api.CurrentActor;
+import java.util.Set;
+import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 class VerifyFixerEligibility implements FixerEligibility {
     private final FixerProfiles profiles;
-    private static final java.util.Map<java.util.UUID, java.util.Set<String>> OVERRIDDEN_SPECIALTIES =
-            new java.util.concurrent.ConcurrentHashMap<>();
 
     VerifyFixerEligibility(FixerProfiles profiles) {
         this.profiles = profiles;
-    }
-
-    @Override
-    public void assignSpecialties(java.util.UUID userId, java.util.Set<String> specialties) {
-        if (specialties == null) {
-            OVERRIDDEN_SPECIALTIES.remove(userId);
-        } else {
-            OVERRIDDEN_SPECIALTIES.put(userId, specialties);
-        }
     }
 
     @Override
@@ -35,13 +27,27 @@ class VerifyFixerEligibility implements FixerEligibility {
 
     @Override
     @Transactional(readOnly = true)
-    public java.util.Set<String> specialtiesOf(CurrentActor actor) {
-        var profile = profiles.findByUserId(actor.internalUserId()).orElseThrow(FixerNotEligibleException::new);
-        profile.requireEligible(actor);
-        var overridden = OVERRIDDEN_SPECIALTIES.get(actor.internalUserId());
-        if (overridden != null) {
-            return overridden;
+    public boolean isVerified(CurrentActor actor) {
+        try {
+            requireVerified(actor);
+            return true;
+        } catch (FixerNotEligibleException notEligible) {
+            return false;
         }
-        return profile.specialties();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Set<Specialty> specialtiesOf(CurrentActor actor) {
+        requireVerified(actor);
+        return specialtiesOf(actor.internalUserId());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Set<Specialty> specialtiesOf(UUID fixerUserId) {
+        return profiles.findByUserId(fixerUserId)
+                .map(profile -> profile.specialties())
+                .orElse(Set.of());
     }
 }

@@ -1,6 +1,6 @@
 package com.fixup.requests.domain;
 
-import com.fixup.requests.api.Specialty;
+import com.fixup.fixers.api.Specialty;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;

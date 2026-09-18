@@ -1,7 +1,7 @@
 package com.fixup.requests.infrastructure;
 
 import com.fixup.requests.api.RepairRequestStatus;
-import com.fixup.requests.api.Specialty;
+import com.fixup.fixers.api.Specialty;
 import jakarta.persistence.LockModeType;
 import java.util.List;
 import java.util.Optional;

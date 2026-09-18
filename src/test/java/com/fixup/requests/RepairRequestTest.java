@@ -6,7 +6,7 @@ import com.fixup.identityaccess.api.UserStatus;
 import com.fixup.requests.api.RepairRequestAccessDeniedException;
 import com.fixup.requests.api.RepairRequestConflictException;
 import com.fixup.requests.api.RepairRequestStatus;
-import com.fixup.requests.api.Specialty;
+import com.fixup.fixers.api.Specialty;
 import com.fixup.requests.domain.RepairRequest;
 import java.time.Instant;
 import java.util.List;

@@ -1,8 +1,8 @@
 package com.fixup.requests.web;
 
 import com.fixup.identityaccess.api.CurrentActorProvider;
+import com.fixup.fixers.api.Specialty;
 import com.fixup.requests.api.RepairRequestStatus;
-import com.fixup.requests.api.Specialty;
 import com.fixup.requests.application.CreateRepairRequest;
 import com.fixup.requests.application.GetRepairRequest;
 import com.fixup.requests.application.ListOpenRepairRequests;
@@ -68,8 +68,7 @@ class RepairRequestController {
 
     @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
     @Operation(summary = "Open a repair request",
-            description = "The body carries provisional photo storage keys. Photos are uploaded by the client against a "
-                    + "signed URL, so no image content crosses this API.")
+            description = "The body carries provisional photo storage keys. No raw image binary content crosses this API.")
     @ApiResponse(responseCode = "201", description = "The request is open and visible to the fixers")
     @ResponseStatus(HttpStatus.CREATED)
     RequestDetailResponse open(@Valid @RequestBody OpenRequest body) {

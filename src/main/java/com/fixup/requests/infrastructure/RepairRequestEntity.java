@@ -1,7 +1,7 @@
 package com.fixup.requests.infrastructure;
 
 import com.fixup.requests.api.RepairRequestStatus;
-import com.fixup.requests.api.Specialty;
+import com.fixup.fixers.api.Specialty;
 import com.fixup.requests.domain.RepairRequest;
 import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
