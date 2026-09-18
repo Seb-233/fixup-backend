@@ -41,14 +41,22 @@ class OpenApiContractTest {
         assertThat(paths.fieldNames()).toIterable().containsExactlyInAnyOrder(
                 "/auth/bootstrap", "/auth/me", "/auth/select-role",
                 "/fixers/me/verification", "/fixers/me/verification/documents",
-                "/fixers/{fixerUserId}/verification/approve", "/fixers/{fixerUserId}/verification/reject");
+                "/fixers/{fixerUserId}/verification/approve", "/fixers/{fixerUserId}/verification/reject",
+                "/requests", "/requests/me", "/requests/open", "/requests/{requestId}",
+                "/quotations", "/quotations/me", "/quotations/for-request/{requestId}",
+                "/quotations/{quotationId}/accept");
         for (var endpoint : new String[][]{
                 {"/auth/bootstrap", "post", "200"}, {"/auth/me", "get", "200"},
                 {"/auth/select-role", "post", "200"},
                 {"/fixers/me/verification", "get", "200"},
                 {"/fixers/me/verification/documents", "post", "200"},
                 {"/fixers/{fixerUserId}/verification/approve", "post", "204"},
-                {"/fixers/{fixerUserId}/verification/reject", "post", "204"}}) {
+                {"/fixers/{fixerUserId}/verification/reject", "post", "204"},
+                {"/requests", "post", "201"}, {"/requests/me", "get", "200"},
+                {"/requests/open", "get", "200"}, {"/requests/{requestId}", "get", "200"},
+                {"/quotations", "post", "201"}, {"/quotations/me", "get", "200"},
+                {"/quotations/for-request/{requestId}", "get", "200"},
+                {"/quotations/{quotationId}/accept", "post", "200"}}) {
             var operation = paths.get(endpoint[0]).get(endpoint[1]);
             assertThat(operation.get("security").toString()).contains("bearerAuth");
             for (String code : new String[]{endpoint[2], "400", "401", "403", "409"}) {
@@ -66,6 +74,22 @@ class OpenApiContractTest {
         // No document content crosses this API: the request carries storage keys only.
         assertThat(contract.at("/components/schemas/DocumentRequest/properties").toString())
                 .contains("storageKey").doesNotContain("content", "file");
+        // FR-UC-18: closed taxonomy of trades and closed lifecycle of an offer.
+        assertThat(contract.at("/components/schemas/Specialty/enum").toString())
+                .contains("PLUMBING", "ELECTRICAL", "PAINTING", "CARPENTRY", "MASONRY", "GENERAL");
+        assertThat(contract.at("/components/schemas/RepairRequestStatus/enum").toString())
+                .contains("OPEN", "ASSIGNED");
+        assertThat(contract.at("/components/schemas/QuotationStatus/enum").toString())
+                .contains("SUBMITTED", "ACCEPTED", "REJECTED");
+        assertThat(contract.at("/components/schemas/RequestResponse/properties/assignedFixerUserId/type")
+                .toString()).contains("null");
+        // No photo content crosses this API either: the request carries storage keys only.
+        assertThat(contract.at("/components/schemas/OpenRequest/properties").toString())
+                .contains("photoKeys").doesNotContain("content", "file");
+        // The author of a quotation comes from the validated token, never from the client body.
+        assertThat(contract.at("/components/schemas/QuotationRequest/properties").toString())
+                .contains("requestId", "amount", "estimatedDays")
+                .doesNotContain("fixerUserId", "status");
         Files.createDirectories(Path.of("target"));
         Files.writeString(Path.of("target", "openapi.json"),
                 mapper.writerWithDefaultPrettyPrinter().writeValueAsString(contract) + System.lineSeparator());
