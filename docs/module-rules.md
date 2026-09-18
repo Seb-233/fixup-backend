@@ -2,31 +2,40 @@
 
 1. Cada módulo es dueño de sus datos y reglas.
 2. Ningún módulo accede a repositorios internos ajenos.
-3. No importar `domain`, `application`, `infrastructure` ni `web` de otro módulo.
-4. La comunicación síncrona futura utiliza exclusivamente `api`, declarada como NamedInterface de Spring Modulith.
-5. Los efectos secundarios futuros se coordinan mediante eventos.
-6. `shared` contiene únicamente elementos técnicos realmente reutilizables.
-7. No colocar reglas del negocio en `shared`; tampoco puede depender de los módulos del negocio.
-8. Los controladores no acceden directamente a JPA ni a repositorios; usan la capa de aplicación.
+3. No importar domain, application, infrastructure ni web de otro módulo.
+4. La comunicación síncrona entre módulos usa contratos de api, declarada NamedInterface.
+5. Los eventos permiten coordinar cambios sin invertir las dependencias entre módulos.
+6. shared contiene únicamente elementos técnicos reutilizables.
+7. shared no contiene reglas de negocio ni depende de módulos de negocio.
+8. Los controladores usan casos de uso; no acceden a JPA ni validan JWT manualmente.
 9. Las entidades JPA no se comparten entre módulos ni forman contratos públicos.
-10. No se permiten dependencias circulares.
-11. Spring Modulith verifica fronteras y ciclos en cada build de CI.
-12. Ningún módulo se utiliza como contenedor de código sin clasificar.
+10. No se permiten ciclos.
+11. Spring Modulith verifica fronteras y ciclos durante la verificación.
+12. Los casos de uso reciben CurrentActor; no reciben JWT de otros módulos.
 
-Los módulos son cerrados. Solo los paquetes `api` tienen interfaz nombrada; las raíces se reservan para metadatos, no para clases públicas del negocio. Los subpaquetes de `shared` son privados por defecto; exponer una interfaz técnica específica exige una decisión explícita posterior.
+Los módulos son cerrados. Los paquetes api tienen interfaz nombrada. shared.errors
+expone una interfaz técnica de respuestas HTTP; shared.security permanece interno.
 
-## Capas
+## Capas activas
 
-- `api`: contratos públicos futuros, sin entidades ni repositorios.
-- `application`: coordinación futura de casos de uso.
-- `domain`: reglas y modelos futuros propiedad del módulo.
-- `infrastructure`: adaptadores y persistencia futuros.
-- `web`: adaptadores HTTP futuros basados en contratos aprobados.
+- api: contratos públicos e inmutables, enums y eventos sin entidades JPA.
+- web: adaptación HTTP y Bean Validation, con controladores delgados.
+- application: coordinación transaccional y autorización del caso de uso.
+- domain: modelos, puertos y políticas propios del módulo.
+- infrastructure: persistencia y adaptación de servicios técnicos.
 
-Los paquetes reservados se conservan con `package-info.java`. La configuración de seguridad en `shared.security` deniega solicitudes sin implementar autenticación.
+identityaccess mantiene users/user_roles y obtiene el actor desde una identidad JWT
+validada por Spring Security. fixers mantiene su perfil separado y consume RoleGranted
+por la API de identityaccess. Su listener síncrono participa en la transacción de
+asignación del rol: no hay llamada de identityaccess hacia internals de fixers.
+
+La seguridad técnica valida JWT y acceso general; los casos de uso consultan roles
+internos y estado. La autorización administrativa combina PreAuthorize con la política
+de dominio. Los futuros casos de uso de trabajos deben invocar FixerEligibility.
 
 ## Verificación
 
-`ModularityTest` comprueba el conjunto exacto de módulos para evitar verificaciones vacías y ejecuta `ApplicationModules.of(FixupApplication.class).verify()`. La encapsulación cierra el acceso a internals ajenos. Una regla adicional de ArchUnit impide dependencias de `shared` hacia módulos del negocio.
-
-`LayerRulesTest` añade restricciones para que web y api no dependan de JPA, Spring Data o infraestructura. El sentido del negocio, la propiedad de datos y la clasificación del código también requieren revisión humana; no se presentan como garantías automáticas.
+ModularityTest exige los 14 módulos y ejecuta ApplicationModules.verify().
+LayerRulesTest impide dependencias de shared hacia negocio y dependencias de web/api
+hacia JPA, Spring Data o infrastructure. Las pruebas funcionales se ejecutan con
+migraciones y se repiten contra PostgreSQL con el perfil Maven postgres-it.

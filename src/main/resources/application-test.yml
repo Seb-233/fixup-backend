@@ -1,5 +1,15 @@
-# Foundation profile without external integrations.
 spring:
-  config:
-    activate:
-      on-profile: test
+  datasource:
+    url: jdbc:h2:mem:fixup;MODE=PostgreSQL;DB_CLOSE_DELAY=-1
+    username: sa
+    password:
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: https://issuer.example.test/
+          audiences: https://api.example.test
+          jwk-set-uri: https://issuer.example.test/.well-known/jwks.json
+fixup:
+  cors:
+    allowed-origins: http://localhost:4200
