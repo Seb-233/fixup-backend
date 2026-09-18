@@ -55,15 +55,18 @@ class QuotationController {
     private final ListOwnQuotations listOwn;
     private final ListQuotationsForRequest listForRequest;
     private final AcceptQuotation acceptQuotation;
+    private final com.fixup.quotations.application.RejectQuotation rejectQuotation;
 
     QuotationController(CurrentActorProvider actors, SubmitQuotation submitQuotation,
             ListOwnQuotations listOwn, ListQuotationsForRequest listForRequest,
-            AcceptQuotation acceptQuotation) {
+            AcceptQuotation acceptQuotation,
+            com.fixup.quotations.application.RejectQuotation rejectQuotation) {
         this.actors = actors;
         this.submitQuotation = submitQuotation;
         this.listOwn = listOwn;
         this.listForRequest = listForRequest;
         this.acceptQuotation = acceptQuotation;
+        this.rejectQuotation = rejectQuotation;
     }
 
     @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
@@ -100,6 +103,14 @@ class QuotationController {
     @ApiResponse(responseCode = "200", description = "The accepted quotation")
     QuotationResponse accept(@PathVariable UUID quotationId) {
         return QuotationResponse.of(acceptQuotation.execute(actors.currentActor(), quotationId));
+    }
+
+    @PostMapping("/{quotationId}/reject")
+    @Operation(summary = "Explicitly reject a quotation",
+            description = "The owner of the request rejects a submitted quotation without accepting another.")
+    @ApiResponse(responseCode = "200", description = "The quotation is rejected")
+    QuotationResponse reject(@PathVariable UUID quotationId) {
+        return QuotationResponse.of(rejectQuotation.execute(actors.currentActor(), quotationId));
     }
 
     @Schema(additionalProperties = Schema.AdditionalPropertiesValue.FALSE)

@@ -47,7 +47,12 @@ public class SubmitQuotation {
         var message = draft.message() == null || draft.message().isBlank() ? null : draft.message().trim();
         var quotation = Quotation.submitted(UUID.randomUUID(), draft.requestId(), actor.internalUserId(),
                 draft.amount(), draft.estimatedDays(), message, Instant.now());
-        quotations.create(quotation);
+        try {
+            quotations.create(quotation);
+        } catch (org.springframework.dao.DataIntegrityViolationException ex) {
+            throw new QuotationConflictException("ALREADY_QUOTED",
+                    "This fixer already sent a quotation for the request");
+        }
         return QuotationSummary.of(quotation);
     }
 }

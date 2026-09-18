@@ -17,6 +17,11 @@ class JpaQuotations implements Quotations {
     }
 
     @Override
+    public Optional<Quotation> findById(UUID id) {
+        return repository.findById(id).map(QuotationEntity::toDomain);
+    }
+
+    @Override
     public Optional<Quotation> findByIdForUpdate(UUID id) {
         return repository.findAndLockById(id).map(QuotationEntity::toDomain);
     }

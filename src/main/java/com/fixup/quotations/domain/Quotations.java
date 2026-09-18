@@ -5,6 +5,8 @@ import java.util.Optional;
 import java.util.UUID;
 
 public interface Quotations {
+    Optional<Quotation> findById(UUID id);
+
     /** Reads the quotation for a decision, holding the row until the transaction ends. */
     Optional<Quotation> findByIdForUpdate(UUID id);
 
