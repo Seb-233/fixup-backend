@@ -4,10 +4,8 @@ Fecha local: 2026-09-18 (America/Bogota). Repositorio: Seb-233/fixup-backend.
 Rama: `feature/fr-uc-18-quotations`.
 Base: `develop`, commit `78fb6a5`.
 
-> **Estado de la verificación: pendiente.** Las secciones de resultados quedan sin
-> diligenciar a propósito. El entorno donde se redactó este cambio no tiene acceso a
-> Maven Central, así que `clean verify` no se ejecutó aquí. Nadie debe marcar estas
-> casillas sin haber corrido las órdenes en una máquina con la construcción completa.
+Base: `develop`, commit `78fb6a5`. Verificación ejecutada el 2026-09-18 sobre
+Microsoft OpenJDK 21.0.12 en Windows.
 
 ## Alcance
 
@@ -67,14 +65,20 @@ Solo GET y POST: el CORS del proyecto no habilita otros métodos.
 
 | Ejecución | Resultado |
 | --- | --- |
-| `.\mvnw.cmd clean verify` | pendiente |
-| `.\mvnw.cmd --batch-mode --no-transfer-progress -Ppostgres-it verify` | pendiente |
-| Arquitectura (ArchUnit y Spring Modulith, 14 módulos) | pendiente |
-| OpenAPI (rutas, respuestas, enums y campos opcionales) | pendiente |
+| `.\mvnw.cmd clean verify` | BUILD SUCCESS; 110 pruebas, 0 fallos, 0 errores, 0 omitidas |
+| Arquitectura (ArchUnit y Spring Modulith, 14 módulos) | aprobado |
+| OpenAPI (rutas, respuestas, enums y campos opcionales) | aprobado |
+| `-Ppostgres-it verify` contra PostgreSQL real | no ejecutado |
+| Docker y pruebas HTTP reales | no ejecutado |
 
-`docs/openapi.json` **no** se regeneró en esta entrega, porque se produce a partir de
-`target/openapi.json` durante las pruebas. Debe regenerarse antes de abrir el PR: sin eso,
-el cliente tipado del frontend no puede generarse contra este contrato.
+La primera ejecución falló entera: `photo_order` se declaró `SMALLINT` en la migración
+mientras Hibernate mapea `@OrderColumn` a `integer`, así que la validación de esquema
+tumbó el `EntityManagerFactory` y ningún contexto de Spring arrancó. Los 79 errores eran
+el mismo fallo en cascada. Se corrigió la columna y se repitió el `clean verify` completo;
+el resultado aprobado de arriba es posterior a esa corrección.
+
+`docs/openapi.json` se regeneró desde `target/openapi.json`. La superficie expuesta pasó
+de siete rutas a quince.
 
 ## Pruebas agregadas
 
@@ -89,5 +93,12 @@ que debe agregarse cuando el caso se pruebe contra la base de datos.
 
 ## Límites de la evidencia
 
-Nada de lo escrito aquí se ejecutó. No hay construcción, ni pruebas, ni contenedores, ni
-llamadas HTTP que respalden este documento todavía.
+Las pruebas corrieron con H2 en modo PostgreSQL. Este caso **no** se repitió contra
+PostgreSQL real con el perfil `postgres-it`, ni se levantó el contenedor, ni se hicieron
+llamadas HTTP reales contra el puerto del backend. FR-UC-21 sí tiene esa evidencia; este
+caso todavía no.
+
+Falta además el contrato HTTP de extremo a extremo al estilo de
+`FixerVerificationHttpContract`: hoy las reglas de dominio están cubiertas y el contrato
+OpenAPI está fijado, pero ningún test recorre el flujo completo de abrir una solicitud,
+cotizarla y aceptarla a través de HTTP.
