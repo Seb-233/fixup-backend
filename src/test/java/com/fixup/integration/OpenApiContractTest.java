@@ -44,7 +44,7 @@ class OpenApiContractTest {
                 "/fixers/{fixerUserId}/verification/approve", "/fixers/{fixerUserId}/verification/reject",
                 "/requests", "/requests/me", "/requests/open", "/requests/{requestId}",
                 "/quotations", "/quotations/me", "/quotations/for-request/{requestId}",
-                "/quotations/{quotationId}/accept");
+                "/quotations/{quotationId}/accept", "/quotations/{quotationId}/reject");
         for (var endpoint : new String[][]{
                 {"/auth/bootstrap", "post", "200"}, {"/auth/me", "get", "200"},
                 {"/auth/select-role", "post", "200"},
@@ -56,7 +56,8 @@ class OpenApiContractTest {
                 {"/requests/open", "get", "200"}, {"/requests/{requestId}", "get", "200"},
                 {"/quotations", "post", "201"}, {"/quotations/me", "get", "200"},
                 {"/quotations/for-request/{requestId}", "get", "200"},
-                {"/quotations/{quotationId}/accept", "post", "200"}}) {
+                {"/quotations/{quotationId}/accept", "post", "200"},
+                {"/quotations/{quotationId}/reject", "post", "200"}}) {
             var operation = paths.get(endpoint[0]).get(endpoint[1]);
             assertThat(operation.get("security").toString()).contains("bearerAuth");
             for (String code : new String[]{endpoint[2], "400", "401", "403", "409"}) {
@@ -81,8 +82,11 @@ class OpenApiContractTest {
                 .contains("OPEN", "ASSIGNED");
         assertThat(contract.at("/components/schemas/QuotationStatus/enum").toString())
                 .contains("SUBMITTED", "ACCEPTED", "REJECTED");
-        assertThat(contract.at("/components/schemas/RequestResponse/properties/assignedFixerUserId/type")
+        assertThat(contract.at("/components/schemas/RequestDetailResponse/properties/assignedFixerUserId/type")
                 .toString()).contains("null");
+        assertThat(contract.at("/components/schemas/OpenRequestSummaryResponse/properties").toString())
+                .contains("requestId", "specialty", "title", "createdAt")
+                .doesNotContain("ownerUserId", "description", "photoKeys", "assignedFixerUserId");
         // No photo content crosses this API either: the request carries storage keys only.
         assertThat(contract.at("/components/schemas/OpenRequest/properties").toString())
                 .contains("photoKeys").doesNotContain("content", "file");
