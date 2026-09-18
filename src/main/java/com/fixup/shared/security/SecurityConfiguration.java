@@ -7,8 +7,6 @@ import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.core.env.Environment;
-import org.springframework.core.env.Profiles;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -38,7 +36,7 @@ class SecurityConfiguration {
     }
 
     @Bean
-    SecurityFilterChain securityFilterChain(HttpSecurity http, Environment environment,
+    SecurityFilterChain securityFilterChain(HttpSecurity http,
             RestAuthenticationEntryPoint entryPoint, RestAccessDeniedHandler deniedHandler,
             CorsConfigurationSource corsConfigurationSource, ObjectMapper mapper) throws Exception {
         var converter = new JwtAuthenticationConverter();
@@ -58,10 +56,7 @@ class SecurityConfiguration {
                 .authorizeHttpRequests(requests -> {
                     requests.requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                             .requestMatchers("/actuator/health").permitAll();
-                    if (environment.acceptsProfiles(Profiles.of("dev"))) {
-                        requests.requestMatchers("/v3/api-docs", "/v3/api-docs/**").permitAll();
-                    }
-                    requests.requestMatchers("/api/**").authenticated().anyRequest().denyAll();
+                    requests.requestMatchers("/auth/**").authenticated().anyRequest().denyAll();
                 })
                 .exceptionHandling(errors -> errors.authenticationEntryPoint(entryPoint)
                         .accessDeniedHandler(deniedHandler))

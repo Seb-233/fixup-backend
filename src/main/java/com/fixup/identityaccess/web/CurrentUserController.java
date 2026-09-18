@@ -23,7 +23,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api/v1/users/me")
+@RequestMapping("/auth")
 @SecurityRequirement(name = "bearerAuth")
 @ApiResponses({
     @ApiResponse(responseCode = "400", description = "Invalid role, missing role or unexpected client fields",
@@ -46,7 +46,7 @@ class CurrentUserController {
         this.selectRole = selectRole;
     }
 
-    @GetMapping
+    @GetMapping("/me")
     @Operation(summary = "Read the current internal account")
     @ApiResponse(responseCode = "200", description = "Current active account")
     UserResponse me() {
@@ -54,7 +54,7 @@ class CurrentUserController {
         return new UserResponse(user.id(), user.email(), user.displayName(), user.status(), user.roles());
     }
 
-    @PostMapping("/roles")
+    @PostMapping("/select-role")
     @Operation(summary = "Request an initial role idempotently",
             description = "Only OWNER, TENANT and FIXER are self-assignable. FIXER starts PENDING. "
                     + "Administrative roles require a dedicated administrative use case.")

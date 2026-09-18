@@ -86,9 +86,9 @@ El entorno de desarrollo publica los puertos únicamente en `127.0.0.1`.
 | Método y ruta | Comportamiento |
 | --- | --- |
 | `GET /actuator/health` | Público; devuelve estado sin detalles sensibles |
-| `POST /api/v1/auth/bootstrap` | JWT válido; crea la cuenta sin roles (201) o devuelve la existente (200) |
-| `GET /api/v1/users/me` | Cuenta activa resuelta por subject; no expone externalSubject |
-| `POST /api/v1/users/me/roles` | Asigna OWNER, TENANT o FIXER idempotentemente al usuario actual |
+| `POST /auth/bootstrap` | JWT válido; crea la cuenta sin roles (201) o devuelve la existente (200) |
+| `GET /auth/me` | Cuenta activa resuelta por subject; no expone externalSubject |
+| `POST /auth/select-role` | Asigna OWNER, TENANT o FIXER idempotentemente al usuario actual |
 
 Los errores de autenticación son 401 y los de autorización 403, con JSON uniforme.
 Una cuenta aún no provisionada recibe 409 al consultar `me`. Los cuerpos con campos
@@ -104,8 +104,8 @@ endpoint de autoasignación administrativa ni una cuenta administradora precread
 
 ## OpenAPI y perfiles
 
-- `dev`: JSON público en `/v3/api-docs` para desarrollo.
-- Sin `dev`: documentación HTTP desactivada y rutas de documentación denegadas.
+- `dev`: permite generar el contrato OpenAPI en las pruebas; su endpoint HTTP permanece denegado.
+- Sin `dev`: generación OpenAPI desactivada; las rutas de documentación también están denegadas.
 - Swagger UI permanece desactivado.
 - `test`: base H2 aislada y configuración ficticia; las claves de prueba se generan en memoria.
 

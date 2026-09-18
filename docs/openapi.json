@@ -9,7 +9,7 @@
     "description" : "Generated server url"
   } ],
   "paths" : {
-    "/api/v1/users/me/roles" : {
+    "/auth/select-role" : {
       "post" : {
         "tags" : [ "current-user-controller" ],
         "summary" : "Request an initial role idempotently",
@@ -82,7 +82,7 @@
         } ]
       }
     },
-    "/api/v1/auth/bootstrap" : {
+    "/auth/bootstrap" : {
       "post" : {
         "tags" : [ "auth-controller" ],
         "summary" : "Provision the authenticated identity idempotently",
@@ -164,7 +164,7 @@
         } ]
       }
     },
-    "/api/v1/users/me" : {
+    "/auth/me" : {
       "get" : {
         "tags" : [ "current-user-controller" ],
         "summary" : "Read the current internal account",

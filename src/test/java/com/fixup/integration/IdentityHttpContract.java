@@ -49,6 +49,8 @@ abstract class IdentityHttpContract {
     @Autowired JdbcTemplate jdbc;
     @Autowired ObjectMapper mapper;
     @Autowired BootstrapUser bootstrap;
+    @Autowired @org.springframework.beans.factory.annotation.Qualifier("requestMappingHandlerMapping")
+    org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping mappings;
     @Autowired CurrentActorProvider actors;
     @Autowired AdministrativeRoles administrativeRoles;
     @Autowired FixerEligibility fixerEligibility;
@@ -67,7 +69,7 @@ abstract class IdentityHttpContract {
     }
 
     UUID provision(String subject) throws Exception {
-        var result = mvc.perform(post("/api/v1/auth/bootstrap").with(identity(subject)))
+        var result = mvc.perform(post("/auth/bootstrap").with(identity(subject)))
                 .andExpect(status().isCreated()).andExpect(jsonPath("$.roles").isEmpty())
                 .andReturn();
         return UUID.fromString(mapper.readTree(result.getResponse().getContentAsString()).get("id").asText());
@@ -81,6 +83,26 @@ abstract class IdentityHttpContract {
     }
 
     @Test
+    void retiredRoutesHaveNoHandlersAndRemainDenied() throws Exception {
+        String retiredPrefix = String.join("/", "", "api", "v1");
+        var retiredRoutes = List.of(retiredPrefix + "/auth/bootstrap",
+                retiredPrefix + "/users/me", retiredPrefix + "/users/me/roles");
+        var registered = mappings.getHandlerMethods().keySet().stream()
+                .flatMap(mapping -> mapping.getPatternValues().stream()).toList();
+        assertThat(registered).contains("/auth/bootstrap", "/auth/me", "/auth/select-role")
+                .doesNotContainAnyElementsOf(retiredRoutes);
+        for (int index = 0; index < retiredRoutes.size(); index++) {
+            String path = retiredRoutes.get(index);
+            var request = index == 1 ? get(path) : post(path);
+            mvc.perform(request.with(identity("auth0|retired-route")))
+                    .andExpect(status().isForbidden())
+                    .andExpect(header().doesNotExist("Location"))
+                    .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+        }
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM users", Integer.class)).isZero();
+    }
+
+    @Test
     void publicHealthHasNoDetails() throws Exception {
         mvc.perform(get("/actuator/health")).andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("UP"))
@@ -90,8 +112,8 @@ abstract class IdentityHttpContract {
 
     @Test
     void anonymousApiRequestsReturnUniform401() throws Exception {
-        for (var request : List.of(get("/api/v1/users/me"), post("/api/v1/auth/bootstrap"),
-                post("/api/v1/users/me/roles").contentType(MediaType.APPLICATION_JSON).content("{\"role\":\"OWNER\"}"))) {
+        for (var request : List.of(get("/auth/me"), post("/auth/bootstrap"),
+                post("/auth/select-role").contentType(MediaType.APPLICATION_JSON).content("{\"role\":\"OWNER\"}"))) {
             mvc.perform(request).andExpect(status().isUnauthorized())
                     .andExpect(header().string("WWW-Authenticate", "Bearer"))
                     .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
@@ -103,17 +125,17 @@ abstract class IdentityHttpContract {
 
     @Test
     void malformedBearerReturns401WithoutLeakingToken() throws Exception {
-        mvc.perform(get("/api/v1/users/me").header("Authorization", "Bearer not-a-jwt"))
+        mvc.perform(get("/auth/me").header("Authorization", "Bearer not-a-jwt"))
                 .andExpect(status().isUnauthorized()).andExpect(jsonPath("$.code").value("UNAUTHENTICATED"))
-                .andExpect(jsonPath("$.path").value("/api/v1/users/me"));
+                .andExpect(jsonPath("$.path").value("/auth/me"));
     }
 
     @Test
     void signedValidJwtTraversesRealDecoderAndBootstraps() throws Exception {
         String token = TestJwtConfiguration.token("auth0|signed");
-        mvc.perform(post("/api/v1/auth/bootstrap").header("Authorization", "Bearer " + token))
+        mvc.perform(post("/auth/bootstrap").header("Authorization", "Bearer " + token))
                 .andExpect(status().isCreated()).andExpect(jsonPath("$.status").value("ACTIVE"));
-        mvc.perform(get("/api/v1/users/me").header("Authorization", "Bearer " + token))
+        mvc.perform(get("/auth/me").header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.email").value("synthetic@example.test"));
     }
 
@@ -128,7 +150,7 @@ abstract class IdentityHttpContract {
                 defect.equals("no-expiry") ? null : defect.equals("expired") ? now.minusSeconds(300) : now.plusSeconds(300),
                 defect.equals("future") ? now.plusSeconds(300) : now.minusSeconds(5),
                 defect.equals("signature") ? TestJwtConfiguration.OTHER_KEY : TestJwtConfiguration.KEY);
-        mvc.perform(post("/api/v1/auth/bootstrap").header("Authorization", "Bearer " + token))
+        mvc.perform(post("/auth/bootstrap").header("Authorization", "Bearer " + token))
                 .andExpect(status().isUnauthorized()).andExpect(jsonPath("$.status").value(401));
         assertThat(jdbc.queryForObject("SELECT count(*) FROM users", Integer.class)).isZero();
     }
@@ -136,7 +158,7 @@ abstract class IdentityHttpContract {
     @Test
     void repeatedBootstrapKeepsIdentityAndInitialProfile() throws Exception {
         UUID id = provision("auth0|same-subject");
-        mvc.perform(post("/api/v1/auth/bootstrap").with(jwt().jwt(token -> token.subject("auth0|same-subject")
+        mvc.perform(post("/auth/bootstrap").with(jwt().jwt(token -> token.subject("auth0|same-subject")
                         .claim("email", "changed@example.test").claim("name", "Changed name"))))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.id").value(id.toString()))
                 .andExpect(jsonPath("$.email").value("same@example.test"))
@@ -147,7 +169,7 @@ abstract class IdentityHttpContract {
 
     @Test
     void optionalClaimsAreNotRequiredForBootstrap() throws Exception {
-        mvc.perform(post("/api/v1/auth/bootstrap").with(jwt().jwt(token -> token.subject("auth0|minimal")))
+        mvc.perform(post("/auth/bootstrap").with(jwt().jwt(token -> token.subject("auth0|minimal")))
                         .contentType(MediaType.APPLICATION_JSON).content("{}"))
                 .andExpect(status().isCreated()).andExpect(jsonPath("$.roles").isEmpty());
     }
@@ -156,7 +178,7 @@ abstract class IdentityHttpContract {
     @ValueSource(strings = {"{\"roles\":[\"PLATFORM_ADMIN\"]}", "{\"status\":\"ACTIVE\"}",
             "{\"subject\":\"auth0|victim\"}", "{\"id\":\"00000000-0000-0000-0000-000000000001\"}"})
     void bootstrapRejectsClientIdentityAndPrivileges(String body) throws Exception {
-        mvc.perform(post("/api/v1/auth/bootstrap").with(identity("auth0|attacker"))
+        mvc.perform(post("/auth/bootstrap").with(identity("auth0|attacker"))
                         .contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
         assertThat(jdbc.queryForObject("SELECT count(*) FROM users", Integer.class)).isZero();
@@ -164,7 +186,7 @@ abstract class IdentityHttpContract {
 
     @Test
     void missingInternalAccountRequiresBootstrap() throws Exception {
-        mvc.perform(get("/api/v1/users/me").with(identity("auth0|unknown")))
+        mvc.perform(get("/auth/me").with(identity("auth0|unknown")))
                 .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("USER_NOT_PROVISIONED"));
     }
 
@@ -173,7 +195,7 @@ abstract class IdentityHttpContract {
         UUID alice = provision("auth0|alice");
         UUID bob = provision("auth0|bob");
         assertThat(alice).isNotEqualTo(bob); // Same email is not an identity key.
-        mvc.perform(get("/api/v1/users/me").with(identity("auth0|alice")))
+        mvc.perform(get("/auth/me").with(identity("auth0|alice")))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.id").value(alice.toString()))
                 .andExpect(jsonPath("$.externalSubject").doesNotExist());
     }
@@ -183,8 +205,8 @@ abstract class IdentityHttpContract {
     void inactiveUsersAreForbiddenEverywhere(UserStatus accountStatus) throws Exception {
         UUID id = provision("auth0|inactive");
         jdbc.update("UPDATE users SET status = ? WHERE id = ?", accountStatus.name(), id);
-        for (var request : List.of(get("/api/v1/users/me"), post("/api/v1/auth/bootstrap"),
-                post("/api/v1/users/me/roles").contentType(MediaType.APPLICATION_JSON).content("{\"role\":\"OWNER\"}"))) {
+        for (var request : List.of(get("/auth/me"), post("/auth/bootstrap"),
+                post("/auth/select-role").contentType(MediaType.APPLICATION_JSON).content("{\"role\":\"OWNER\"}"))) {
             mvc.perform(request.with(identity("auth0|inactive"))).andExpect(status().isForbidden())
                     .andExpect(jsonPath("$.status").value(403))
                     .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
@@ -195,7 +217,7 @@ abstract class IdentityHttpContract {
     @EnumSource(value = Role.class, names = {"PLATFORM_ADMIN", "REAL_ESTATE_MANAGER"})
     void cannotSelfAssignAdministrativeRole(Role role) throws Exception {
         provision("auth0|ordinary");
-        mvc.perform(post("/api/v1/users/me/roles").with(identity("auth0|ordinary"))
+        mvc.perform(post("/auth/select-role").with(identity("auth0|ordinary"))
                         .contentType(MediaType.APPLICATION_JSON).content("{\"role\":\"" + role + "\"}"))
                 .andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
         assertThat(jdbc.queryForObject("SELECT count(*) FROM user_roles", Integer.class)).isZero();
@@ -206,7 +228,7 @@ abstract class IdentityHttpContract {
     void selfAssignableRolesAreIdempotentAndFixerStartsPending(Role role) throws Exception {
         UUID id = provision("auth0|self-role");
         for (int attempt = 0; attempt < 2; attempt++) {
-            mvc.perform(post("/api/v1/users/me/roles").with(identity("auth0|self-role"))
+            mvc.perform(post("/auth/select-role").with(identity("auth0|self-role"))
                             .contentType(MediaType.APPLICATION_JSON).content("{\"role\":\"" + role + "\"}"))
                     .andExpect(status().isOk()).andExpect(jsonPath("$.roles[0]").value(role.name()));
         }
@@ -219,7 +241,7 @@ abstract class IdentityHttpContract {
             assertThatThrownBy(() -> fixerEligibility.requireVerified(actor)).isInstanceOf(FixerNotEligibleException.class);
             jdbc.update("UPDATE fixer_profiles SET verification_status = 'VERIFIED' WHERE user_id = ?", id);
             assertThatCode(() -> fixerEligibility.requireVerified(actor)).doesNotThrowAnyException();
-            mvc.perform(post("/api/v1/users/me/roles").with(identity("auth0|self-role"))
+            mvc.perform(post("/auth/select-role").with(identity("auth0|self-role"))
                             .contentType(MediaType.APPLICATION_JSON).content("{\"role\":\"FIXER\"}"))
                     .andExpect(status().isOk());
             assertThat(jdbc.queryForObject("SELECT verification_status FROM fixer_profiles WHERE user_id = ?",
@@ -233,7 +255,7 @@ abstract class IdentityHttpContract {
     @EnumSource(value = FixerVerificationStatus.class, names = {"PENDING", "REJECTED", "SUSPENDED"})
     void fixerRoleAloneNeverAuthorizesWork(FixerVerificationStatus verificationStatus) throws Exception {
         UUID id = provision("auth0|fixer");
-        mvc.perform(post("/api/v1/users/me/roles").with(identity("auth0|fixer"))
+        mvc.perform(post("/auth/select-role").with(identity("auth0|fixer"))
                 .contentType(MediaType.APPLICATION_JSON).content("{\"role\":\"FIXER\"}")).andExpect(status().isOk());
         jdbc.update("UPDATE fixer_profiles SET verification_status = ? WHERE user_id = ?", verificationStatus.name(), id);
         var actor = new CurrentActor(id, "auth0|fixer", Set.of(Role.FIXER), UserStatus.ACTIVE);
@@ -244,11 +266,11 @@ abstract class IdentityHttpContract {
     void clientCannotModifyAnotherUsersRoles() throws Exception {
         UUID attacker = provision("auth0|attacker");
         UUID victim = provision("auth0|victim");
-        mvc.perform(post("/api/v1/users/me/roles").with(identity("auth0|attacker"))
+        mvc.perform(post("/auth/select-role").with(identity("auth0|attacker"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"role\":\"OWNER\",\"id\":\"" + victim + "\"}"))
                 .andExpect(status().isBadRequest());
-        mvc.perform(post("/api/v1/users/me/roles").param("userId", victim.toString()).with(identity("auth0|attacker"))
+        mvc.perform(post("/auth/select-role").param("userId", victim.toString()).with(identity("auth0|attacker"))
                         .contentType(MediaType.APPLICATION_JSON).content("{\"role\":\"OWNER\"}"))
                 .andExpect(status().isOk());
         assertThat(jdbc.queryForObject("SELECT count(*) FROM user_roles WHERE user_id = ?", Integer.class, victim)).isZero();
@@ -259,19 +281,19 @@ abstract class IdentityHttpContract {
     @ValueSource(strings = {"{}", "{\"role\":null}", "{\"role\":\"ROOT\"}", "{\"role\":\"owner\"}"})
     void malformedRoleRequestsReturn400(String body) throws Exception {
         provision("auth0|bad-request");
-        mvc.perform(post("/api/v1/users/me/roles").with(identity("auth0|bad-request"))
+        mvc.perform(post("/auth/select-role").with(identity("auth0|bad-request"))
                         .contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.status").value(400));
     }
 
     @Test
     void corsAllowsConfiguredLocalOriginAndRejectsOthers() throws Exception {
-        mvc.perform(options("/api/v1/users/me/roles").header("Origin", "http://localhost:4200")
+        mvc.perform(options("/auth/select-role").header("Origin", "http://localhost:4200")
                         .header("Access-Control-Request-Method", "POST")
                         .header("Access-Control-Request-Headers", "authorization,content-type"))
                 .andExpect(status().isOk()).andExpect(header().string("Access-Control-Allow-Origin", "http://localhost:4200"))
                 .andExpect(header().doesNotExist("Access-Control-Allow-Credentials"));
-        mvc.perform(options("/api/v1/users/me").header("Origin", "https://untrusted.example.test")
+        mvc.perform(options("/auth/me").header("Origin", "https://untrusted.example.test")
                         .header("Access-Control-Request-Method", "GET"))
                 .andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
     }
@@ -279,7 +301,7 @@ abstract class IdentityHttpContract {
     @Test
     void jwtPrivilegesAndAuthoritiesDoNotReplaceDatabaseRoles() throws Exception {
         UUID id = provision("auth0|forged-role");
-        mvc.perform(get("/api/v1/users/me").with(jwt().jwt(token -> token.subject("auth0|forged-role")
+        mvc.perform(get("/auth/me").with(jwt().jwt(token -> token.subject("auth0|forged-role")
                         .claim("roles", List.of("PLATFORM_ADMIN")).claim("scope", "PLATFORM_ADMIN"))
                         .authorities(new SimpleGrantedAuthority("ROLE_PLATFORM_ADMIN"))))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.roles").isEmpty());
@@ -314,7 +336,7 @@ abstract class IdentityHttpContract {
 
     @Test
     void nonJwtAuthenticationCannotResolveCurrentActor() throws Exception {
-        mvc.perform(get("/api/v1/users/me").with(user("synthetic-user")))
+        mvc.perform(get("/auth/me").with(user("synthetic-user")))
                 .andExpect(status().isUnauthorized()).andExpect(jsonPath("$.code").value("UNAUTHENTICATED"));
     }
 
@@ -365,7 +387,7 @@ abstract class IdentityHttpContract {
         try (var executor = Executors.newFixedThreadPool(3)) {
             var tasks = java.util.Arrays.stream(new Role[]{Role.OWNER, Role.TENANT, Role.FIXER})
                     .<Callable<Void>>map(role -> () -> {
-                        mvc.perform(post("/api/v1/users/me/roles").with(identity("auth0|parallel-roles"))
+                        mvc.perform(post("/auth/select-role").with(identity("auth0|parallel-roles"))
                                         .contentType(MediaType.APPLICATION_JSON).content("{\"role\":\"" + role + "\"}"))
                                 .andExpect(status().isOk());
                         return null;
@@ -380,7 +402,7 @@ abstract class IdentityHttpContract {
 
     @Test
     void invalidInitialProfileDoesNotPersistPartialAccount() throws Exception {
-        mvc.perform(post("/api/v1/auth/bootstrap").with(jwt().jwt(token -> token.subject("auth0|oversize")
+        mvc.perform(post("/auth/bootstrap").with(jwt().jwt(token -> token.subject("auth0|oversize")
                         .claim("name", "x".repeat(201)))))
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("INVALID_PROFILE"));
         assertThat(jdbc.queryForObject("SELECT count(*) FROM users", Integer.class)).isZero();

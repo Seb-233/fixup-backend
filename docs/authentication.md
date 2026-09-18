@@ -48,7 +48,7 @@ Verificación Fixer: PENDING, VERIFIED, REJECTED, SUSPENDED; es independiente de
 
 ## Bootstrap y concurrencia
 
-`POST /api/v1/auth/bootstrap` admite ausencia de cuerpo o `{}`.
+`POST /auth/bootstrap` admite ausencia de cuerpo o `{}`.
 Una cuenta nueva se crea ACTIVE, sin roles y con UUID generado por el backend (201).
 Una cuenta existente conserva sus datos iniciales y devuelve 200. SUSPENDED y DISABLED
 reciben 403 incluso al repetir bootstrap.
@@ -57,14 +57,14 @@ La restricción única protege solicitudes simultáneas. Un intento de inserció
 colisiona se revierte en una transacción independiente; después se consulta la cuenta
 que ganó la carrera. No se reutiliza una transacción marcada para rollback.
 
-`GET /api/v1/users/me` resuelve CurrentActor desde SecurityContext y PostgreSQL.
+`GET /auth/me` resuelve CurrentActor desde SecurityContext y PostgreSQL.
 Solo acepta JwtAuthenticationToken autenticado. Si falta la cuenta interna, responde
 409 USER_NOT_PROVISIONED; el cliente debe ejecutar bootstrap. La respuesta no expone
 externalSubject. Email y displayName pueden ser null cuando no vienen en el access token.
 
 ## Roles y verificación
 
-`POST /api/v1/users/me/roles`, cuerpo `{"role":"OWNER"}`, permite únicamente
+`POST /auth/select-role`, cuerpo `{"role":"OWNER"}`, permite únicamente
 OWNER, TENANT y FIXER. Una repetición no duplica roles. Un UUID adicional en JSON
 se rechaza; el usuario objetivo siempre proviene de CurrentActor. Se pueden acumular
 los roles permitidos. El bloqueo de la fila de usuario serializa solicitudes concurrentes
@@ -106,7 +106,7 @@ No se utiliza 402 para autenticación o autorización.
   "status": 401,
   "code": "UNAUTHENTICATED",
   "message": "Authentication is required",
-  "path": "/api/v1/users/me"
+  "path": "/auth/me"
 }
 ```
 
@@ -115,7 +115,7 @@ No se utiliza 402 para autenticación o autorización.
   "status": 403,
   "code": "ACCESS_DENIED",
   "message": "You do not have permission to perform this action",
-  "path": "/api/v1/users/me/roles"
+  "path": "/auth/select-role"
 }
 ```
 
@@ -126,15 +126,37 @@ La base de datos debe mantenerse disponible para resolver permisos vigentes.
 
 El [JSON OpenAPI](openapi.json) documenta los tres endpoints, Bearer JWT, esquemas
 Role/UserStatus y códigos de respuesta. `OpenApiContractTest` verifica y exporta el
-contrato a `target/openapi.json`; el snapshot de documentación se actualiza desde esa
+contrato directamente desde el recurso Springdoc a `target/openapi.json`, sin abrir el endpoint HTTP; el snapshot de documentación se actualiza desde esa
 salida revisada. OpenAPI es el contrato HTTP, no un orquestador de módulos.
 
 Solo `/actuator/health` es público en la configuración base, además de OPTIONS.
-Health no expone detalles ni componentes. `/api/**` requiere autenticación y el resto
-queda denegado. En `dev` se publica además `/v3/api-docs`; fuera de desarrollo está
-desactivado y denegado. Swagger UI permanece desactivado.
+Health no expone detalles ni componentes. `/auth/**` requiere autenticación y el resto
+queda denegado, incluido `/v3/api-docs` también en `dev`. La generación interna del
+contrato se conserva en desarrollo y pruebas. Swagger UI permanece desactivado.
 
 Los ensayos con claves efímeras prueban el Resource Server y la autorización interna.
 La integración real de login/renovación de Auth0 y el cliente frontend requieren un
 tenant configurado y access tokens dirigidos a esta API; no se consideran demostrados
 por esas pruebas sintéticas.
+
+## Rutas definitivas y ejemplos curl
+
+Esta entrega expone exclusivamente POST `/auth/bootstrap`, GET `/auth/me` y
+POST `/auth/select-role`. No hay alias, redirecciones ni compatibilidad con las
+rutas retiradas. OPTIONS conserva el tratamiento de preflight CORS existente.
+
+Ejemplos Bash: define TOKEN con un access token válido sin guardarlo en Git.
+BASE_URL puede ajustarse al puerto local (8081 en el entorno de validación).
+
+```bash
+BASE_URL=http://localhost:8081
+curl -i -X POST "$BASE_URL/auth/bootstrap" \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{}'
+curl -i "$BASE_URL/auth/me" -H "Authorization: Bearer $TOKEN"
+curl -i -X POST "$BASE_URL/auth/select-role" \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"role":"OWNER"}'
+```
+
+La prueba de regresión comprueba que las tres rutas retiradas no tienen handlers
+registrados y que, incluso con JWT válido, reciben 403 por `anyRequest().denyAll()`.
+Los códigos y cuerpos de las operaciones vigentes no cambian.

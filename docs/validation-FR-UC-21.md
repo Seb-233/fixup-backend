@@ -4,6 +4,39 @@ Fecha local: 2026-09-17 (America/Bogota). Repositorio: Seb-233/fixup-backend.
 Rama: `feature/fr-uc-21-authentication`.
 Base actualizada: `develop`, commit `12d3eacfcf974e0c767c5d1fd61b080fbd99de12`.
 
+## Actualización de rutas del PR #24
+
+Esta revisión sustituye las rutas de identidad por:
+
+- POST `/auth/bootstrap`, cuerpo `{}`: 201 al crear y 200 al repetir.
+- GET `/auth/me`: 200 para una cuenta activa.
+- POST `/auth/select-role`, cuerpo `{"role":"OWNER"}`: 200.
+
+No existen handlers, alias ni redirecciones para las tres rutas retiradas. La prueba
+de regresión inspecciona los mappings y verifica 403 con autenticación válida por
+la regla final denyAll. La comprobación HTTP real obtuvo también 403 en las tres.
+La búsqueda del prefijo retirado en archivos versionados no encontró coincidencias.
+
+Ambos controladores usan la base `/auth`. Security exige autenticación en
+`/auth/**`, permite health y conserva OPTIONS para CORS. El resto queda denegado,
+incluido el endpoint HTTP de OpenAPI en dev. El contrato se genera directamente
+desde Springdoc durante las pruebas; no se abre una excepción de seguridad para exportarlo.
+
+Los esquemas OpenAPI son idénticos a los del commit anterior; solo cambiaron las
+tres claves de rutas. No se modificaron casos de uso, DTO, roles, estados,
+CurrentActor, validación JWT, migraciones, políticas de dominio, reglas FIXER ni
+códigos HTTP de las operaciones vigentes.
+
+La primera ejecución de esta revisión falló por una inyección ambigua del registro
+de mappings en la prueba nueva. Se añadió el qualifier del registro MVC y se volvió
+a ejecutar clean verify completo; los resultados aprobados abajo son posteriores
+a esa corrección.
+
+Archivos de esta revisión: README.md; docs/authentication.md; docs/openapi.json;
+docs/validation-FR-UC-21.md; AuthController.java; CurrentUserController.java;
+SecurityConfiguration.java; IdentityHttpContract.java; OpenApiContractTest.java.
+
+
 ## Alcance y decisiones
 
 - Auth0 identifica al usuario; Spring Security valida RS256, issuer, audience, tiempo y subject.
@@ -14,15 +47,15 @@ Base actualizada: `develop`, commit `12d3eacfcf974e0c767c5d1fd61b080fbd99de12`.
 - FIXER crea un perfil separado PENDING; la política de elegibilidad exige VERIFIED.
 - Los roles administrativos tienen un caso de uso protegido con @PreAuthorize y política de dominio; no hay endpoint público ni administrador precargado.
 - Flyway crea users, user_roles y fixer_profiles. Hibernate valida el esquema.
-- Health es público sin detalles. OpenAPI JSON solo se publica en dev; Swagger UI está desactivado.
+- Health es público sin detalles. OpenAPI se genera para desarrollo/pruebas y su endpoint HTTP queda denegado; Swagger UI está desactivado.
 
 ## Verificación automatizada
 
 | Ejecución | Resultado |
 | --- | --- |
-| `.\mvnw.cmd clean verify` final | BUILD SUCCESS; 45 pruebas, 0 fallos, 0 errores, 0 omitidas |
-| `.\mvnw.cmd --batch-mode --no-transfer-progress -Ppostgres-it verify` | BUILD SUCCESS; 45 pruebas principales y 42 adicionales contra PostgreSQL 17 real |
-| Maven dentro de la construcción Docker final | BUILD SUCCESS; 45 pruebas, 0 fallos, 0 errores, 0 omitidas |
+| `.\mvnw.cmd clean verify` final | BUILD SUCCESS; 46 pruebas, 0 fallos, 0 errores, 0 omitidas |
+| `.\mvnw.cmd --batch-mode --no-transfer-progress -Ppostgres-it verify` | BUILD SUCCESS; 46 pruebas principales y 43 adicionales contra PostgreSQL 17 real |
+| Maven dentro de la construcción Docker final | BUILD SUCCESS; 46 pruebas, 0 fallos, 0 errores, 0 omitidas |
 | Arquitectura | ArchUnit y Spring Modulith aprobados; 14 módulos |
 | OpenAPI | Bearer, tres rutas, respuestas, roles, estados y campos opcionales/nulos comprobados |
 
@@ -50,8 +83,7 @@ docker compose -f compose.development.yml --profile database ps
 docker compose -f compose.development.yml --profile database logs backend
 ```
 
-No se usó `down -v`. La imagen final se volvió a construir tras ajustar el esquema
-OpenAPI para campos nulos.
+No se usó `down -v`. La imagen final se volvió a construir tras actualizar los mappings de autenticación.
 
 Estado final observado:
 
@@ -67,11 +99,11 @@ Estado final observado:
 Una comprobación HTTP durante la recreación devolvió conexión vacía (HTTP 000).
 Después de completar el arranque se repitió: health 200, API sin token 401 y token
 inválido 401. El intento durante la transición no se contó como una respuesta HTTP válida.
-El JSON OpenAPI final respondió correctamente y contiene las tres rutas.
+El JSON OpenAPI exportado contiene exactamente las tres rutas bajo /auth. Su endpoint HTTP queda denegado.
 
 ## Pruebas HTTP reales
 
-Se verificaron 14 casos a través del puerto HTTP del contenedor:
+Se verificaron 18 casos a través del puerto HTTP del contenedor:
 
 | Caso | Esperado | Observado |
 | --- | --- | --- |
@@ -89,6 +121,10 @@ Se verificaron 14 casos a través del puerto HTTP del contenedor:
 | Issuer incorrecto | 401 | 401 |
 | Audience incorrecta | 401 | 401 |
 | JWT vencido | 401 | 401 |
+| Bootstrap retirado con JWT válido | 403 | 403 |
+| Consulta retirada con JWT válido | 403 | 403 |
+| Selección de rol retirada con JWT válido | 403 | 403 |
+| Endpoint HTTP OpenAPI con JWT válido, incluso en dev | 403 | 403 |
 
 Se comprobó además en PostgreSQL que el perfil del Fixer sintético quedó PENDING.
 El usuario de prueba y sus filas asociadas se retiraron después.
