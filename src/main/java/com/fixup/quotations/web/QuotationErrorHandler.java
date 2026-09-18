@@ -29,10 +29,4 @@ class QuotationErrorHandler {
         return ResponseEntity.status(409).body(new ErrorResponse(409, exception.code(),
                 exception.getMessage(), request.getRequestURI()));
     }
-
-    @ExceptionHandler(org.springframework.dao.DataIntegrityViolationException.class)
-    ResponseEntity<ErrorResponse> duplicate(HttpServletRequest request) {
-        return ResponseEntity.status(409).body(new ErrorResponse(409, "ALREADY_QUOTED",
-                "This fixer already sent a quotation for the request", request.getRequestURI()));
-    }
 }

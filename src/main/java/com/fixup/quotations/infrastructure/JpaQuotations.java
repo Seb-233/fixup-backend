@@ -1,11 +1,13 @@
 package com.fixup.quotations.infrastructure;
 
+import com.fixup.quotations.api.QuotationConflictException;
 import com.fixup.quotations.api.QuotationNotFoundException;
 import com.fixup.quotations.domain.Quotation;
 import com.fixup.quotations.domain.Quotations;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Repository;
 
 @Repository
@@ -52,7 +54,32 @@ class JpaQuotations implements Quotations {
 
     @Override
     public void create(Quotation quotation) {
-        repository.saveAndFlush(QuotationEntity.from(quotation));
+        try {
+            repository.saveAndFlush(QuotationEntity.from(quotation));
+        } catch (DataIntegrityViolationException ex) {
+            if (isUniqueQuotationConstraintViolation(ex)) {
+                throw new QuotationConflictException("ALREADY_QUOTED",
+                        "This fixer already sent a quotation for the request");
+            }
+            throw ex;
+        }
+    }
+
+    private boolean isUniqueQuotationConstraintViolation(DataIntegrityViolationException ex) {
+        Throwable current = ex;
+        while (current != null) {
+            String msg = current.getMessage();
+            if (msg != null && msg.toLowerCase().contains("uq_quotation_request_fixer")) {
+                return true;
+            }
+            if (current instanceof org.hibernate.exception.ConstraintViolationException cve) {
+                if (cve.getConstraintName() != null && cve.getConstraintName().toLowerCase().contains("uq_quotation_request_fixer")) {
+                    return true;
+                }
+            }
+            current = current.getCause();
+        }
+        return false;
     }
 
     @Override

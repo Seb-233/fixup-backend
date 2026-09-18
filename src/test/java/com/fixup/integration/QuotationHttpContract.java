@@ -43,7 +43,7 @@ abstract class QuotationHttpContract {
     @Autowired MockMvc mvc;
     @Autowired JdbcTemplate jdbc;
     @Autowired ObjectMapper mapper;
-    @Autowired FixerEligibility fixerEligibility;
+    @Autowired com.fixup.testsupport.IntegrationDatabaseCleaner databaseCleaner;
     @Autowired EventRecorder events;
 
     public static class EventRecorder {
@@ -63,13 +63,7 @@ abstract class QuotationHttpContract {
     void clearIsolatedTestDatabase() {
         SecurityContextHolder.clearContext();
         events.clear();
-        jdbc.update("DELETE FROM quotations");
-        jdbc.update("DELETE FROM repair_request_photos");
-        jdbc.update("DELETE FROM repair_requests");
-        jdbc.update("DELETE FROM fixer_verification_documents");
-        jdbc.update("DELETE FROM fixer_profiles");
-        jdbc.update("DELETE FROM user_roles");
-        jdbc.update("DELETE FROM users");
+        databaseCleaner.clean();
     }
 
     // ---------- helpers ----------
@@ -105,6 +99,18 @@ abstract class QuotationHttpContract {
         UUID fixerId = provisionFixer(subject);
         jdbc.update("UPDATE fixer_profiles SET verification_status = 'VERIFIED' WHERE user_id = ?", fixerId);
         return fixerId;
+    }
+
+    UUID provisionVerifiedFixer(String subject, String... specialties) throws Exception {
+        UUID fixerId = provisionVerifiedFixer(subject);
+        for (String specialty : specialties) {
+            addFixerSpecialty(fixerId, specialty);
+        }
+        return fixerId;
+    }
+
+    void addFixerSpecialty(UUID fixerUserId, String specialty) {
+        jdbc.update("INSERT INTO fixer_specialties (fixer_user_id, specialty) VALUES (?, ?)", fixerUserId, specialty);
     }
 
     UUID provisionAdmin(String subject) throws Exception {
@@ -174,9 +180,7 @@ abstract class QuotationHttpContract {
         UUID requestId = createRequest(ownerSubject, "PLUMBING", "Tubo roto", "Fuga constante de agua en cocina");
 
         String fixerSubject = "auth0|fixer-electrical";
-        UUID fixerId = provisionVerifiedFixer(fixerSubject);
-        // Fixer only does ELECTRICAL
-        fixerEligibility.assignSpecialties(fixerId, Set.of("ELECTRICAL"));
+        provisionVerifiedFixer(fixerSubject, "ELECTRICAL");
 
         // Inbox should not list the PLUMBING request
         mvc.perform(get("/requests/open").with(identity(fixerSubject)))
@@ -196,8 +200,7 @@ abstract class QuotationHttpContract {
         UUID requestId = createRequest(ownerSubject, "PLUMBING", "Tubo roto", "Fuga constante de agua en cocina");
 
         String fixerSubject = "auth0|fixer-plumber";
-        UUID fixerId = provisionVerifiedFixer(fixerSubject);
-        fixerEligibility.assignSpecialties(fixerId, Set.of("PLUMBING", "GENERAL"));
+        provisionVerifiedFixer(fixerSubject, "PLUMBING", "GENERAL");
 
         // Inbox contains the compatible request
         mvc.perform(get("/requests/open").with(identity(fixerSubject)))
@@ -257,7 +260,7 @@ abstract class QuotationHttpContract {
         UUID requestId = createRequest(ownerSubject, "CARPENTRY", "Puerta de roble", "Ajustar marco y cerradura");
 
         String fixerSubject = "auth0|fixer-privacy";
-        provisionVerifiedFixer(fixerSubject);
+        provisionVerifiedFixer(fixerSubject, "CARPENTRY");
 
         mvc.perform(get("/requests/open").with(identity(fixerSubject)))
                 .andExpect(status().isOk())
@@ -279,7 +282,7 @@ abstract class QuotationHttpContract {
         UUID requestId = createRequest(ownerASubject, "PLUMBING", "Llave goteando", "Cambio de empaque");
 
         String fixerSubject = "auth0|fixer-offerer";
-        provisionVerifiedFixer(fixerSubject);
+        provisionVerifiedFixer(fixerSubject, "PLUMBING");
         UUID quotationId = submitQuotation(fixerSubject, requestId, 80_000L, 1, "Puedo ir hoy");
 
         String ownerBSubject = "auth0|owner-b";
@@ -303,7 +306,7 @@ abstract class QuotationHttpContract {
         UUID requestId = createRequest(ownerSubject, "ELECTRICAL", "Toma corriente", "No hay energía");
 
         String fixerSubject = "auth0|fixer-rej";
-        provisionVerifiedFixer(fixerSubject);
+        provisionVerifiedFixer(fixerSubject, "ELECTRICAL");
         UUID quotationId = submitQuotation(fixerSubject, requestId, 120_000L, 2, "Revisión general");
 
         // Owner explicitly rejects the quotation
@@ -325,7 +328,7 @@ abstract class QuotationHttpContract {
         UUID requestId = createRequest(ownerSubject, "MASONRY", "Muro agrietado", "Resanar grieta");
 
         String fixerSubject = "auth0|fixer-event";
-        UUID fixerId = provisionVerifiedFixer(fixerSubject);
+        UUID fixerId = provisionVerifiedFixer(fixerSubject, "MASONRY");
         UUID quotationId = submitQuotation(fixerSubject, requestId, 300_000L, 4, "Materiales incluidos");
 
         mvc.perform(post("/quotations/" + quotationId + "/accept").with(identity(ownerSubject)))
@@ -348,11 +351,11 @@ abstract class QuotationHttpContract {
         UUID requestId = createRequest(ownerSubject, "PLUMBING", "Tubería principal", "Fuga en ducto de entrada");
 
         String fixerASubject = "auth0|fixer-concurrent-a";
-        provisionVerifiedFixer(fixerASubject);
+        provisionVerifiedFixer(fixerASubject, "PLUMBING");
         UUID quotationAId = submitQuotation(fixerASubject, requestId, 200_000L, 2, "Oferta Fixer A");
 
         String fixerBSubject = "auth0|fixer-concurrent-b";
-        provisionVerifiedFixer(fixerBSubject);
+        provisionVerifiedFixer(fixerBSubject, "PLUMBING");
         UUID quotationBId = submitQuotation(fixerBSubject, requestId, 220_000L, 3, "Oferta Fixer B");
 
         var ready = new CountDownLatch(2);
@@ -412,7 +415,7 @@ abstract class QuotationHttpContract {
         UUID requestId = createRequest(ownerSubject, "ELECTRICAL", "Cortocircuito", "Chispas en caja de fusibles");
 
         String fixerSubject = "auth0|fixer-duplicate";
-        provisionVerifiedFixer(fixerSubject);
+        provisionVerifiedFixer(fixerSubject, "ELECTRICAL");
 
         var ready = new CountDownLatch(2);
         var start = new CountDownLatch(1);
@@ -471,5 +474,196 @@ abstract class QuotationHttpContract {
         assertThat(conflictCount.get()).isEqualTo(1);
         assertThat(jdbc.queryForObject("SELECT count(*) FROM quotations WHERE request_id = ?", Integer.class, requestId))
                 .isEqualTo(1);
+    }
+
+    @Test
+    void verifiedCompatibleFixerCanSubmitQuotation() throws Exception {
+        String ownerSubject = "auth0|owner-submit-compat";
+        provisionOwner(ownerSubject);
+        UUID requestId = createRequest(ownerSubject, "PLUMBING", "Fuga lavamanos", "Gotea bajo el sifón");
+
+        String fixerSubject = "auth0|fixer-submit-compat";
+        UUID fixerId = provisionVerifiedFixer(fixerSubject, "PLUMBING");
+
+        String body = """
+                {
+                    "requestId": "%s",
+                    "amount": 95000,
+                    "estimatedDays": 1,
+                    "message": "Puedo atender hoy mismo"
+                }
+                """.formatted(requestId);
+
+        mvc.perform(post("/quotations").with(identity(fixerSubject))
+                .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").isNotEmpty())
+                .andExpect(jsonPath("$.requestId").value(requestId.toString()))
+                .andExpect(jsonPath("$.fixerUserId").value(fixerId.toString()))
+                .andExpect(jsonPath("$.amount").value(95000))
+                .andExpect(jsonPath("$.estimatedDays").value(1))
+                .andExpect(jsonPath("$.message").value("Puedo atender hoy mismo"))
+                .andExpect(jsonPath("$.status").value("SUBMITTED"))
+                .andExpect(jsonPath("$.createdAt").isNotEmpty());
+    }
+
+    @Test
+    void verifiedIncompatibleFixerCannotSubmitQuotation() throws Exception {
+        String ownerSubject = "auth0|owner-submit-incompat";
+        provisionOwner(ownerSubject);
+        UUID requestId = createRequest(ownerSubject, "PLUMBING", "Fuga lavamanos", "Gotea bajo el sifón");
+
+        String fixerSubject = "auth0|fixer-submit-incompat";
+        provisionVerifiedFixer(fixerSubject, "CARPENTRY"); // Only carpentry, request is PLUMBING
+
+        String body = """
+                {
+                    "requestId": "%s",
+                    "amount": 95000,
+                    "estimatedDays": 1,
+                    "message": "Intento de cotizar oficio incompatible"
+                }
+                """.formatted(requestId);
+
+        var result = mvc.perform(post("/quotations").with(identity(fixerSubject))
+                .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"))
+                .andReturn();
+
+        String content = result.getResponse().getContentAsString();
+        assertThat(content).doesNotContain("ownerUserId")
+                .doesNotContain("Fuga lavamanos")
+                .doesNotContain("Gotea bajo el sifón")
+                .doesNotContain("photoKeys")
+                .doesNotContain("photos/sample.jpg");
+    }
+
+    @Test
+    void unverifiedFixerCannotSubmitQuotation() throws Exception {
+        String ownerSubject = "auth0|owner-submit-unverified";
+        provisionOwner(ownerSubject);
+        UUID requestId = createRequest(ownerSubject, "ELECTRICAL", "Tablero chispeando", "Revisar breaker principal");
+
+        String fixerSubject = "auth0|fixer-submit-unverified";
+        provisionFixer(fixerSubject); // Has FIXER role but is pending verification
+
+        String body = """
+                {
+                    "requestId": "%s",
+                    "amount": 100000,
+                    "estimatedDays": 1,
+                    "message": "Soy electricista aún no verificado"
+                }
+                """.formatted(requestId);
+
+        mvc.perform(post("/quotations").with(identity(fixerSubject))
+                .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+    }
+
+    @Test
+    void userWithoutFixerRoleCannotSubmitQuotation() throws Exception {
+        String ownerSubject = "auth0|owner-submit-norole";
+        provisionOwner(ownerSubject);
+        UUID requestId = createRequest(ownerSubject, "ELECTRICAL", "Tablero chispeando", "Revisar breaker principal");
+
+        String nonFixerSubject = "auth0|other-owner-quoting";
+        provisionOwner(nonFixerSubject);
+
+        String body = """
+                {
+                    "requestId": "%s",
+                    "amount": 100000,
+                    "estimatedDays": 1,
+                    "message": "Propietario intentando cotizar"
+                }
+                """.formatted(requestId);
+
+        mvc.perform(post("/quotations").with(identity(nonFixerSubject))
+                .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+    }
+
+    @Test
+    void submittingQuotationForNonExistentRequestReturnsNotFound() throws Exception {
+        String fixerSubject = "auth0|fixer-submit-404";
+        provisionVerifiedFixer(fixerSubject, "ELECTRICAL");
+        UUID fakeRequestId = UUID.randomUUID();
+
+        String body = """
+                {
+                    "requestId": "%s",
+                    "amount": 100000,
+                    "estimatedDays": 1,
+                    "message": "Cotización a solicitud inexistente"
+                }
+                """.formatted(fakeRequestId);
+
+        mvc.perform(post("/quotations").with(identity(fixerSubject))
+                .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("REQUEST_NOT_FOUND"));
+    }
+
+    @Test
+    void submittingQuotationForNonOpenRequestReturnsConflict() throws Exception {
+        String ownerSubject = "auth0|owner-submit-closed";
+        provisionOwner(ownerSubject);
+        UUID requestId = createRequest(ownerSubject, "PLUMBING", "Tubo roto", "Fuga en cocina");
+
+        String fixerASubject = "auth0|fixer-first-compat";
+        provisionVerifiedFixer(fixerASubject, "PLUMBING");
+        UUID quotationId = submitQuotation(fixerASubject, requestId, 80000L, 1, "Oferta ganadora");
+
+        // Owner accepts quotation -> request becomes ASSIGNED (not OPEN)
+        mvc.perform(post("/quotations/" + quotationId + "/accept").with(identity(ownerSubject)))
+                .andExpect(status().isOk());
+
+        // Fixer B tries to submit quotation for now-assigned request -> 409 REQUEST_NOT_OPEN
+        String fixerBSubject = "auth0|fixer-second-compat";
+        provisionVerifiedFixer(fixerBSubject, "PLUMBING");
+
+        String body = """
+                {
+                    "requestId": "%s",
+                    "amount": 90000,
+                    "estimatedDays": 2,
+                    "message": "Llegué tarde"
+                }
+                """.formatted(requestId);
+
+        mvc.perform(post("/quotations").with(identity(fixerBSubject))
+                .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("REQUEST_NOT_OPEN"));
+    }
+
+    @Test
+    void secondQuotationFromSameFixerReturnsConflict() throws Exception {
+        String ownerSubject = "auth0|owner-submit-twice";
+        provisionOwner(ownerSubject);
+        UUID requestId = createRequest(ownerSubject, "PAINTING", "Pintar sala", "Pintura vinilo");
+
+        String fixerSubject = "auth0|fixer-submit-twice";
+        provisionVerifiedFixer(fixerSubject, "PAINTING");
+
+        submitQuotation(fixerSubject, requestId, 120000L, 2, "Primera oferta");
+
+        String body = """
+                {
+                    "requestId": "%s",
+                    "amount": 110000,
+                    "estimatedDays": 2,
+                    "message": "Segunda oferta para mejorar precio"
+                }
+                """.formatted(requestId);
+
+        mvc.perform(post("/quotations").with(identity(fixerSubject))
+                .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("ALREADY_QUOTED"));
     }
 }

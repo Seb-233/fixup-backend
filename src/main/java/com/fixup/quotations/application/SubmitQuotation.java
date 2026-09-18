@@ -2,6 +2,7 @@ package com.fixup.quotations.application;
 
 import com.fixup.fixers.api.FixerEligibility;
 import com.fixup.identityaccess.api.CurrentActor;
+import com.fixup.quotations.api.QuotationAccessDeniedException;
 import com.fixup.quotations.api.QuotationConflictException;
 import com.fixup.quotations.domain.Quotation;
 import com.fixup.quotations.domain.Quotations;
@@ -31,10 +32,14 @@ public class SubmitQuotation {
     public QuotationSummary execute(CurrentActor actor, NewQuotation draft) {
         QuotationAccess.requireActiveFixer(actor);
         eligibility.requireVerified(actor);
+        var fixerSpecialties = eligibility.specialtiesOf(actor);
         var request = requests.require(draft.requestId());
         if (!request.isOpen()) {
             throw new QuotationConflictException("REQUEST_NOT_OPEN",
                     "The repair request no longer admits quotations");
+        }
+        if (!fixerSpecialties.contains(request.specialty())) {
+            throw new QuotationAccessDeniedException();
         }
         if (request.ownerUserId().equals(actor.internalUserId())) {
             throw new QuotationConflictException("SELF_QUOTATION",
@@ -47,12 +52,7 @@ public class SubmitQuotation {
         var message = draft.message() == null || draft.message().isBlank() ? null : draft.message().trim();
         var quotation = Quotation.submitted(UUID.randomUUID(), draft.requestId(), actor.internalUserId(),
                 draft.amount(), draft.estimatedDays(), message, Instant.now());
-        try {
-            quotations.create(quotation);
-        } catch (org.springframework.dao.DataIntegrityViolationException ex) {
-            throw new QuotationConflictException("ALREADY_QUOTED",
-                    "This fixer already sent a quotation for the request");
-        }
+        quotations.create(quotation);
         return QuotationSummary.of(quotation);
     }
 }
