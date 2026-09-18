@@ -20,6 +20,14 @@ class FixerProfileEntity {
     @Enumerated(EnumType.STRING)
     @Column(name = "verification_status", nullable = false, length = 32)
     private FixerVerificationStatus verificationStatus;
+    @Column(name = "submitted_at")
+    private Instant submittedAt;
+    @Column(name = "decided_at")
+    private Instant decidedAt;
+    @Column(name = "decided_by")
+    private UUID decidedBy;
+    @Column(name = "rejection_reason", length = 500)
+    private String rejectionReason;
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
     @Column(name = "updated_at", nullable = false)
@@ -31,13 +39,22 @@ class FixerProfileEntity {
     static FixerProfileEntity from(FixerProfile profile) {
         var entity = new FixerProfileEntity();
         entity.userId = profile.userId();
-        entity.verificationStatus = profile.verificationStatus();
+        entity.apply(profile);
         entity.createdAt = profile.createdAt();
-        entity.updatedAt = profile.updatedAt();
         return entity;
     }
 
+    void apply(FixerProfile profile) {
+        verificationStatus = profile.verificationStatus();
+        submittedAt = profile.submittedAt();
+        decidedAt = profile.decidedAt();
+        decidedBy = profile.decidedBy();
+        rejectionReason = profile.rejectionReason();
+        updatedAt = profile.updatedAt();
+    }
+
     FixerProfile toDomain() {
-        return new FixerProfile(userId, verificationStatus, createdAt, updatedAt);
+        return new FixerProfile(userId, verificationStatus, submittedAt, decidedAt, decidedBy, rejectionReason,
+                createdAt, updatedAt);
     }
 }

@@ -1,6 +1,5 @@
 package com.fixup.fixers.application;
 
-import com.fixup.fixers.api.FixerVerificationStatus;
 import com.fixup.fixers.domain.FixerProfile;
 import com.fixup.fixers.domain.FixerProfiles;
 import com.fixup.identityaccess.api.Role;
@@ -23,8 +22,7 @@ class RegisterPendingFixer {
     @Transactional(propagation = Propagation.MANDATORY)
     public void on(RoleGranted event) {
         if (event.role() == Role.FIXER && profiles.findByUserId(event.internalUserId()).isEmpty()) {
-            var now = Instant.now();
-            profiles.create(new FixerProfile(event.internalUserId(), FixerVerificationStatus.PENDING, now, now));
+            profiles.create(FixerProfile.pending(event.internalUserId(), Instant.now()));
         }
     }
 }

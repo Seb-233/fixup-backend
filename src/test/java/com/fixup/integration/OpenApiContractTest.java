@@ -40,11 +40,17 @@ class OpenApiContractTest {
         // The exported surface is pinned by name: an endpoint may only appear here deliberately.
         assertThat(paths.fieldNames()).toIterable().containsExactlyInAnyOrder(
                 "/auth/bootstrap", "/auth/me", "/auth/select-role",
+                "/fixers/me/verification", "/fixers/me/verification/documents",
+                "/fixers/{fixerUserId}/verification/approve", "/fixers/{fixerUserId}/verification/reject",
                 "/media/me/portfolio", "/media/me/portfolio/{pieceId}/hide",
                 "/media/me/portfolio/{pieceId}/show", "/media/fixers/{fixerUserId}/portfolio");
         for (var endpoint : new String[][]{
                 {"/auth/bootstrap", "post", "200"}, {"/auth/me", "get", "200"},
                 {"/auth/select-role", "post", "200"},
+                {"/fixers/me/verification", "get", "200"},
+                {"/fixers/me/verification/documents", "post", "200"},
+                {"/fixers/{fixerUserId}/verification/approve", "post", "204"},
+                {"/fixers/{fixerUserId}/verification/reject", "post", "204"},
                 {"/media/me/portfolio", "post", "201"}, {"/media/me/portfolio", "get", "200"},
                 {"/media/me/portfolio/{pieceId}/hide", "post", "200"},
                 {"/media/me/portfolio/{pieceId}/show", "post", "200"},
@@ -59,6 +65,13 @@ class OpenApiContractTest {
         assertThat(paths.get("/auth/bootstrap").get("post").get("responses").has("201")).isTrue();
         assertThat(contract.at("/components/schemas/UserResponse/properties/email/type").toString()).contains("null");
         assertThat(contract.at("/components/schemas/BootstrapResponse/properties/displayName/type").toString()).contains("null");
+        assertThat(contract.at("/components/schemas/FixerVerificationDocumentType/enum").toString())
+                .contains("ID_CARD", "TRADE_CERTIFICATE");
+        assertThat(contract.at("/components/schemas/VerificationResponse/properties/submittedAt/type").toString())
+                .contains("null");
+        // No document content crosses this API: the request carries storage keys only.
+        assertThat(contract.at("/components/schemas/DocumentRequest/properties").toString())
+                .contains("storageKey").doesNotContain("content", "file");
         assertThat(contract.at("/components/schemas/PieceRequest/properties/kind/enum").toString())
                 .contains("PHOTO", "VIDEO");
         assertThat(contract.at("/components/schemas/PieceResponse/properties/visibility/enum").toString())
@@ -66,6 +79,9 @@ class OpenApiContractTest {
         // No media content crosses this API: the request carries a storage key only.
         assertThat(contract.at("/components/schemas/PieceRequest/properties").toString())
                 .contains("storageKey").doesNotContain("content", "file", "bytes");
+        // The public response never leaks the internal storage layout: it carries a media id only.
+        assertThat(contract.at("/components/schemas/PieceResponse/properties").toString())
+                .contains("mediaId").doesNotContain("storageKey");
         Files.createDirectories(Path.of("target"));
         Files.writeString(Path.of("target", "openapi.json"),
                 mapper.writerWithDefaultPrettyPrinter().writeValueAsString(contract) + System.lineSeparator());

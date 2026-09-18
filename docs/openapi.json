@@ -9,6 +9,498 @@
     "description" : "Generated server url"
   } ],
   "paths" : {
+    "/fixers/{fixerUserId}/verification/reject" : {
+      "post" : {
+        "tags" : [ "fixer-verification-controller" ],
+        "summary" : "Reject a fixer verification",
+        "description" : "Requires an active PLATFORM_ADMIN.",
+        "operationId" : "reject",
+        "parameters" : [ {
+          "name" : "fixerUserId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/RejectionRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "400" : {
+            "description" : "Invalid document type, missing field or unexpected client fields",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Inactive account, missing FIXER role or missing administrative privileges",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "The transition does not apply to the current verification state",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "204" : {
+            "description" : "The fixer is rejected and may submit again"
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/fixers/{fixerUserId}/verification/approve" : {
+      "post" : {
+        "tags" : [ "fixer-verification-controller" ],
+        "summary" : "Approve a fixer verification",
+        "description" : "Requires an active PLATFORM_ADMIN.",
+        "operationId" : "approve",
+        "parameters" : [ {
+          "name" : "fixerUserId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "responses" : {
+          "400" : {
+            "description" : "Invalid document type, missing field or unexpected client fields",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Inactive account, missing FIXER role or missing administrative privileges",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "The transition does not apply to the current verification state",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "204" : {
+            "description" : "The fixer is verified"
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/fixers/me/verification/documents" : {
+      "post" : {
+        "tags" : [ "fixer-verification-controller" ],
+        "summary" : "File the verification documents and open the administrative review",
+        "description" : "The body carries storage keys only. Files are uploaded by the client against a signed URL, so no document content crosses this API. Documents may be filed one at a time; the review opens by itself once the mandatory set is complete. Resubmitting a type replaces its key.",
+        "operationId" : "submit",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/DocumentsRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "400" : {
+            "description" : "Invalid document type, missing field or unexpected client fields",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Inactive account, missing FIXER role or missing administrative privileges",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "The transition does not apply to the current verification state",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "200" : {
+            "description" : "Verification state after the submission",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/VerificationResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/auth/select-role" : {
+      "post" : {
+        "tags" : [ "current-user-controller" ],
+        "summary" : "Request an initial role idempotently",
+        "description" : "Only OWNER, TENANT and FIXER are self-assignable. FIXER starts PENDING. Administrative roles require a dedicated administrative use case.",
+        "operationId" : "selectRole",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/RoleRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "400" : {
+            "description" : "Invalid role, missing role or unexpected client fields",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Inactive account or forbidden role assignment",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "Bootstrap is required before accessing the internal account",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "200" : {
+            "description" : "The current user's internal roles",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RolesResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/auth/bootstrap" : {
+      "post" : {
+        "tags" : [ "auth-controller" ],
+        "summary" : "Provision the authenticated identity idempotently",
+        "description" : "No body or an empty object. Subject and initial profile come only from the validated JWT.",
+        "operationId" : "bootstrap",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/BootstrapRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "Existing active account",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/BootstrapResponse"
+                }
+              }
+            }
+          },
+          "201" : {
+            "description" : "New account without roles",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/BootstrapResponse"
+                }
+              }
+            }
+          },
+          "400" : {
+            "description" : "Unexpected client fields or invalid initial profile",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Account suspended or disabled",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "Identity conflict",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/fixers/me/verification" : {
+      "get" : {
+        "tags" : [ "fixer-verification-controller" ],
+        "summary" : "Read the current fixer's own verification state",
+        "operationId" : "myVerification",
+        "responses" : {
+          "400" : {
+            "description" : "Invalid document type, missing field or unexpected client fields",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Inactive account, missing FIXER role or missing administrative privileges",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "The transition does not apply to the current verification state",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "200" : {
+            "description" : "Verification state of the current fixer",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/VerificationResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/auth/me" : {
+      "get" : {
+        "tags" : [ "current-user-controller" ],
+        "summary" : "Read the current internal account",
+        "operationId" : "me",
+        "responses" : {
+          "400" : {
+            "description" : "Invalid role, missing role or unexpected client fields",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Inactive account or forbidden role assignment",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "Bootstrap is required before accessing the internal account",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "200" : {
+            "description" : "Current active account",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/UserResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
     "/media/me/portfolio" : {
       "get" : {
         "tags" : [ "portfolio-controller" ],
@@ -287,161 +779,6 @@
         } ]
       }
     },
-    "/auth/select-role" : {
-      "post" : {
-        "tags" : [ "current-user-controller" ],
-        "summary" : "Request an initial role idempotently",
-        "description" : "Only OWNER, TENANT and FIXER are self-assignable. FIXER starts PENDING. Administrative roles require a dedicated administrative use case.",
-        "operationId" : "selectRole",
-        "requestBody" : {
-          "content" : {
-            "application/json" : {
-              "schema" : {
-                "$ref" : "#/components/schemas/RoleRequest"
-              }
-            }
-          },
-          "required" : true
-        },
-        "responses" : {
-          "400" : {
-            "description" : "Invalid role, missing role or unexpected client fields",
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "401" : {
-            "description" : "Missing or invalid bearer token",
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "403" : {
-            "description" : "Inactive account or forbidden role assignment",
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "409" : {
-            "description" : "Bootstrap is required before accessing the internal account",
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "200" : {
-            "description" : "The current user's internal roles",
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/RolesResponse"
-                }
-              }
-            }
-          }
-        },
-        "security" : [ {
-          "bearerAuth" : [ ]
-        } ]
-      }
-    },
-    "/auth/bootstrap" : {
-      "post" : {
-        "tags" : [ "auth-controller" ],
-        "summary" : "Provision the authenticated identity idempotently",
-        "description" : "No body or an empty object. Subject and initial profile come only from the validated JWT.",
-        "operationId" : "bootstrap",
-        "requestBody" : {
-          "content" : {
-            "application/json" : {
-              "schema" : {
-                "$ref" : "#/components/schemas/BootstrapRequest"
-              }
-            }
-          }
-        },
-        "responses" : {
-          "200" : {
-            "description" : "Existing active account",
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/BootstrapResponse"
-                }
-              }
-            }
-          },
-          "201" : {
-            "description" : "New account without roles",
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/BootstrapResponse"
-                }
-              }
-            }
-          },
-          "400" : {
-            "description" : "Unexpected client fields or invalid initial profile",
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "401" : {
-            "description" : "Missing or invalid bearer token",
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "403" : {
-            "description" : "Account suspended or disabled",
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "409" : {
-            "description" : "Identity conflict",
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        },
-        "security" : [ {
-          "bearerAuth" : [ ]
-        } ]
-      }
-    },
     "/media/fixers/{fixerUserId}/portfolio" : {
       "get" : {
         "tags" : [ "portfolio-controller" ],
@@ -516,97 +853,21 @@
           "bearerAuth" : [ ]
         } ]
       }
-    },
-    "/auth/me" : {
-      "get" : {
-        "tags" : [ "current-user-controller" ],
-        "summary" : "Read the current internal account",
-        "operationId" : "me",
-        "responses" : {
-          "400" : {
-            "description" : "Invalid role, missing role or unexpected client fields",
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "401" : {
-            "description" : "Missing or invalid bearer token",
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "403" : {
-            "description" : "Inactive account or forbidden role assignment",
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "409" : {
-            "description" : "Bootstrap is required before accessing the internal account",
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "200" : {
-            "description" : "Current active account",
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/UserResponse"
-                }
-              }
-            }
-          }
-        },
-        "security" : [ {
-          "bearerAuth" : [ ]
-        } ]
-      }
     }
   },
   "components" : {
     "schemas" : {
-      "PieceRequest" : {
+      "RejectionRequest" : {
         "type" : "object",
         "additionalProperties" : false,
         "properties" : {
-          "kind" : {
+          "reason" : {
             "type" : "string",
-            "enum" : [ "PHOTO", "VIDEO" ]
-          },
-          "storageKey" : {
-            "type" : "string",
-            "maxLength" : 512,
-            "minLength" : 0
-          },
-          "title" : {
-            "type" : "string",
-            "maxLength" : 120,
-            "minLength" : 0
-          },
-          "description" : {
-            "type" : "string",
-            "maxLength" : 1000,
+            "maxLength" : 500,
             "minLength" : 0
           }
         },
-        "required" : [ "kind", "storageKey", "title" ]
+        "required" : [ "reason" ]
       },
       "ErrorResponse" : {
         "type" : "object",
@@ -626,40 +887,77 @@
           }
         }
       },
-      "PieceResponse" : {
+      "DocumentRequest" : {
         "type" : "object",
+        "additionalProperties" : false,
         "properties" : {
-          "id" : {
-            "type" : "string",
-            "format" : "uuid"
-          },
-          "kind" : {
-            "type" : "string",
-            "enum" : [ "PHOTO", "VIDEO" ]
+          "type" : {
+            "$ref" : "#/components/schemas/FixerVerificationDocumentType"
           },
           "storageKey" : {
-            "type" : "string"
-          },
-          "title" : {
-            "type" : "string"
-          },
-          "description" : {
-            "type" : [ "string", "null" ]
-          },
-          "position" : {
-            "type" : "integer",
-            "format" : "int32"
-          },
-          "visibility" : {
             "type" : "string",
-            "enum" : [ "PUBLIC", "HIDDEN" ]
-          },
-          "createdAt" : {
-            "type" : "string",
-            "format" : "date-time"
+            "maxLength" : 512,
+            "minLength" : 0
           }
         },
-        "required" : [ "id", "kind", "position", "storageKey", "title", "visibility" ]
+        "required" : [ "storageKey", "type" ]
+      },
+      "DocumentsRequest" : {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "documents" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/DocumentRequest"
+            },
+            "maxItems" : 4,
+            "minItems" : 0
+          }
+        },
+        "required" : [ "documents" ]
+      },
+      "FixerVerificationDocumentType" : {
+        "type" : "string",
+        "enum" : [ "ID_CARD", "TRADE_CERTIFICATE", "BACKGROUND_CHECK", "INSURANCE" ]
+      },
+      "VerificationResponse" : {
+        "type" : "object",
+        "properties" : {
+          "status" : {
+            "type" : "string",
+            "enum" : [ "PENDING", "VERIFIED", "REJECTED", "SUSPENDED" ]
+          },
+          "underReview" : {
+            "type" : "boolean"
+          },
+          "submittedAt" : {
+            "type" : [ "string", "null" ],
+            "format" : "date-time"
+          },
+          "decidedAt" : {
+            "type" : [ "string", "null" ],
+            "format" : "date-time"
+          },
+          "rejectionReason" : {
+            "type" : [ "string", "null" ]
+          },
+          "submittedDocuments" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/FixerVerificationDocumentType"
+            },
+            "uniqueItems" : true
+          },
+          "missingDocuments" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/FixerVerificationDocumentType"
+            },
+            "uniqueItems" : true
+          }
+        },
+        "required" : [ "missingDocuments", "status", "submittedDocuments", "underReview" ]
       },
       "Role" : {
         "type" : "string",
@@ -750,6 +1048,67 @@
           }
         },
         "required" : [ "displayName", "email", "id", "roles", "status" ]
+      },
+      "PieceRequest" : {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "kind" : {
+            "type" : "string",
+            "enum" : [ "PHOTO", "VIDEO" ]
+          },
+          "storageKey" : {
+            "type" : "string",
+            "maxLength" : 512,
+            "minLength" : 0
+          },
+          "title" : {
+            "type" : "string",
+            "maxLength" : 120,
+            "minLength" : 0
+          },
+          "description" : {
+            "type" : "string",
+            "maxLength" : 1000,
+            "minLength" : 0
+          }
+        },
+        "required" : [ "kind", "storageKey", "title" ]
+      },
+      "PieceResponse" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "kind" : {
+            "type" : "string",
+            "enum" : [ "PHOTO", "VIDEO" ]
+          },
+          "storageKey" : {
+            "type" : "string"
+          },
+          "title" : {
+            "type" : "string"
+          },
+          "description" : {
+            "type" : [ "string", "null" ]
+          },
+          "position" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "visibility" : {
+            "type" : "string",
+            "enum" : [ "PUBLIC", "HIDDEN" ]
+          },
+          "createdAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          }
+        },
+        "required" : [ "id", "kind", "position", "storageKey", "title", "visibility" ]
       }
     },
     "securitySchemes" : {

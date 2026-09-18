@@ -57,6 +57,7 @@ class SecurityConfiguration {
                     requests.requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                             .requestMatchers("/actuator/health").permitAll();
                     requests.requestMatchers("/auth/**").authenticated()
+                            .requestMatchers("/fixers/**").authenticated()
                             .requestMatchers("/media/**").authenticated()
                             .anyRequest().denyAll();
                 })
