@@ -40,11 +40,17 @@ class OpenApiContractTest {
         // The exported surface is pinned by name: an endpoint may only appear here deliberately.
         assertThat(paths.fieldNames()).toIterable().containsExactlyInAnyOrder(
                 "/auth/bootstrap", "/auth/me", "/auth/select-role",
+                "/fixers/me/verification", "/fixers/me/verification/documents",
+                "/fixers/{fixerUserId}/verification/approve", "/fixers/{fixerUserId}/verification/reject",
                 "/analytics/zones/{zone}/market-indicators");
         for (var endpoint : new String[][]{
                 {"/auth/bootstrap", "post", "200,400,401,403,409"},
                 {"/auth/me", "get", "200,400,401,403,409"},
                 {"/auth/select-role", "post", "200,400,401,403,409"},
+                {"/fixers/me/verification", "get", "200,400,401,403,409"},
+                {"/fixers/me/verification/documents", "post", "200,400,401,403,409"},
+                {"/fixers/{fixerUserId}/verification/approve", "post", "204,400,401,403,409"},
+                {"/fixers/{fixerUserId}/verification/reject", "post", "204,400,401,403,409"},
                 {"/analytics/zones/{zone}/market-indicators", "get", "200,400,401,403,503"}}) {
             var operation = paths.get(endpoint[0]).get(endpoint[1]);
             assertThat(operation.get("security").toString()).contains("bearerAuth");
@@ -56,11 +62,20 @@ class OpenApiContractTest {
         assertThat(paths.get("/auth/bootstrap").get("post").get("responses").has("201")).isTrue();
         assertThat(contract.at("/components/schemas/UserResponse/properties/email/type").toString()).contains("null");
         assertThat(contract.at("/components/schemas/BootstrapResponse/properties/displayName/type").toString()).contains("null");
+        assertThat(contract.at("/components/schemas/FixerVerificationDocumentType/enum").toString())
+                .contains("ID_CARD", "TRADE_CERTIFICATE");
+        assertThat(contract.at("/components/schemas/VerificationResponse/properties/submittedAt/type").toString())
+                .contains("null");
+        // No document content crosses this API: the request carries storage keys only.
+        assertThat(contract.at("/components/schemas/DocumentRequest/properties").toString())
+                .contains("storageKey").doesNotContain("content", "file");
         // FR-UC-15 no miente al cliente: la procedencia del dato es parte del contrato.
         assertThat(contract.at("/components/schemas/IndicatorsResponse/properties/freshness/enum").toString())
                 .contains("LIVE", "CACHED", "DEGRADED");
+        assertThat(contract.at("/components/schemas/IndicatorsResponse/properties/source/enum").toString())
+                .contains("EXTERNAL_PROVIDER", "DEVELOPMENT_SYNTHETIC");
         assertThat(contract.at("/components/schemas/IndicatorsResponse/required").toString())
-                .contains("freshness", "degraded", "observedAt");
+                .contains("freshness", "degraded", "observedAt", "source", "synthetic");
         Files.createDirectories(Path.of("target"));
         Files.writeString(Path.of("target", "openapi.json"),
                 mapper.writerWithDefaultPrettyPrinter().writeValueAsString(contract) + System.lineSeparator());

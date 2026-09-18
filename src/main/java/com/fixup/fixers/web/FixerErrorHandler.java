@@ -1,6 +1,7 @@
 package com.fixup.fixers.web;
 
 import com.fixup.fixers.api.FixerNotEligibleException;
+import com.fixup.fixers.api.FixerVerificationConflictException;
 import com.fixup.shared.errors.ErrorResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseEntity;
@@ -13,5 +14,12 @@ class FixerErrorHandler {
     ResponseEntity<ErrorResponse> forbidden(HttpServletRequest request) {
         return ResponseEntity.status(403).body(new ErrorResponse(403, "ACCESS_DENIED",
                 "You do not have permission to perform this action", request.getRequestURI()));
+    }
+
+    @ExceptionHandler(FixerVerificationConflictException.class)
+    ResponseEntity<ErrorResponse> conflict(FixerVerificationConflictException exception,
+            HttpServletRequest request) {
+        return ResponseEntity.status(409).body(new ErrorResponse(409, exception.code(),
+                exception.getMessage(), request.getRequestURI()));
     }
 }
