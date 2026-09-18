@@ -58,6 +58,8 @@ class SecurityConfiguration {
                             .requestMatchers("/actuator/health").permitAll();
                     requests.requestMatchers("/auth/**").authenticated()
                             .requestMatchers("/fixers/**").authenticated()
+                            .requestMatchers("/requests/**").authenticated()
+                            .requestMatchers("/quotations/**").authenticated()
                             .anyRequest().denyAll();
                 })
                 .exceptionHandling(errors -> errors.authenticationEntryPoint(entryPoint)
