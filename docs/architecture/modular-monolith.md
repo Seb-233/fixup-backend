@@ -1,36 +1,42 @@
 # Arquitectura del monolito modular
 
-FixUp se ejecuta como una aplicación Spring Boot bajo el paquete raíz `com.fixup`. Spring Modulith interpreta cada subpaquete directo como un módulo cerrado.
+FixUp es una aplicación Spring Boot bajo com.fixup. Cada subpaquete directo constituye
+un módulo cerrado. Se conservan 14 módulos; no hay microservicios ni propagación de JWT
+entre módulos internos.
 
-## Reglas de módulos
+## Identidad y permisos
 
-1. Cada módulo es dueño de sus datos y reglas.
-2. Ningún módulo accede a repositorios internos ajenos.
-3. No importar `domain`, `application`, `infrastructure` ni `web` de otro módulo.
-4. La comunicación síncrona futura utiliza exclusivamente `api`, declarada como NamedInterface de Spring Modulith.
-5. Los efectos secundarios futuros se coordinan mediante eventos.
-6. `shared` contiene únicamente elementos técnicos realmente reutilizables.
-7. No colocar reglas del negocio en `shared`; tampoco puede depender de los módulos del negocio.
-8. Los controladores no acceden directamente a JPA ni a repositorios; usan la capa de aplicación.
-9. Las entidades JPA no se comparten entre módulos ni forman contratos públicos.
-10. No se permiten dependencias circulares.
-11. Spring Modulith verifica fronteras y ciclos en cada build de CI.
-12. Ningún módulo se utiliza como contenedor de código sin clasificar.
+La cadena Spring Security valida firma RS256, issuer, audience y tiempo antes del
+controlador. La adaptación de identidad en identityaccess.infrastructure lee únicamente
+el JwtAuthenticationToken ya autenticado y su subject.
 
-Los módulos son cerrados. Solo los paquetes `api` tienen interfaz nombrada; las raíces se reservan para metadatos, no para clases públicas del negocio. Los subpaquetes de `shared` son privados por defecto; exponer una interfaz técnica específica exige una decisión explícita posterior.
+CurrentActorProvider consulta users/user_roles, exige estado ACTIVE y devuelve un
+contrato inmutable. Los controladores entregan ese actor a los casos de uso.
+Ningún rol del frontend o del token sustituye los permisos almacenados.
 
-## Capas
+## Dependencias activas
 
-- `api`: contratos públicos futuros, sin entidades ni repositorios.
-- `application`: coordinación futura de casos de uso.
-- `domain`: reglas y modelos futuros propiedad del módulo.
-- `infrastructure`: adaptadores y persistencia futuros.
-- `web`: adaptadores HTTP futuros basados en contratos aprobados.
+| Módulo | Datos propios | Contratos consumidos |
+| --- | --- | --- |
+| shared | Ningún dato de negocio | Ninguno de negocio |
+| identityaccess | users y user_roles | shared.errors |
+| fixers | fixer_profiles | identityaccess.api y shared.errors |
 
-Los paquetes reservados se conservan con `package-info.java`. La configuración de seguridad en `shared.security` deniega solicitudes sin implementar autenticación.
+identityaccess publica RoleGranted en la transacción. fixers lo consume síncronamente
+para crear un perfil PENDING cuando se concede FIXER. Así mantiene la propiedad de
+sus datos sin crear una dependencia circular.
 
-## Verificación
+La base es única, con migraciones Flyway y validación de esquema por Hibernate.
+La cuenta usa UUID interno y subject externo único. La elección inicial de roles
+bloquea la cuenta durante la actualización, y el bootstrap resuelve carreras apoyado
+en la restricción única y una transacción nueva.
 
-`ModularityTest` comprueba el conjunto exacto de módulos para evitar verificaciones vacías y ejecuta `ApplicationModules.of(FixupApplication.class).verify()`. La encapsulación cierra el acceso a internals ajenos. Una regla adicional de ArchUnit impide dependencias de `shared` hacia módulos del negocio.
+## Límites
 
-`LayerRulesTest` añade restricciones para que web y api no dependan de JPA, Spring Data o infraestructura. El sentido del negocio, la propiedad de datos y la clasificación del código también requieren revisión humana; no se presentan como garantías automáticas.
+El módulo users mantiene su estructura reservada para futuros casos de perfil; no
+duplica el modelo de identidad. Los demás módulos no reciben funcionalidades de negocio
+en esta entrega. FixerEligibility prepara el control necesario para trabajos futuros,
+sin implementar esos casos de uso ni la revisión administrativa de trabajadores.
+
+Consulta las [reglas de módulos](../module-rules.md), la
+[guía de autenticación](../authentication.md) y el [contrato OpenAPI](../openapi.json).

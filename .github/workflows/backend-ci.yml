@@ -18,7 +18,7 @@ jobs:
           java-version: '21'
           cache: maven
       - name: Compile and verify architecture and tests
-        run: ./mvnw --batch-mode --no-transfer-progress clean verify
+        run: ./mvnw --batch-mode --no-transfer-progress -Ppostgres-it clean verify
       - name: Publish test and coverage reports
         if: always()
         uses: actions/upload-artifact@v4
@@ -27,4 +27,6 @@ jobs:
           path: |
             target/surefire-reports/
             target/site/jacoco/
+            target/failsafe-reports/
+            target/openapi.json
           if-no-files-found: warn

@@ -1,0 +1,349 @@
+{
+  "openapi" : "3.1.0",
+  "info" : {
+    "title" : "FixUp identity API",
+    "version" : "v1"
+  },
+  "servers" : [ {
+    "url" : "http://localhost",
+    "description" : "Generated server url"
+  } ],
+  "paths" : {
+    "/auth/select-role" : {
+      "post" : {
+        "tags" : [ "current-user-controller" ],
+        "summary" : "Request an initial role idempotently",
+        "description" : "Only OWNER, TENANT and FIXER are self-assignable. FIXER starts PENDING. Administrative roles require a dedicated administrative use case.",
+        "operationId" : "selectRole",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/RoleRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "400" : {
+            "description" : "Invalid role, missing role or unexpected client fields",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Inactive account or forbidden role assignment",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "Bootstrap is required before accessing the internal account",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "200" : {
+            "description" : "The current user's internal roles",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RolesResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/auth/bootstrap" : {
+      "post" : {
+        "tags" : [ "auth-controller" ],
+        "summary" : "Provision the authenticated identity idempotently",
+        "description" : "No body or an empty object. Subject and initial profile come only from the validated JWT.",
+        "operationId" : "bootstrap",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/BootstrapRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "Existing active account",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/BootstrapResponse"
+                }
+              }
+            }
+          },
+          "201" : {
+            "description" : "New account without roles",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/BootstrapResponse"
+                }
+              }
+            }
+          },
+          "400" : {
+            "description" : "Unexpected client fields or invalid initial profile",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Account suspended or disabled",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "Identity conflict",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/auth/me" : {
+      "get" : {
+        "tags" : [ "current-user-controller" ],
+        "summary" : "Read the current internal account",
+        "operationId" : "me",
+        "responses" : {
+          "400" : {
+            "description" : "Invalid role, missing role or unexpected client fields",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Inactive account or forbidden role assignment",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "Bootstrap is required before accessing the internal account",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "200" : {
+            "description" : "Current active account",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/UserResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    }
+  },
+  "components" : {
+    "schemas" : {
+      "Role" : {
+        "type" : "string",
+        "enum" : [ "OWNER", "TENANT", "FIXER", "REAL_ESTATE_MANAGER", "PLATFORM_ADMIN" ]
+      },
+      "RoleRequest" : {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "role" : {
+            "$ref" : "#/components/schemas/Role"
+          }
+        },
+        "required" : [ "role" ]
+      },
+      "ErrorResponse" : {
+        "type" : "object",
+        "properties" : {
+          "status" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "code" : {
+            "type" : "string"
+          },
+          "message" : {
+            "type" : "string"
+          },
+          "path" : {
+            "type" : "string"
+          }
+        }
+      },
+      "RolesResponse" : {
+        "type" : "object",
+        "properties" : {
+          "roles" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/Role"
+            },
+            "uniqueItems" : true
+          }
+        },
+        "required" : [ "roles" ]
+      },
+      "BootstrapRequest" : {
+        "type" : "object",
+        "additionalProperties" : false
+      },
+      "BootstrapResponse" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "externalSubject" : {
+            "type" : "string"
+          },
+          "email" : {
+            "type" : [ "string", "null" ]
+          },
+          "displayName" : {
+            "type" : [ "string", "null" ]
+          },
+          "status" : {
+            "$ref" : "#/components/schemas/UserStatus"
+          },
+          "roles" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/Role"
+            },
+            "uniqueItems" : true
+          }
+        },
+        "required" : [ "displayName", "email", "externalSubject", "id", "roles", "status" ]
+      },
+      "UserStatus" : {
+        "type" : "string",
+        "enum" : [ "ACTIVE", "SUSPENDED", "DISABLED" ]
+      },
+      "UserResponse" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "email" : {
+            "type" : [ "string", "null" ]
+          },
+          "displayName" : {
+            "type" : [ "string", "null" ]
+          },
+          "status" : {
+            "$ref" : "#/components/schemas/UserStatus"
+          },
+          "roles" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/Role"
+            },
+            "uniqueItems" : true
+          }
+        },
+        "required" : [ "displayName", "email", "id", "roles", "status" ]
+      }
+    },
+    "securitySchemes" : {
+      "bearerAuth" : {
+        "type" : "http",
+        "scheme" : "bearer",
+        "bearerFormat" : "JWT"
+      }
+    }
+  }
+}

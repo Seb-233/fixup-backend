@@ -1,5 +1,7 @@
-# Foundation profile without external integrations.
 spring:
   config:
     activate:
       on-profile: dev
+springdoc:
+  api-docs:
+    enabled: true

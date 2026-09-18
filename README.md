@@ -1,122 +1,142 @@
 # FixUp Backend
 
-## 1. Descripción
+Backend de FixUp construido como monolito modular con Java 21, Spring Boot y Spring
+Modulith. Auth0 autentica la identidad externa; PostgreSQL mantiene las cuentas,
+los estados y los roles internos. Este repositorio no contiene el frontend.
 
-Backend de FixUp desarrollado como monolito modular con Java, Spring Boot y Spring Modulith. El repositorio organiza los componentes del sistema bajo el paquete raíz `com.fixup`.
+## Arquitectura
 
-## 2. Objetivo del backend
+Los 14 módulos conservan sus fronteras y capas `api`, `web`, `application`,
+`domain` e `infrastructure`. La identidad interna pertenece a `identityaccess`;
+los perfiles y la verificación de trabajadores pertenecen a `fixers`.
+Los otros módulos conservan su estructura para sus entregas correspondientes.
 
-Proporcionar una base técnica segura y mantenible para los servicios de FixUp, con responsabilidades separadas por módulo y reglas arquitectónicas verificables.
+Spring Security valida Bearer JWT antes de los controladores. Los casos de uso reciben
+`CurrentActor`, con UUID interno, subject, roles y estado resueltos desde PostgreSQL.
+Los módulos de negocio no intercambian JWT y no confían en roles recibidos del frontend.
 
-## 3. Arquitectura
+Consulta las [reglas modulares](docs/module-rules.md) y la
+[arquitectura](docs/architecture/modular-monolith.md).
 
-Cada módulo encapsula sus datos y reglas, y organiza su código en `api`, `application`, `domain`, `infrastructure` y `web`. La comunicación entre módulos utiliza contratos públicos de `api`; los efectos secundarios se coordinan mediante eventos. `shared` contiene elementos técnicos reutilizables.
+## Tecnologías y requisitos
 
-Spring Modulith verifica fronteras y ciclos. ArchUnit restringe dependencias de persistencia y evita que `shared` dependa de módulos del negocio. Consulta la [arquitectura del monolito modular](docs/architecture/modular-monolith.md).
+- JDK 21; configurar `JAVA_HOME`. Maven 3.9.11 mediante Maven Wrapper.
+- Spring Boot 3.5.16, Spring Modulith 1.4.13 y Spring Security Resource Server.
+- PostgreSQL 17, JPA/Hibernate, Flyway y Bean Validation.
+- Actuator, Springdoc OpenAPI, JUnit, ArchUnit, Testcontainers y JaCoCo.
+- Docker con contenedores Linux y Compose V2 para el entorno y las pruebas PostgreSQL.
 
-## 4. Tecnologías
+`pom.xml` mantiene las versiones. H2 se utiliza solo en pruebas, no como base del backend.
 
-- Java 21 LTS y Maven 3.9.11 mediante Maven Wrapper.
-- Spring Boot 3.5.16 y Spring Modulith 1.4.13.
-- Spring Web, Security y OAuth2 Resource Server.
-- Spring Data JPA, PostgreSQL, Flyway y Bean Validation.
-- Actuator y Springdoc OpenAPI 2.8.17.
-- JUnit, ArchUnit, Testcontainers y JaCoCo 0.8.14.
-- Docker, Docker Compose y GitHub Actions.
+## Configuración
 
-El archivo `pom.xml` define las dependencias y sus versiones; los BOM de Boot y Modulith administran las versiones transitivas.
+Copia `.env.example` a `.env`; permanece ignorado por Git. El ejemplo contiene
+únicamente valores ficticios. Configura un issuer de Auth0 terminado en `/` y el
+audience de la API para utilizar tokens de un tenant real. No se requiere Client Secret.
 
-## 5. Requisitos previos
+| Variable | Propósito |
+| --- | --- |
+| `DATABASE_URL` | JDBC PostgreSQL; en Docker debe usar `database:5432` |
+| `DATABASE_USERNAME`, `DATABASE_PASSWORD` | Acceso local a la base de datos |
+| `POSTGRES_DB` | Base creada por el contenedor PostgreSQL |
+| `AUTH0_ISSUER_URI`, `AUTH0_AUDIENCE` | Issuer y audience exactos del JWT |
+| `CORS_ALLOWED_ORIGINS` | Orígenes separados por comas, por ejemplo `http://localhost:4200` |
+| `POSTGRES_PORT`, `BACKEND_PORT` | Puertos publicados en el equipo; defaults 5432 y 8080 |
 
-Instalar JDK 21 y configurar `JAVA_HOME` hacia el JDK. Verificar `java -version`. No se requiere Maven global: el Wrapper descarga Maven desde Maven Central en su primera ejecución.
+Las claves públicas se obtienen de `<issuer>.well-known/jwks.json` al validar un token.
+`AUTH0_JWK_SET_URI` es una configuración opcional de servidor para una ubicación
+confiable de JWKS; no proviene de solicitudes ni de encabezados del cliente.
+En despliegues reales utiliza el endpoint HTTPS de Auth0.
 
-Docker con contenedores Linux es opcional para ejecutar Compose. Las pruebas base no requieren Docker, PostgreSQL ni Auth0.
+Compose carga `.env`; Spring Boot y Maven no lo cargan automáticamente.
+Para ejecutar desde el host, exporta las variables y cambia la URL JDBC a
+`jdbc:postgresql://localhost:<puerto-publicado>/fixup`. Ese valor no sirve dentro del
+contenedor backend. No publiques valores sensibles ni registros sin revisión.
 
-## 6. Configuración local
-
-Copiar `.env.example` a `.env` para preparar las variables locales. El archivo de ejemplo contiene únicamente valores ficticios y `.env` está excluido de Git.
-
-Spring Boot y los scripts no cargan automáticamente `.env`; las variables deben exportarse en la terminal cuando se utilicen. Docker Compose sí carga ese archivo.
-
-Los perfiles disponibles son `dev` y `test`. La configuración mantiene desactivadas las conexiones externas de datasource, JPA, Flyway y OAuth2 Resource Server. Las propiedades de conexión usan variables de entorno sin credenciales incorporadas. CORS está declarado como configuración, sin habilitar acceso entre orígenes.
-
-## 7. Ejecución
-
-Linux, macOS o Git Bash:
-
-```bash
-./scripts/start-local.sh
-```
+## Inicio con Docker
 
 PowerShell:
 
 ```powershell
-.\mvnw.cmd spring-boot:run "-Dspring-boot.run.profiles=dev"
+Copy-Item .env.example .env
+docker compose -f compose.development.yml --profile database up --build -d
+docker compose -f compose.development.yml --profile database ps
+docker compose -f compose.development.yml --profile database logs --tail 100 backend
 ```
 
-El servidor utiliza el puerto 8080. La configuración de seguridad deniega las solicitudes HTTP con 403. No hay login ni endpoints funcionales; Swagger y los endpoints de Actuator están desactivados.
+En Bash utiliza `cp .env.example .env` para la copia inicial. No sobrescribas un
+`.env` existente. Si un puerto está ocupado, cambia únicamente su variable local.
 
-## 8. Pruebas
+El backend espera al healthcheck de la base cuando se activa el perfil `database`.
+Flyway crea `users`, `user_roles` y `fixer_profiles`; Hibernate valida el esquema.
+Para usar una base externa, configura sus variables y arranca solo `backend` sin
+el perfil `database`.
 
-```bash
-./mvnw clean verify
-```
+Detención segura:
 
-En PowerShell, utilizar `.\mvnw.cmd clean verify`.
-
-La verificación compila, ejecuta pruebas, empaqueta el JAR y genera cobertura. `ModularityTest` exige los 14 módulos y ejecuta `ApplicationModules.verify()`. Las pruebas de contexto comprueban el arranque sin servicios externos y la denegación HTTP.
-
-Los resultados JUnit se encuentran en `target/surefire-reports/` y el reporte de cobertura en `target/site/jacoco/index.html`. GitHub Actions ejecuta la misma verificación y publica ambos reportes como artefactos.
-
-## 9. Docker
-
-Con `.env` preparado a partir del ejemplo:
-
-```bash
-docker compose -f compose.development.yml up --build backend
+```sh
 docker compose -f compose.development.yml down
 ```
 
-Compose publica los puertos únicamente en loopback. El servicio opcional PostgreSQL se inicia con:
+El volumen `postgres-data` se conserva. No se automatiza ningún borrado de volúmenes.
+El entorno de desarrollo publica los puertos únicamente en `127.0.0.1`.
 
-```bash
-docker compose -f compose.development.yml --profile database up -d database
+## API de identidad
+
+| Método y ruta | Comportamiento |
+| --- | --- |
+| `GET /actuator/health` | Público; devuelve estado sin detalles sensibles |
+| `POST /auth/bootstrap` | JWT válido; crea la cuenta sin roles (201) o devuelve la existente (200) |
+| `GET /auth/me` | Cuenta activa resuelta por subject; no expone externalSubject |
+| `POST /auth/select-role` | Asigna OWNER, TENANT o FIXER idempotentemente al usuario actual |
+
+Los errores de autenticación son 401 y los de autorización 403, con JSON uniforme.
+Una cuenta aún no provisionada recibe 409 al consultar `me`. Los cuerpos con campos
+de identidad o privilegios no admitidos se rechazan con 400.
+
+FIXER se crea con verificación PENDING. El rol solo no autoriza ejecutar trabajos:
+los casos de uso deben invocar `FixerEligibility.requireVerified(CurrentActor)`.
+No se implementa aquí el flujo de revisión de trabajadores ni los casos de uso de trabajos.
+
+La asignación administrativa requiere el caso de uso protegido
+`AdministrativeRoles` y un PLATFORM_ADMIN vigente en PostgreSQL. No existe un
+endpoint de autoasignación administrativa ni una cuenta administradora precreada.
+
+## OpenAPI y perfiles
+
+- `dev`: permite generar el contrato OpenAPI en las pruebas; su endpoint HTTP permanece denegado.
+- Sin `dev`: generación OpenAPI desactivada; las rutas de documentación también están denegadas.
+- Swagger UI permanece desactivado.
+- `test`: base H2 aislada y configuración ficticia; las claves de prueba se generan en memoria.
+
+El [contrato OpenAPI versionado](docs/openapi.json) permite preparar el cliente del
+frontend. La [guía de autenticación](docs/authentication.md) explica los estados,
+límites y respuestas. Los placeholders no constituyen una integración operativa con
+un tenant real de Auth0.
+
+## Pruebas
+
+```powershell
+.\mvnw.cmd clean verify
+.\mvnw.cmd -Ppostgres-it verify
 ```
 
-El backend tiene la conexión a PostgreSQL desactivada. Una conexión desde otro contenedor debe usar el nombre de servicio `database`, mientras que una conexión desde el host utiliza el puerto publicado. El volumen conserva los datos locales al ejecutar `down`. No se incluyen tablas ni migraciones de negocio.
+En Bash usa `./mvnw`. La primera orden ejecuta arquitectura, HTTP, seguridad,
+concurrencia y contrato sobre H2, con las migraciones reales. La segunda repite el
+contrato HTTP contra PostgreSQL 17 mediante Testcontainers y requiere Docker.
+No se omiten las pruebas PostgreSQL si Docker no está disponible: ese perfil falla.
 
-## 10. Módulos
+Las pruebas combinan `jwt()` de Spring Security Test con tokens RSA firmados,
+incluyendo firmas inválidas, issuer/audience incorrectos y expiración. No necesitan
+credenciales reales de Auth0.
 
-Los 14 módulos son `shared`, `identityaccess`, `users`, `fixers`, `properties`, `media`, `requests`, `quotations`, `jobs`, `notifications`, `messaging`, `payments`, `contracts` y `analytics`.
+Reportes: `target/surefire-reports/`, `target/failsafe-reports/` y
+`target/site/jacoco/`. La prueba de OpenAPI exporta `target/openapi.json`.
+GitHub Actions ejecuta `-Ppostgres-it clean verify` y publica los reportes.
 
-```text
-src/main/java/com/fixup/
-  FixupApplication.java
-  shared/{configuration,errors,events,security,utilities}
-  <module>/{api,application,domain,infrastructure,web}
-src/main/resources/
-  application.yml
-  application-dev.yml
-  application-test.yml
-  db/migration/
-src/test/java/com/fixup/{architecture,unit,integration,e2e}
-scripts/
-docs/architecture/
-```
+## Contribución
 
-Los paquetes reservados se conservan mediante `package-info.java`, sin entidades ni servicios de negocio.
-
-## 11. Documentación adicional
-
-- [Arquitectura modular](docs/architecture/modular-monolith.md).
-- [Reglas de módulos](docs/module-rules.md).
-- [Guía de contribución](CONTRIBUTING.md).
-- [Política de seguridad](SECURITY.md).
-
-## 12. Contribución
-
-Crear una rama temporal, validar los cambios y abrir un pull request hacia `develop`. Los cambios en ramas permanentes requieren revisión y CI exitoso. Consulta [CONTRIBUTING.md](CONTRIBUTING.md) para convenciones y validaciones.
-
-## 13. Equipo
-
-Proyecto desarrollado por el equipo de FixUp. La participación en el código puede consultarse en el [historial de contribuciones](https://github.com/Seb-233/fixup-backend/graphs/contributors).
+Trabaja en ramas temporales desde `develop` y abre PR hacia esa base. No hagas merge
+directo ni force push. Consulta [CONTRIBUTING.md](CONTRIBUTING.md) y
+[SECURITY.md](SECURITY.md). La identidad del backend, la integración Auth0 del
+frontend y los demás casos de negocio mantienen responsabilidades separadas.
