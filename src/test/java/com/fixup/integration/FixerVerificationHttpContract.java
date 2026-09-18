@@ -49,14 +49,12 @@ abstract class FixerVerificationHttpContract {
     @Autowired ObjectMapper mapper;
     @Autowired FixerEligibility fixerEligibility;
     @Autowired FixerReview review;
+    @Autowired com.fixup.testsupport.IntegrationDatabaseCleaner databaseCleaner;
 
     @BeforeEach
     void clearIsolatedTestDatabase() {
         SecurityContextHolder.clearContext();
-        jdbc.update("DELETE FROM fixer_verification_documents");
-        jdbc.update("DELETE FROM fixer_profiles");
-        jdbc.update("DELETE FROM user_roles");
-        jdbc.update("DELETE FROM users");
+        databaseCleaner.clean();
     }
 
     // ---------- helpers ----------
