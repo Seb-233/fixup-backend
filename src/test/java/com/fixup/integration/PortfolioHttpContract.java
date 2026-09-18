@@ -61,8 +61,9 @@ abstract class PortfolioHttpContract {
     }
 
     /**
-     * FR-UC-16 owns the review that turns a profile VERIFIED. That flow lives on its own branch,
-     * so the state is set directly here: this contract covers the portfolio, not the review.
+     * FR-UC-16 owns the review that turns a profile VERIFIED and has its own contract. The state is
+     * set directly here so a change in the review flow cannot make the portfolio tests fail for a
+     * reason that has nothing to do with the portfolio.
      */
     private UUID verifiedFixer(String subject) throws Exception {
         var id = bootstrap(subject, "FIXER");
