@@ -38,7 +38,7 @@
           "400" : {
             "description" : "Invalid document type, missing field or unexpected client fields",
             "content" : {
-              "*/*" : {
+              "application/json" : {
                 "schema" : {
                   "$ref" : "#/components/schemas/ErrorResponse"
                 }
@@ -48,7 +48,7 @@
           "401" : {
             "description" : "Missing or invalid bearer token",
             "content" : {
-              "*/*" : {
+              "application/json" : {
                 "schema" : {
                   "$ref" : "#/components/schemas/ErrorResponse"
                 }
@@ -58,7 +58,7 @@
           "403" : {
             "description" : "Inactive account, missing FIXER role or missing administrative privileges",
             "content" : {
-              "*/*" : {
+              "application/json" : {
                 "schema" : {
                   "$ref" : "#/components/schemas/ErrorResponse"
                 }
@@ -68,7 +68,7 @@
           "409" : {
             "description" : "The transition does not apply to the current verification state",
             "content" : {
-              "*/*" : {
+              "application/json" : {
                 "schema" : {
                   "$ref" : "#/components/schemas/ErrorResponse"
                 }
@@ -103,7 +103,7 @@
           "400" : {
             "description" : "Invalid document type, missing field or unexpected client fields",
             "content" : {
-              "*/*" : {
+              "application/json" : {
                 "schema" : {
                   "$ref" : "#/components/schemas/ErrorResponse"
                 }
@@ -113,7 +113,7 @@
           "401" : {
             "description" : "Missing or invalid bearer token",
             "content" : {
-              "*/*" : {
+              "application/json" : {
                 "schema" : {
                   "$ref" : "#/components/schemas/ErrorResponse"
                 }
@@ -123,7 +123,7 @@
           "403" : {
             "description" : "Inactive account, missing FIXER role or missing administrative privileges",
             "content" : {
-              "*/*" : {
+              "application/json" : {
                 "schema" : {
                   "$ref" : "#/components/schemas/ErrorResponse"
                 }
@@ -133,7 +133,7 @@
           "409" : {
             "description" : "The transition does not apply to the current verification state",
             "content" : {
-              "*/*" : {
+              "application/json" : {
                 "schema" : {
                   "$ref" : "#/components/schemas/ErrorResponse"
                 }
@@ -169,7 +169,7 @@
           "400" : {
             "description" : "Invalid document type, missing field or unexpected client fields",
             "content" : {
-              "*/*" : {
+              "application/json" : {
                 "schema" : {
                   "$ref" : "#/components/schemas/ErrorResponse"
                 }
@@ -179,7 +179,7 @@
           "401" : {
             "description" : "Missing or invalid bearer token",
             "content" : {
-              "*/*" : {
+              "application/json" : {
                 "schema" : {
                   "$ref" : "#/components/schemas/ErrorResponse"
                 }
@@ -189,7 +189,7 @@
           "403" : {
             "description" : "Inactive account, missing FIXER role or missing administrative privileges",
             "content" : {
-              "*/*" : {
+              "application/json" : {
                 "schema" : {
                   "$ref" : "#/components/schemas/ErrorResponse"
                 }
@@ -199,7 +199,7 @@
           "409" : {
             "description" : "The transition does not apply to the current verification state",
             "content" : {
-              "*/*" : {
+              "application/json" : {
                 "schema" : {
                   "$ref" : "#/components/schemas/ErrorResponse"
                 }
@@ -209,7 +209,7 @@
           "200" : {
             "description" : "Verification state after the submission",
             "content" : {
-              "*/*" : {
+              "application/json" : {
                 "schema" : {
                   "$ref" : "#/components/schemas/VerificationResponse"
                 }
@@ -386,7 +386,7 @@
           "400" : {
             "description" : "Invalid document type, missing field or unexpected client fields",
             "content" : {
-              "*/*" : {
+              "application/json" : {
                 "schema" : {
                   "$ref" : "#/components/schemas/ErrorResponse"
                 }
@@ -396,7 +396,7 @@
           "401" : {
             "description" : "Missing or invalid bearer token",
             "content" : {
-              "*/*" : {
+              "application/json" : {
                 "schema" : {
                   "$ref" : "#/components/schemas/ErrorResponse"
                 }
@@ -406,7 +406,7 @@
           "403" : {
             "description" : "Inactive account, missing FIXER role or missing administrative privileges",
             "content" : {
-              "*/*" : {
+              "application/json" : {
                 "schema" : {
                   "$ref" : "#/components/schemas/ErrorResponse"
                 }
@@ -416,7 +416,7 @@
           "409" : {
             "description" : "The transition does not apply to the current verification state",
             "content" : {
-              "*/*" : {
+              "application/json" : {
                 "schema" : {
                   "$ref" : "#/components/schemas/ErrorResponse"
                 }
@@ -426,7 +426,7 @@
           "200" : {
             "description" : "Verification state of the current fixer",
             "content" : {
-              "*/*" : {
+              "application/json" : {
                 "schema" : {
                   "$ref" : "#/components/schemas/VerificationResponse"
                 }

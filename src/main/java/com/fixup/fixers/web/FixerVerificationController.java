@@ -25,6 +25,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -35,7 +36,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 /** FR-UC-16: registro y validación del Fixer. Controllers stay thin and never touch JPA. */
 @RestController
-@RequestMapping("/fixers")
+@RequestMapping(value = "/fixers", produces = MediaType.APPLICATION_JSON_VALUE)
 @SecurityRequirement(name = "bearerAuth")
 @ApiResponses({
     @ApiResponse(responseCode = "400", description = "Invalid document type, missing field or unexpected client fields",
