@@ -9,6 +9,284 @@
     "description" : "Generated server url"
   } ],
   "paths" : {
+    "/media/me/portfolio" : {
+      "get" : {
+        "tags" : [ "portfolio-controller" ],
+        "summary" : "List the fixer's own portfolio, hidden pieces included",
+        "operationId" : "myPortfolio",
+        "responses" : {
+          "400" : {
+            "description" : "Invalid kind, missing field or unexpected client fields",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Inactive account, or the fixer is not verified",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "A publication rule of the portfolio rejected the operation",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "200" : {
+            "description" : "Every piece of the current fixer, in publication order",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/PieceResponse"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      },
+      "post" : {
+        "tags" : [ "portfolio-controller" ],
+        "summary" : "Publish a piece in the fixer's own portfolio",
+        "description" : "The body carries a storage key only. The file is uploaded by the client against a signed URL, so no media content crosses this API. Requires a verified fixer.",
+        "operationId" : "publish",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/PieceRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "400" : {
+            "description" : "Invalid kind, missing field or unexpected client fields",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Inactive account, or the fixer is not verified",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "A publication rule of the portfolio rejected the operation",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "201" : {
+            "description" : "The piece was published",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PieceResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/media/me/portfolio/{pieceId}/show" : {
+      "post" : {
+        "tags" : [ "portfolio-controller" ],
+        "summary" : "Put a hidden piece back in the public portfolio",
+        "operationId" : "show",
+        "parameters" : [ {
+          "name" : "pieceId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "responses" : {
+          "400" : {
+            "description" : "Invalid kind, missing field or unexpected client fields",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Inactive account, or the fixer is not verified",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "A publication rule of the portfolio rejected the operation",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "200" : {
+            "description" : "The piece is public again",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PieceResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/media/me/portfolio/{pieceId}/hide" : {
+      "post" : {
+        "tags" : [ "portfolio-controller" ],
+        "summary" : "Take a piece out of the public portfolio",
+        "operationId" : "hide",
+        "parameters" : [ {
+          "name" : "pieceId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "responses" : {
+          "400" : {
+            "description" : "Invalid kind, missing field or unexpected client fields",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Inactive account, or the fixer is not verified",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "A publication rule of the portfolio rejected the operation",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "200" : {
+            "description" : "The piece is hidden",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PieceResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
     "/auth/select-role" : {
       "post" : {
         "tags" : [ "current-user-controller" ],
@@ -164,6 +442,81 @@
         } ]
       }
     },
+    "/media/fixers/{fixerUserId}/portfolio" : {
+      "get" : {
+        "tags" : [ "portfolio-controller" ],
+        "summary" : "Read the public portfolio of a fixer",
+        "description" : "Returns only the pieces the fixer chose to show, in publication order.",
+        "operationId" : "portfolioOf",
+        "parameters" : [ {
+          "name" : "fixerUserId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "responses" : {
+          "400" : {
+            "description" : "Invalid kind, missing field or unexpected client fields",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Inactive account, or the fixer is not verified",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "A publication rule of the portfolio rejected the operation",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "200" : {
+            "description" : "The public portfolio of that fixer",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/PieceResponse"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
     "/auth/me" : {
       "get" : {
         "tags" : [ "current-user-controller" ],
@@ -229,19 +582,31 @@
   },
   "components" : {
     "schemas" : {
-      "Role" : {
-        "type" : "string",
-        "enum" : [ "OWNER", "TENANT", "FIXER", "REAL_ESTATE_MANAGER", "PLATFORM_ADMIN" ]
-      },
-      "RoleRequest" : {
+      "PieceRequest" : {
         "type" : "object",
         "additionalProperties" : false,
         "properties" : {
-          "role" : {
-            "$ref" : "#/components/schemas/Role"
+          "kind" : {
+            "type" : "string",
+            "enum" : [ "PHOTO", "VIDEO" ]
+          },
+          "storageKey" : {
+            "type" : "string",
+            "maxLength" : 512,
+            "minLength" : 0
+          },
+          "title" : {
+            "type" : "string",
+            "maxLength" : 120,
+            "minLength" : 0
+          },
+          "description" : {
+            "type" : "string",
+            "maxLength" : 1000,
+            "minLength" : 0
           }
         },
-        "required" : [ "role" ]
+        "required" : [ "kind", "storageKey", "title" ]
       },
       "ErrorResponse" : {
         "type" : "object",
@@ -260,6 +625,55 @@
             "type" : "string"
           }
         }
+      },
+      "PieceResponse" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "kind" : {
+            "type" : "string",
+            "enum" : [ "PHOTO", "VIDEO" ]
+          },
+          "storageKey" : {
+            "type" : "string"
+          },
+          "title" : {
+            "type" : "string"
+          },
+          "description" : {
+            "type" : [ "string", "null" ]
+          },
+          "position" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "visibility" : {
+            "type" : "string",
+            "enum" : [ "PUBLIC", "HIDDEN" ]
+          },
+          "createdAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          }
+        },
+        "required" : [ "id", "kind", "position", "storageKey", "title", "visibility" ]
+      },
+      "Role" : {
+        "type" : "string",
+        "enum" : [ "OWNER", "TENANT", "FIXER", "REAL_ESTATE_MANAGER", "PLATFORM_ADMIN" ]
+      },
+      "RoleRequest" : {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "role" : {
+            "$ref" : "#/components/schemas/Role"
+          }
+        },
+        "required" : [ "role" ]
       },
       "RolesResponse" : {
         "type" : "object",
