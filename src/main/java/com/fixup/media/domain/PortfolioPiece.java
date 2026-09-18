@@ -8,9 +8,12 @@ import java.util.Objects;
 import java.util.UUID;
 
 /**
- * FR-UC-17: a portfolio piece. The backend stores only the object key; the file itself is
- * uploaded by the client against a signed Supabase Storage URL, so no media content crosses
+ * FR-UC-17: a portfolio piece. The backend stores only the object key; no media content crosses
  * this API. Same decision as the verification documents of FR-UC-16.
+ *
+ * <p>The signed upload URL that should issue that key does not exist yet, so today the key is
+ * whatever the client sends and it does not prove ownership of the stored object. The conditions
+ * that must hold before production are written down in {@code docs/media-storage.md}.
  */
 public record PortfolioPiece(UUID id, UUID fixerUserId, PortfolioPieceKind kind, String storageKey,
         String title, String description, int position, PortfolioVisibility visibility,

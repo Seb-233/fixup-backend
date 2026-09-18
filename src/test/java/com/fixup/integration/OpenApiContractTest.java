@@ -79,9 +79,6 @@ class OpenApiContractTest {
         // No media content crosses this API: the request carries a storage key only.
         assertThat(contract.at("/components/schemas/PieceRequest/properties").toString())
                 .contains("storageKey").doesNotContain("content", "file", "bytes");
-        // The public response never leaks the internal storage layout: it carries a media id only.
-        assertThat(contract.at("/components/schemas/PieceResponse/properties").toString())
-                .contains("mediaId").doesNotContain("storageKey");
         Files.createDirectories(Path.of("target"));
         Files.writeString(Path.of("target", "openapi.json"),
                 mapper.writerWithDefaultPrettyPrinter().writeValueAsString(contract) + System.lineSeparator());

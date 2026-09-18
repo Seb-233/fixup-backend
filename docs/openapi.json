@@ -568,7 +568,7 @@
       "post" : {
         "tags" : [ "portfolio-controller" ],
         "summary" : "Publish a piece in the fixer's own portfolio",
-        "description" : "The body carries a storage key only. The file is uploaded by the client against a signed URL, so no media content crosses this API. Requires a verified fixer.",
+        "description" : "The body carries a storage key only, never media content. The upload service does not exist yet, so the key is accepted as free text and does not prove that the object belongs to this fixer: before production the upload must go through a signed URL issued by the backend and bound to the authenticated fixer. Requires a verified fixer.",
         "operationId" : "publish",
         "requestBody" : {
           "content" : {
@@ -783,7 +783,7 @@
       "get" : {
         "tags" : [ "portfolio-controller" ],
         "summary" : "Read the public portfolio of a fixer",
-        "description" : "Returns only the pieces the fixer chose to show, in publication order.",
+        "description" : "Returns only the pieces the fixer chose to show, in publication order. Each piece still carries its storage key, which exposes how the bucket is organised: before production this becomes a controlled read URL or a media identifier, an incompatible change of this contract.",
         "operationId" : "portfolioOf",
         "parameters" : [ {
           "name" : "fixerUserId",

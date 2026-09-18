@@ -2,7 +2,12 @@ package com.fixup.integration;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fixup.media.domain.PortfolioPolicy;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -212,6 +217,50 @@ abstract class PortfolioHttpContract {
                 .andExpect(jsonPath("$.code").value("PORTFOLIO_FULL"));
         assertThat(jdbc.queryForObject("SELECT count(*) FROM portfolio_pieces", Integer.class))
                 .isEqualTo(PortfolioPolicy.MAX_PIECES);
+    }
+
+    /**
+     * Publishing counts the pieces and derives the next position from them. Two simultaneous
+     * publications must not observe the same portfolio: the loser is a conflict for the client,
+     * never an internal error, and the positions that reach the table stay unique.
+     */
+    @Test
+    void twoSimultaneousPublicationsNeitherCollideNorFail() throws Exception {
+        verifiedFixer("auth0|concurrent");
+        publish("auth0|concurrent", "Base").andExpect(status().isCreated());
+
+        var start = new CountDownLatch(1);
+        var pool = Executors.newFixedThreadPool(2);
+        List<Integer> statuses;
+        try {
+            var attempts = List.of(
+                    pool.submit(() -> statusOfPublication("auth0|concurrent", "Simultanea1", start)),
+                    pool.submit(() -> statusOfPublication("auth0|concurrent", "Simultanea2", start)));
+            start.countDown();
+            statuses = new ArrayList<>();
+            for (var attempt : attempts) {
+                statuses.add(attempt.get(30, TimeUnit.SECONDS));
+            }
+        } finally {
+            pool.shutdownNow();
+        }
+
+        assertThat(statuses).as("a concurrent publication is 201 or 409, never 500")
+                .allMatch(status -> status == 201 || status == 409);
+        assertThat(statuses).as("at least one publication goes through").contains(201);
+        var positions = jdbc.queryForList(
+                "SELECT display_position FROM portfolio_pieces ORDER BY display_position", Integer.class);
+        assertThat(positions).doesNotHaveDuplicates()
+                .hasSize(1 + java.util.Collections.frequency(statuses, 201));
+    }
+
+    private int statusOfPublication(String subject, String title, CountDownLatch start) throws Exception {
+        start.await(30, TimeUnit.SECONDS);
+        try {
+            return publish(subject, title).andReturn().getResponse().getStatus();
+        } finally {
+            SecurityContextHolder.clearContext();
+        }
     }
 
     @ParameterizedTest
