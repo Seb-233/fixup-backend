@@ -1,0 +1,32 @@
+package com.fixup.requests.web;
+
+import com.fixup.requests.api.RepairRequestAccessDeniedException;
+import com.fixup.requests.api.RepairRequestConflictException;
+import com.fixup.requests.api.RepairRequestNotFoundException;
+import com.fixup.shared.errors.ErrorResponse;
+import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
+
+@RestControllerAdvice
+class RequestErrorHandler {
+    @ExceptionHandler(RepairRequestAccessDeniedException.class)
+    ResponseEntity<ErrorResponse> forbidden(HttpServletRequest request) {
+        return ResponseEntity.status(403).body(new ErrorResponse(403, "ACCESS_DENIED",
+                "You do not have permission to perform this action", request.getRequestURI()));
+    }
+
+    @ExceptionHandler(RepairRequestNotFoundException.class)
+    ResponseEntity<ErrorResponse> notFound(HttpServletRequest request) {
+        return ResponseEntity.status(404).body(new ErrorResponse(404, "REQUEST_NOT_FOUND",
+                "The repair request does not exist", request.getRequestURI()));
+    }
+
+    @ExceptionHandler(RepairRequestConflictException.class)
+    ResponseEntity<ErrorResponse> conflict(RepairRequestConflictException exception,
+            HttpServletRequest request) {
+        return ResponseEntity.status(409).body(new ErrorResponse(409, exception.code(),
+                exception.getMessage(), request.getRequestURI()));
+    }
+}
