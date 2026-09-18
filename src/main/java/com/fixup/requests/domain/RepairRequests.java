@@ -16,6 +16,9 @@ public interface RepairRequests {
     /** Open requests offered to the fixers, newest first, optionally narrowed to one specialty. */
     List<RepairRequest> findOpen(Specialty specialty);
 
+    /** Open requests offered to fixers matching any of the given specialties, newest first. */
+    List<RepairRequest> findOpenBySpecialties(java.util.Collection<Specialty> specialties);
+
     void create(RepairRequest request);
 
     void update(RepairRequest request);

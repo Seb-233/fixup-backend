@@ -10,9 +10,20 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 class VerifyFixerEligibility implements FixerEligibility {
     private final FixerProfiles profiles;
+    private static final java.util.Map<java.util.UUID, java.util.Set<String>> OVERRIDDEN_SPECIALTIES =
+            new java.util.concurrent.ConcurrentHashMap<>();
 
     VerifyFixerEligibility(FixerProfiles profiles) {
         this.profiles = profiles;
+    }
+
+    @Override
+    public void assignSpecialties(java.util.UUID userId, java.util.Set<String> specialties) {
+        if (specialties == null) {
+            OVERRIDDEN_SPECIALTIES.remove(userId);
+        } else {
+            OVERRIDDEN_SPECIALTIES.put(userId, specialties);
+        }
     }
 
     @Override
@@ -20,5 +31,17 @@ class VerifyFixerEligibility implements FixerEligibility {
     public void requireVerified(CurrentActor actor) {
         var profile = profiles.findByUserId(actor.internalUserId()).orElseThrow(FixerNotEligibleException::new);
         profile.requireEligible(actor);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public java.util.Set<String> specialtiesOf(CurrentActor actor) {
+        var profile = profiles.findByUserId(actor.internalUserId()).orElseThrow(FixerNotEligibleException::new);
+        profile.requireEligible(actor);
+        var overridden = OVERRIDDEN_SPECIALTIES.get(actor.internalUserId());
+        if (overridden != null) {
+            return overridden;
+        }
+        return profile.specialties();
     }
 }

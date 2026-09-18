@@ -12,6 +12,13 @@ public interface RepairRequestDirectory {
     RepairRequestSnapshot require(UUID requestId);
 
     /**
+     * Locks the repair request row with PESSIMISTIC_WRITE for a decision.
+     *
+     * @throws RepairRequestNotFoundException when no request carries that identifier.
+     */
+    RepairRequestSnapshot lockForDecision(UUID requestId);
+
+    /**
      * Closes the request against the fixer whose quotation was accepted. The caller already runs
      * inside a transaction, so the assignment either commits with the acceptance or not at all.
      *

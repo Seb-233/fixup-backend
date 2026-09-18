@@ -23,4 +23,7 @@ interface RepairRequestJpaRepository extends JpaRepository<RepairRequestEntity, 
 
     List<RepairRequestEntity> findByStatusAndSpecialtyOrderByCreatedAtDesc(RepairRequestStatus status,
             Specialty specialty);
+
+    List<RepairRequestEntity> findByStatusAndSpecialtyInOrderByCreatedAtDesc(RepairRequestStatus status,
+            java.util.Collection<Specialty> specialties);
 }

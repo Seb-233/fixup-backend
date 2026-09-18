@@ -65,7 +65,8 @@ public record RepairRequest(UUID id, UUID ownerUserId, Specialty specialty, Stri
         if (actor.status() != UserStatus.ACTIVE) {
             throw new RepairRequestAccessDeniedException();
         }
-        if (ownerUserId.equals(userId) || userId.equals(assignedFixerUserId)) {
+        if (ownerUserId.equals(userId) || userId.equals(assignedFixerUserId)
+                || actor.hasRole(Role.PLATFORM_ADMIN)) {
             return;
         }
         if (!actor.hasRole(Role.FIXER) || !isOpen()) {

@@ -1,30 +1,67 @@
 package com.fixup.requests.application;
 
+import com.fixup.fixers.api.FixerEligibility;
+import com.fixup.fixers.api.FixerNotEligibleException;
 import com.fixup.identityaccess.api.CurrentActor;
+import com.fixup.identityaccess.api.Role;
+import com.fixup.identityaccess.api.UserStatus;
+import com.fixup.requests.api.RepairRequestAccessDeniedException;
 import com.fixup.requests.api.Specialty;
+import com.fixup.requests.domain.RepairRequest;
 import com.fixup.requests.domain.RepairRequests;
 import java.util.List;
+import java.util.Objects;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * FR-UC-18: la bandeja del Fixer. Ver la oferta abierta no exige estar verificado todavía; el
- * sello solo se exige para cotizar, de modo que un técnico en revisión puede ir mirando el mercado.
+ * FR-UC-18: la bandeja del Fixer. Exige cuenta ACTIVE, rol FIXER y verificación VERIFIED.
+ * Devuelve únicamente solicitudes compatibles con las especialidades del perfil del Fixer.
  */
 @Service
 public class ListOpenRepairRequests {
     private final RepairRequests requests;
+    private final FixerEligibility eligibility;
 
-    ListOpenRepairRequests(RepairRequests requests) {
+    public ListOpenRepairRequests(RepairRequests requests, FixerEligibility eligibility) {
         this.requests = requests;
+        this.eligibility = eligibility;
     }
 
     @Transactional(readOnly = true)
-    public List<RepairRequestSummary> execute(CurrentActor actor, Specialty specialty) {
-        RequestAccess.requireActiveFixer(actor);
-        return requests.findOpen(specialty).stream()
+    public List<RepairRequest> execute(CurrentActor actor) {
+        if (actor.status() != UserStatus.ACTIVE || !actor.hasRole(Role.FIXER)) {
+            throw new RepairRequestAccessDeniedException();
+        }
+        try {
+            eligibility.requireVerified(actor);
+        } catch (FixerNotEligibleException ex) {
+            throw new RepairRequestAccessDeniedException();
+        }
+
+        var specialtyNames = eligibility.specialtiesOf(actor);
+        if (specialtyNames == null || specialtyNames.isEmpty()) {
+            return List.of();
+        }
+
+        var specialties = specialtyNames.stream()
+                .map(name -> {
+                    try {
+                        return Specialty.valueOf(name);
+                    } catch (IllegalArgumentException ex) {
+                        return null;
+                    }
+                })
+                .filter(Objects::nonNull)
+                .toList();
+
+        if (specialties.isEmpty()) {
+            return List.of();
+        }
+
+        return requests.findOpenBySpecialties(specialties).stream()
                 // A fixer never sees his own request in the offer list.
                 .filter(request -> !request.ownerUserId().equals(actor.internalUserId()))
-                .map(RepairRequestSummary::of).toList();
+                .toList();
     }
 }

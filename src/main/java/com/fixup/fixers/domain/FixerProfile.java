@@ -7,6 +7,7 @@ import com.fixup.identityaccess.api.CurrentActor;
 import com.fixup.identityaccess.api.Role;
 import com.fixup.identityaccess.api.UserStatus;
 import java.time.Instant;
+import java.util.Set;
 import java.util.UUID;
 
 public record FixerProfile(UUID userId, FixerVerificationStatus verificationStatus, Instant submittedAt,
@@ -22,6 +23,14 @@ public record FixerProfile(UUID userId, FixerVerificationStatus verificationStat
                 || !actor.hasRole(Role.FIXER) || verificationStatus != FixerVerificationStatus.VERIFIED) {
             throw new FixerNotEligibleException();
         }
+    }
+
+    /**
+     * Fixer specialties are temporarily defined as all standard trades
+     * as FixerProfile does not model individual specialties in PostgreSQL yet.
+     */
+    public Set<String> specialties() {
+        return Set.of("PLUMBING", "ELECTRICAL", "PAINTING", "CARPENTRY", "MASONRY", "GENERAL");
     }
 
     /** The fixer sends a complete set of documents. A rejected profile may try again. */

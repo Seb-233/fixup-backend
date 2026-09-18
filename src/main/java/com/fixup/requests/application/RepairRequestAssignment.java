@@ -32,6 +32,14 @@ class RepairRequestAssignment implements RepairRequestDirectory {
 
     @Override
     @Transactional(propagation = Propagation.MANDATORY)
+    public RepairRequestSnapshot lockForDecision(UUID requestId) {
+        var request = requests.findByIdForUpdate(requestId)
+                .orElseThrow(RepairRequestNotFoundException::new);
+        return request.snapshot();
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY)
     public void assign(UUID requestId, UUID fixerUserId) {
         // Lock the row: two owners accepting different quotations at once must not both win.
         var request = requests.findByIdForUpdate(requestId)

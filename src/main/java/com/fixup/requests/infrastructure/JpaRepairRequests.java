@@ -43,6 +43,15 @@ class JpaRepairRequests implements RepairRequests {
     }
 
     @Override
+    public List<RepairRequest> findOpenBySpecialties(java.util.Collection<Specialty> specialties) {
+        if (specialties == null || specialties.isEmpty()) {
+            return List.of();
+        }
+        return repository.findByStatusAndSpecialtyInOrderByCreatedAtDesc(RepairRequestStatus.OPEN, specialties)
+                .stream().map(RepairRequestEntity::toDomain).toList();
+    }
+
+    @Override
     public void create(RepairRequest request) {
         repository.saveAndFlush(RepairRequestEntity.from(request));
     }

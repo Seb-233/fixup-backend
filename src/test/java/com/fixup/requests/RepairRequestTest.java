@@ -86,6 +86,12 @@ class RepairRequestTest {
     }
 
     @Test
+    void platformAdminReadsTheRequest() {
+        assertThatCode(() -> open().requireVisibleTo(actor(STRANGER, UserStatus.ACTIVE, Role.PLATFORM_ADMIN)))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
     void onceAssignedOnlyTheChosenFixerKeepsReadingIt() {
         var assigned = open().assign(FIXER, NOW);
         assertThatCode(() -> assigned.requireVisibleTo(actor(FIXER, UserStatus.ACTIVE, Role.FIXER)))

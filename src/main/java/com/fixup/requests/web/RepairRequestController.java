@@ -68,12 +68,12 @@ class RepairRequestController {
 
     @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
     @Operation(summary = "Open a repair request",
-            description = "The body carries storage keys only. Photos are uploaded by the client against a "
+            description = "The body carries provisional photo storage keys. Photos are uploaded by the client against a "
                     + "signed URL, so no image content crosses this API.")
     @ApiResponse(responseCode = "201", description = "The request is open and visible to the fixers")
     @ResponseStatus(HttpStatus.CREATED)
-    RequestResponse open(@Valid @RequestBody OpenRequest body) {
-        return RequestResponse.of(createRequest.execute(actors.currentActor(),
+    RequestDetailResponse open(@Valid @RequestBody OpenRequest body) {
+        return RequestDetailResponse.of(createRequest.execute(actors.currentActor(),
                 new NewRepairRequest(body.specialty(), body.title(), body.description(),
                         body.photoKeys() == null ? List.of() : body.photoKeys())));
     }
@@ -81,25 +81,25 @@ class RepairRequestController {
     @GetMapping("/me")
     @Operation(summary = "List the repair requests opened by the current user")
     @ApiResponse(responseCode = "200", description = "Requests owned by the current user, newest first")
-    List<RequestResponse> mine() {
-        return listOwn.execute(actors.currentActor()).stream().map(RequestResponse::of).toList();
+    List<RequestDetailResponse> mine() {
+        return listOwn.execute(actors.currentActor()).stream().map(RequestDetailResponse::of).toList();
     }
 
     @GetMapping("/open")
     @Operation(summary = "List the open requests offered to fixers",
-            description = "FR-UC-18: the fixer's inbox. Narrow it with the specialty query parameter.")
-    @ApiResponse(responseCode = "200", description = "Open requests, newest first")
-    List<RequestResponse> open(@RequestParam(required = false) Specialty specialty) {
-        return listOpen.execute(actors.currentActor(), specialty).stream().map(RequestResponse::of).toList();
+            description = "FR-UC-18: the fixer's inbox. Requires active, verified FIXER and filters by fixer specialties.")
+    @ApiResponse(responseCode = "200", description = "Open requests matching fixer specialties, newest first")
+    List<OpenRequestSummaryResponse> open() {
+        return listOpen.execute(actors.currentActor()).stream().map(OpenRequestSummaryResponse::of).toList();
     }
 
     @GetMapping("/{requestId}")
     @Operation(summary = "Read one repair request",
-            description = "The owner always reads it; a fixer reads it while it is on offer, or afterwards "
+            description = "The owner always reads it; a verified compatible fixer reads it while open, or afterwards "
                     + "only when the work was assigned to him.")
     @ApiResponse(responseCode = "200", description = "The request with its description and photo keys")
-    RequestResponse detail(@PathVariable UUID requestId) {
-        return RequestResponse.of(getRequest.execute(actors.currentActor(), requestId));
+    RequestDetailResponse detail(@PathVariable UUID requestId) {
+        return RequestDetailResponse.of(getRequest.execute(actors.currentActor(), requestId));
     }
 
     @Schema(additionalProperties = Schema.AdditionalPropertiesValue.FALSE)
@@ -108,16 +108,28 @@ class RepairRequestController {
             @Size(max = 6) List<@NotBlank @Size(max = 512) String> photoKeys) {
     }
 
-    @Schema(requiredProperties = {"id", "ownerUserId", "specialty", "title", "description", "photoKeys",
+    @Schema(requiredProperties = {"requestId", "specialty", "title", "createdAt"})
+    record OpenRequestSummaryResponse(UUID requestId, Specialty specialty, String title, Instant createdAt) {
+        static OpenRequestSummaryResponse of(com.fixup.requests.domain.RepairRequest request) {
+            return new OpenRequestSummaryResponse(request.id(), request.specialty(), request.title(), request.createdAt());
+        }
+    }
+
+    @Schema(requiredProperties = {"requestId", "specialty", "title", "description", "photoKeys",
         "status", "createdAt"})
-    record RequestResponse(UUID id, UUID ownerUserId, Specialty specialty, String title, String description,
+    record RequestDetailResponse(UUID requestId, Specialty specialty, String title, String description,
+            @Schema(description = "Provisional, insecure photo storage keys while the media module is integrated. Will be replaced by evidence IDs.")
             List<String> photoKeys, RepairRequestStatus status,
             @Schema(types = {"string", "null"}) UUID assignedFixerUserId, Instant createdAt) {
 
-        static RequestResponse of(RepairRequestSummary summary) {
-            return new RequestResponse(summary.id(), summary.ownerUserId(), summary.specialty(),
-                    summary.title(), summary.description(), summary.photoKeys(), summary.status(),
-                    summary.assignedFixerUserId(), summary.createdAt());
+        static RequestDetailResponse of(com.fixup.requests.domain.RepairRequest request) {
+            return new RequestDetailResponse(request.id(), request.specialty(), request.title(), request.description(),
+                    request.photoKeys(), request.status(), request.assignedFixerUserId(), request.createdAt());
+        }
+
+        static RequestDetailResponse of(RepairRequestSummary summary) {
+            return new RequestDetailResponse(summary.id(), summary.specialty(), summary.title(), summary.description(),
+                    summary.photoKeys(), summary.status(), summary.assignedFixerUserId(), summary.createdAt());
         }
     }
 }
