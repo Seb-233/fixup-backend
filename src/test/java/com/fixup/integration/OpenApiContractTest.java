@@ -37,12 +37,18 @@ class OpenApiContractTest {
         assertThat(contract.at("/components/schemas/Role/enum").toString()).contains("PLATFORM_ADMIN", "OWNER", "FIXER");
         assertThat(contract.at("/components/schemas/UserStatus/enum").toString()).contains("ACTIVE", "SUSPENDED", "DISABLED");
         var paths = contract.get("paths");
-        assertThat(paths.size()).isEqualTo(3);
+        // The exported surface is pinned by name: an endpoint may only appear here deliberately.
+        assertThat(paths.fieldNames()).toIterable().containsExactlyInAnyOrder(
+                "/auth/bootstrap", "/auth/me", "/auth/select-role",
+                "/analytics/zones/{zone}/market-indicators");
         for (var endpoint : new String[][]{
-                {"/auth/bootstrap", "post"}, {"/auth/me", "get"}, {"/auth/select-role", "post"}}) {
+                {"/auth/bootstrap", "post", "200,400,401,403,409"},
+                {"/auth/me", "get", "200,400,401,403,409"},
+                {"/auth/select-role", "post", "200,400,401,403,409"},
+                {"/analytics/zones/{zone}/market-indicators", "get", "200,400,401,403,503"}}) {
             var operation = paths.get(endpoint[0]).get(endpoint[1]);
             assertThat(operation.get("security").toString()).contains("bearerAuth");
-            for (String code : new String[]{"200", "400", "401", "403", "409"}) {
+            for (String code : endpoint[2].split(",")) {
                 assertThat(operation.get("responses").has(code)).as(endpoint[0] + " status " + code).isTrue();
             }
             assertThat(operation.get("responses").has("402")).isFalse();
@@ -50,6 +56,11 @@ class OpenApiContractTest {
         assertThat(paths.get("/auth/bootstrap").get("post").get("responses").has("201")).isTrue();
         assertThat(contract.at("/components/schemas/UserResponse/properties/email/type").toString()).contains("null");
         assertThat(contract.at("/components/schemas/BootstrapResponse/properties/displayName/type").toString()).contains("null");
+        // FR-UC-15 no miente al cliente: la procedencia del dato es parte del contrato.
+        assertThat(contract.at("/components/schemas/IndicatorsResponse/properties/freshness/enum").toString())
+                .contains("LIVE", "CACHED", "DEGRADED");
+        assertThat(contract.at("/components/schemas/IndicatorsResponse/required").toString())
+                .contains("freshness", "degraded", "observedAt");
         Files.createDirectories(Path.of("target"));
         Files.writeString(Path.of("target", "openapi.json"),
                 mapper.writerWithDefaultPrettyPrinter().writeValueAsString(contract) + System.lineSeparator());
