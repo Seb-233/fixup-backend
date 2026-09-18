@@ -5,6 +5,7 @@ import com.fixup.media.domain.PortfolioPolicy;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -233,9 +234,9 @@ abstract class PortfolioHttpContract {
         var pool = Executors.newFixedThreadPool(2);
         List<Integer> statuses;
         try {
-            var attempts = List.of(
-                    pool.submit(() -> statusOfPublication("auth0|concurrent", "Simultanea1", start)),
-                    pool.submit(() -> statusOfPublication("auth0|concurrent", "Simultanea2", start)));
+            Callable<Integer> first = () -> statusOfPublication("auth0|concurrent", "Simultanea1", start);
+            Callable<Integer> second = () -> statusOfPublication("auth0|concurrent", "Simultanea2", start);
+            var attempts = List.of(pool.submit(first), pool.submit(second));
             start.countDown();
             statuses = new ArrayList<>();
             for (var attempt : attempts) {
