@@ -13,7 +13,7 @@
       "post" : {
         "tags" : [ "repair-request-controller" ],
         "summary" : "Open a repair request",
-        "description" : "The body carries storage keys only. Photos are uploaded by the client against a signed URL, so no image content crosses this API.",
+        "description" : "The body carries provisional photo storage keys. No raw image binary content crosses this API.",
         "operationId" : "open",
         "requestBody" : {
           "content" : {
@@ -81,7 +81,7 @@
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/RequestResponse"
+                  "$ref" : "#/components/schemas/RequestDetailResponse"
                 }
               }
             }
@@ -161,6 +161,88 @@
           },
           "201" : {
             "description" : "The quotation reached the owner of the request",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/QuotationResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/quotations/{quotationId}/reject" : {
+      "post" : {
+        "tags" : [ "quotation-controller" ],
+        "summary" : "Explicitly reject a quotation",
+        "description" : "The owner of the request rejects a submitted quotation without accepting another.",
+        "operationId" : "reject",
+        "parameters" : [ {
+          "name" : "quotationId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "responses" : {
+          "400" : {
+            "description" : "Invalid amount, invalid estimate or unexpected client fields",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Inactive account, unverified fixer or quotation not visible to the caller",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "The quotation or the repair request does not exist",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "The transition does not apply to the current state of the quotation",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "200" : {
+            "description" : "The quotation is rejected",
             "content" : {
               "application/json" : {
                 "schema" : {
@@ -262,7 +344,7 @@
         "tags" : [ "fixer-verification-controller" ],
         "summary" : "Reject a fixer verification",
         "description" : "Requires an active PLATFORM_ADMIN.",
-        "operationId" : "reject",
+        "operationId" : "reject_1",
         "parameters" : [ {
           "name" : "fixerUserId",
           "in" : "path",
@@ -401,7 +483,7 @@
       "post" : {
         "tags" : [ "fixer-verification-controller" ],
         "summary" : "File the verification documents and open the administrative review",
-        "description" : "The body carries storage keys only. Files are uploaded by the client against a signed URL, so no document content crosses this API. Documents may be filed one at a time; the review opens by itself once the mandatory set is complete. Resubmitting a type replaces its key.",
+        "description" : "The body carries storage keys only. No document content crosses this API. Documents may be filed one at a time; the review opens by itself once the mandatory set is complete. Resubmitting a type replaces its key.",
         "operationId" : "submit_1",
         "requestBody" : {
           "content" : {
@@ -629,7 +711,7 @@
       "get" : {
         "tags" : [ "repair-request-controller" ],
         "summary" : "Read one repair request",
-        "description" : "The owner always reads it; a fixer reads it while it is on offer, or afterwards only when the work was assigned to him.",
+        "description" : "The owner always reads it; a verified compatible fixer reads it while open, or afterwards only when the work was assigned to him.",
         "operationId" : "detail",
         "parameters" : [ {
           "name" : "requestId",
@@ -696,7 +778,7 @@
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/RequestResponse"
+                  "$ref" : "#/components/schemas/RequestDetailResponse"
                 }
               }
             }
@@ -711,16 +793,8 @@
       "get" : {
         "tags" : [ "repair-request-controller" ],
         "summary" : "List the open requests offered to fixers",
-        "description" : "FR-UC-18: the fixer's inbox. Narrow it with the specialty query parameter.",
+        "description" : "FR-UC-18: the fixer's inbox. Requires active, verified FIXER and filters by fixer specialties.",
         "operationId" : "open_1",
-        "parameters" : [ {
-          "name" : "specialty",
-          "in" : "query",
-          "required" : false,
-          "schema" : {
-            "$ref" : "#/components/schemas/Specialty"
-          }
-        } ],
         "responses" : {
           "400" : {
             "description" : "Invalid specialty, missing field or unexpected client fields",
@@ -773,13 +847,13 @@
             }
           },
           "200" : {
-            "description" : "Open requests, newest first",
+            "description" : "Open requests matching fixer specialties, newest first",
             "content" : {
               "application/json" : {
                 "schema" : {
                   "type" : "array",
                   "items" : {
-                    "$ref" : "#/components/schemas/RequestResponse"
+                    "$ref" : "#/components/schemas/OpenRequestSummaryResponse"
                   }
                 }
               }
@@ -854,7 +928,7 @@
                 "schema" : {
                   "type" : "array",
                   "items" : {
-                    "$ref" : "#/components/schemas/RequestResponse"
+                    "$ref" : "#/components/schemas/RequestDetailResponse"
                   }
                 }
               }
@@ -1209,14 +1283,10 @@
         "type" : "string",
         "enum" : [ "OPEN", "ASSIGNED" ]
       },
-      "RequestResponse" : {
+      "RequestDetailResponse" : {
         "type" : "object",
         "properties" : {
-          "id" : {
-            "type" : "string",
-            "format" : "uuid"
-          },
-          "ownerUserId" : {
+          "requestId" : {
             "type" : "string",
             "format" : "uuid"
           },
@@ -1231,6 +1301,7 @@
           },
           "photoKeys" : {
             "type" : "array",
+            "description" : "Provisional, insecure photo storage keys while the media module is integrated. Will be replaced by evidence IDs.",
             "items" : {
               "type" : "string"
             }
@@ -1247,7 +1318,7 @@
             "format" : "date-time"
           }
         },
-        "required" : [ "createdAt", "description", "id", "ownerUserId", "photoKeys", "specialty", "status", "title" ]
+        "required" : [ "createdAt", "description", "photoKeys", "requestId", "specialty", "status", "title" ]
       },
       "QuotationRequest" : {
         "type" : "object",
@@ -1463,6 +1534,26 @@
       "UserStatus" : {
         "type" : "string",
         "enum" : [ "ACTIVE", "SUSPENDED", "DISABLED" ]
+      },
+      "OpenRequestSummaryResponse" : {
+        "type" : "object",
+        "properties" : {
+          "requestId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "specialty" : {
+            "$ref" : "#/components/schemas/Specialty"
+          },
+          "title" : {
+            "type" : "string"
+          },
+          "createdAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          }
+        },
+        "required" : [ "createdAt", "requestId", "specialty", "title" ]
       },
       "UserResponse" : {
         "type" : "object",

@@ -6,8 +6,7 @@ import java.util.Objects;
 import java.util.UUID;
 
 /**
- * The backend stores only the object key. The file itself is uploaded by the client against a
- * signed URL, so no document content crosses the API.
+ * The backend stores only the object key. No document content crosses the API.
  */
 public record VerificationDocument(UUID userId, FixerVerificationDocumentType type, String storageKey,
         Instant submittedAt) {

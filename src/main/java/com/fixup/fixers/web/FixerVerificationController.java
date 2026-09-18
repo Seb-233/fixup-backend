@@ -71,10 +71,9 @@ class FixerVerificationController {
 
     @PostMapping("/me/verification/documents")
     @Operation(summary = "File the verification documents and open the administrative review",
-            description = "The body carries storage keys only. Files are uploaded by the client against a "
-                    + "signed URL, so no document content crosses this API. Documents may be filed one at a "
-                    + "time; the review opens by itself once the mandatory set is complete. Resubmitting a "
-                    + "type replaces its key.")
+            description = "The body carries storage keys only. No document content crosses this API. Documents may be "
+                    + "filed one at a time; the review opens by itself once the mandatory set is complete. Resubmitting "
+                    + "a type replaces its key.")
     @ApiResponse(responseCode = "200", description = "Verification state after the submission")
     VerificationResponse submit(@Valid @RequestBody DocumentsRequest request) {
         var actor = actors.currentActor();
