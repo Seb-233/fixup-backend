@@ -56,7 +56,9 @@ class SecurityConfiguration {
                 .authorizeHttpRequests(requests -> {
                     requests.requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                             .requestMatchers("/actuator/health").permitAll();
-                    requests.requestMatchers("/auth/**").authenticated().anyRequest().denyAll();
+                    requests.requestMatchers("/auth/**").authenticated()
+                            .requestMatchers("/fixers/**").authenticated()
+                            .anyRequest().denyAll();
                 })
                 .exceptionHandling(errors -> errors.authenticationEntryPoint(entryPoint)
                         .accessDeniedHandler(deniedHandler))

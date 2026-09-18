@@ -9,6 +9,219 @@
     "description" : "Generated server url"
   } ],
   "paths" : {
+    "/fixers/{fixerUserId}/verification/reject" : {
+      "post" : {
+        "tags" : [ "fixer-verification-controller" ],
+        "summary" : "Reject a fixer verification",
+        "description" : "Requires an active PLATFORM_ADMIN.",
+        "operationId" : "reject",
+        "parameters" : [ {
+          "name" : "fixerUserId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/RejectionRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "400" : {
+            "description" : "Invalid document type, missing field or unexpected client fields",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Inactive account, missing FIXER role or missing administrative privileges",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "The transition does not apply to the current verification state",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "204" : {
+            "description" : "The fixer is rejected and may submit again"
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/fixers/{fixerUserId}/verification/approve" : {
+      "post" : {
+        "tags" : [ "fixer-verification-controller" ],
+        "summary" : "Approve a fixer verification",
+        "description" : "Requires an active PLATFORM_ADMIN.",
+        "operationId" : "approve",
+        "parameters" : [ {
+          "name" : "fixerUserId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "responses" : {
+          "400" : {
+            "description" : "Invalid document type, missing field or unexpected client fields",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Inactive account, missing FIXER role or missing administrative privileges",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "The transition does not apply to the current verification state",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "204" : {
+            "description" : "The fixer is verified"
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/fixers/me/verification/documents" : {
+      "post" : {
+        "tags" : [ "fixer-verification-controller" ],
+        "summary" : "File the verification documents and open the administrative review",
+        "description" : "The body carries storage keys only. Files are uploaded by the client against a signed URL, so no document content crosses this API. Documents may be filed one at a time; the review opens by itself once the mandatory set is complete. Resubmitting a type replaces its key.",
+        "operationId" : "submit",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/DocumentsRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "400" : {
+            "description" : "Invalid document type, missing field or unexpected client fields",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Inactive account, missing FIXER role or missing administrative privileges",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "The transition does not apply to the current verification state",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "200" : {
+            "description" : "Verification state after the submission",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/VerificationResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
     "/auth/select-role" : {
       "post" : {
         "tags" : [ "current-user-controller" ],
@@ -164,6 +377,68 @@
         } ]
       }
     },
+    "/fixers/me/verification" : {
+      "get" : {
+        "tags" : [ "fixer-verification-controller" ],
+        "summary" : "Read the current fixer's own verification state",
+        "operationId" : "myVerification",
+        "responses" : {
+          "400" : {
+            "description" : "Invalid document type, missing field or unexpected client fields",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Inactive account, missing FIXER role or missing administrative privileges",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "The transition does not apply to the current verification state",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "200" : {
+            "description" : "Verification state of the current fixer",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/VerificationResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
     "/auth/me" : {
       "get" : {
         "tags" : [ "current-user-controller" ],
@@ -229,19 +504,17 @@
   },
   "components" : {
     "schemas" : {
-      "Role" : {
-        "type" : "string",
-        "enum" : [ "OWNER", "TENANT", "FIXER", "REAL_ESTATE_MANAGER", "PLATFORM_ADMIN" ]
-      },
-      "RoleRequest" : {
+      "RejectionRequest" : {
         "type" : "object",
         "additionalProperties" : false,
         "properties" : {
-          "role" : {
-            "$ref" : "#/components/schemas/Role"
+          "reason" : {
+            "type" : "string",
+            "maxLength" : 500,
+            "minLength" : 0
           }
         },
-        "required" : [ "role" ]
+        "required" : [ "reason" ]
       },
       "ErrorResponse" : {
         "type" : "object",
@@ -260,6 +533,92 @@
             "type" : "string"
           }
         }
+      },
+      "DocumentRequest" : {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "type" : {
+            "$ref" : "#/components/schemas/FixerVerificationDocumentType"
+          },
+          "storageKey" : {
+            "type" : "string",
+            "maxLength" : 512,
+            "minLength" : 0
+          }
+        },
+        "required" : [ "storageKey", "type" ]
+      },
+      "DocumentsRequest" : {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "documents" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/DocumentRequest"
+            },
+            "maxItems" : 4,
+            "minItems" : 0
+          }
+        },
+        "required" : [ "documents" ]
+      },
+      "FixerVerificationDocumentType" : {
+        "type" : "string",
+        "enum" : [ "ID_CARD", "TRADE_CERTIFICATE", "BACKGROUND_CHECK", "INSURANCE" ]
+      },
+      "VerificationResponse" : {
+        "type" : "object",
+        "properties" : {
+          "status" : {
+            "type" : "string",
+            "enum" : [ "PENDING", "VERIFIED", "REJECTED", "SUSPENDED" ]
+          },
+          "underReview" : {
+            "type" : "boolean"
+          },
+          "submittedAt" : {
+            "type" : [ "string", "null" ],
+            "format" : "date-time"
+          },
+          "decidedAt" : {
+            "type" : [ "string", "null" ],
+            "format" : "date-time"
+          },
+          "rejectionReason" : {
+            "type" : [ "string", "null" ]
+          },
+          "submittedDocuments" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/FixerVerificationDocumentType"
+            },
+            "uniqueItems" : true
+          },
+          "missingDocuments" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/FixerVerificationDocumentType"
+            },
+            "uniqueItems" : true
+          }
+        },
+        "required" : [ "missingDocuments", "status", "submittedDocuments", "underReview" ]
+      },
+      "Role" : {
+        "type" : "string",
+        "enum" : [ "OWNER", "TENANT", "FIXER", "REAL_ESTATE_MANAGER", "PLATFORM_ADMIN" ]
+      },
+      "RoleRequest" : {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "role" : {
+            "$ref" : "#/components/schemas/Role"
+          }
+        },
+        "required" : [ "role" ]
       },
       "RolesResponse" : {
         "type" : "object",

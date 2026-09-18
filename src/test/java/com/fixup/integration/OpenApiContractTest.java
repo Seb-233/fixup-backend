@@ -37,12 +37,21 @@ class OpenApiContractTest {
         assertThat(contract.at("/components/schemas/Role/enum").toString()).contains("PLATFORM_ADMIN", "OWNER", "FIXER");
         assertThat(contract.at("/components/schemas/UserStatus/enum").toString()).contains("ACTIVE", "SUSPENDED", "DISABLED");
         var paths = contract.get("paths");
-        assertThat(paths.size()).isEqualTo(3);
+        // The exported surface is pinned by name: an endpoint may only appear here deliberately.
+        assertThat(paths.fieldNames()).toIterable().containsExactlyInAnyOrder(
+                "/auth/bootstrap", "/auth/me", "/auth/select-role",
+                "/fixers/me/verification", "/fixers/me/verification/documents",
+                "/fixers/{fixerUserId}/verification/approve", "/fixers/{fixerUserId}/verification/reject");
         for (var endpoint : new String[][]{
-                {"/auth/bootstrap", "post"}, {"/auth/me", "get"}, {"/auth/select-role", "post"}}) {
+                {"/auth/bootstrap", "post", "200"}, {"/auth/me", "get", "200"},
+                {"/auth/select-role", "post", "200"},
+                {"/fixers/me/verification", "get", "200"},
+                {"/fixers/me/verification/documents", "post", "200"},
+                {"/fixers/{fixerUserId}/verification/approve", "post", "204"},
+                {"/fixers/{fixerUserId}/verification/reject", "post", "204"}}) {
             var operation = paths.get(endpoint[0]).get(endpoint[1]);
             assertThat(operation.get("security").toString()).contains("bearerAuth");
-            for (String code : new String[]{"200", "400", "401", "403", "409"}) {
+            for (String code : new String[]{endpoint[2], "400", "401", "403", "409"}) {
                 assertThat(operation.get("responses").has(code)).as(endpoint[0] + " status " + code).isTrue();
             }
             assertThat(operation.get("responses").has("402")).isFalse();
@@ -50,6 +59,13 @@ class OpenApiContractTest {
         assertThat(paths.get("/auth/bootstrap").get("post").get("responses").has("201")).isTrue();
         assertThat(contract.at("/components/schemas/UserResponse/properties/email/type").toString()).contains("null");
         assertThat(contract.at("/components/schemas/BootstrapResponse/properties/displayName/type").toString()).contains("null");
+        assertThat(contract.at("/components/schemas/FixerVerificationDocumentType/enum").toString())
+                .contains("ID_CARD", "TRADE_CERTIFICATE");
+        assertThat(contract.at("/components/schemas/VerificationResponse/properties/submittedAt/type").toString())
+                .contains("null");
+        // No document content crosses this API: the request carries storage keys only.
+        assertThat(contract.at("/components/schemas/DocumentRequest/properties").toString())
+                .contains("storageKey").doesNotContain("content", "file");
         Files.createDirectories(Path.of("target"));
         Files.writeString(Path.of("target", "openapi.json"),
                 mapper.writerWithDefaultPrettyPrinter().writeValueAsString(contract) + System.lineSeparator());
