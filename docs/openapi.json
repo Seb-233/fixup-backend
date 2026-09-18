@@ -225,6 +225,79 @@
           "bearerAuth" : [ ]
         } ]
       }
+    },
+    "/analytics/zones/{zone}/market-indicators" : {
+      "get" : {
+        "tags" : [ "market-indicators-controller" ],
+        "summary" : "Read the real estate market indicators of a zone",
+        "description" : "freshness says where the value comes from: LIVE from the external source in this request, CACHED from a still fresh cache entry, DEGRADED when the source did not answer and the last known value is served instead. observedAt always carries the moment the source produced the value, so a degraded answer is never presented as a current one.",
+        "operationId" : "ofZone",
+        "parameters" : [ {
+          "name" : "zone",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "maxLength" : 64,
+            "minLength" : 0
+          }
+        } ],
+        "responses" : {
+          "400" : {
+            "description" : "The zone is missing or too long",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Inactive account",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503" : {
+            "description" : "The external source failed and no known value exists",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "200" : {
+            "description" : "Indicators of that zone, with their provenance",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/IndicatorsResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
     }
   },
   "components" : {
@@ -336,6 +409,36 @@
           }
         },
         "required" : [ "displayName", "email", "id", "roles", "status" ]
+      },
+      "IndicatorsResponse" : {
+        "type" : "object",
+        "properties" : {
+          "zone" : {
+            "type" : "string"
+          },
+          "pricePerSquareMeter" : {
+            "type" : "number"
+          },
+          "yearOverYearVariationPercent" : {
+            "type" : "number"
+          },
+          "averageDaysOnMarket" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "observedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "freshness" : {
+            "type" : "string",
+            "enum" : [ "LIVE", "CACHED", "DEGRADED" ]
+          },
+          "degraded" : {
+            "type" : "boolean"
+          }
+        },
+        "required" : [ "averageDaysOnMarket", "degraded", "freshness", "observedAt", "pricePerSquareMeter", "yearOverYearVariationPercent", "zone" ]
       }
     },
     "securitySchemes" : {
