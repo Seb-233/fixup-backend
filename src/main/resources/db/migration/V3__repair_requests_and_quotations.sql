@@ -33,7 +33,7 @@ CREATE INDEX ix_repair_requests_owner ON repair_requests (owner_user_id, created
 
 CREATE TABLE repair_request_photos (
     request_id UUID NOT NULL REFERENCES repair_requests(id) ON DELETE CASCADE,
-    photo_order SMALLINT NOT NULL,
+    photo_order INTEGER NOT NULL,
     storage_key VARCHAR(512) NOT NULL,
     PRIMARY KEY (request_id, photo_order),
     CONSTRAINT ck_request_photo_key CHECK (length(trim(storage_key)) > 0),
