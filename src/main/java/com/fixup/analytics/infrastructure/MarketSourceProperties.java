@@ -9,8 +9,14 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  */
 @ConfigurationProperties("fixup.analytics.market-source")
 public class MarketSourceProperties {
-    /** development deja el respaldo local; rest habilita el adaptador HTTP configurable. */
-    private Provider provider = Provider.DEVELOPMENT;
+    /**
+     * Selecciona el adaptador y no tiene valor implícito: hay que declararla. {@code rest} habilita
+     * el adaptador HTTP; {@code development} habilita el respaldo sintético y además exige el perfil
+     * {@code dev}. Si no se declara no se registra ninguna fuente y el caso de uso informa
+     * indisponibilidad, porque faltar configuración no puede terminar en datos inventados
+     * presentados como reales.
+     */
+    private Provider provider = Provider.REST;
 
     /** Base del proveedor comercial cuando exista uno contratado. */
     private String baseUrl = "";
@@ -20,10 +26,17 @@ public class MarketSourceProperties {
 
     private Duration readTimeout = Duration.ofSeconds(3);
 
-    /** Táctica de recuperación: Retry. Máximo número de reintentos tras el primer intento. */
+    /**
+     * Táctica de recuperación: Retry. Máximo número de reintentos tras el primer intento. Pocos a
+     * propósito: cada reintento hace esperar al hilo que atiende la petición.
+     * {@link TimeoutAndRetryMarketSource#MAX_RETRIES} lo recorta si se configura de más.
+     */
     private int maxRetries = 2;
 
-    /** Frecuencia de reintentos. */
+    /**
+     * Frecuencia de reintentos. Corta por la misma razón;
+     * {@link TimeoutAndRetryMarketSource#MAX_RETRY_DELAY} la recorta si se configura de más.
+     */
     private Duration retryDelay = Duration.ofMillis(200);
 
     /** Marca de frescura de la caché por zona. */

@@ -1,5 +1,6 @@
 package com.fixup.analytics.infrastructure;
 
+import com.fixup.analytics.api.IndicatorSource;
 import com.fixup.analytics.domain.MarketIndicators;
 import com.fixup.analytics.domain.MarketSourceUnavailableException;
 import java.math.BigDecimal;
@@ -26,7 +27,7 @@ class TimeoutAndRetryMarketSourceTest {
 
     private static MarketIndicators sample() {
         return new MarketIndicators("CHAPINERO", BigDecimal.valueOf(5_000_000), BigDecimal.valueOf(3.2),
-                45, Instant.parse("2026-09-18T09:00:00Z"));
+                45, Instant.parse("2026-09-18T09:00:00Z"), IndicatorSource.EXTERNAL_PROVIDER);
     }
 
     private record CountingClient(AtomicInteger calls, int failuresBeforeSuccess)
@@ -97,6 +98,35 @@ class TimeoutAndRetryMarketSourceTest {
                 .isInstanceOf(MarketSourceUnavailableException.class);
     }
 
+    /** Falta de proveedor no puede terminar en un dato inventado: es indisponibilidad. */
+    @Test
+    void withoutAConfiguredProviderThereIsNoSourceAndItSaysSo() {
+        var source = new TimeoutAndRetryMarketSource(null, properties(2));
+
+        assertThatThrownBy(() -> source.fetch("CHAPINERO"))
+                .isInstanceOf(MarketSourceUnavailableException.class)
+                .hasMessageContaining("No market source is configured");
+    }
+
+    /** La espera bloquea el hilo del servidor, así que la configuración tiene un techo. */
+    @Test
+    void theConfiguredRetriesAndDelayAreCappedSoNoThreadIsHeldForLong() {
+        var calls = new AtomicInteger();
+        var properties = properties(50);
+        properties.setRetryDelay(Duration.ofMinutes(5));
+        var source = new TimeoutAndRetryMarketSource(new CountingClient(calls, Integer.MAX_VALUE),
+                properties);
+
+        var startedAt = System.nanoTime();
+        assertThatThrownBy(() -> source.fetch("CHAPINERO"))
+                .isInstanceOf(MarketSourceUnavailableException.class);
+
+        assertThat(calls).hasValue(TimeoutAndRetryMarketSource.MAX_RETRIES + 1);
+        // Con la espera configurada sin recortar, esto habría tardado quince minutos.
+        var elapsed = Duration.ofNanos(System.nanoTime() - startedAt);
+        assertThat(elapsed).isLessThan(Duration.ofSeconds(10));
+    }
+
     @Test
     void theDevelopmentFallbackIsDeterministicAndClearlyIdentified() {
         var development = new DevelopmentMarketSourceClient();
@@ -105,6 +135,8 @@ class TimeoutAndRetryMarketSourceTest {
         var second = development.fetchOnce("CHAPINERO");
 
         assertThat(development.describe()).isEqualTo("development-fallback");
+        // El dato sintético se identifica como tal desde el origen y no depende de quién lo lea.
+        assertThat(first.source()).isEqualTo(IndicatorSource.DEVELOPMENT_SYNTHETIC);
         assertThat(first.pricePerSquareMeter()).isEqualTo(second.pricePerSquareMeter());
         assertThat(first.averageDaysOnMarket()).isEqualTo(second.averageDaysOnMarket());
         assertThat(first.pricePerSquareMeter()).isNotEqualTo(

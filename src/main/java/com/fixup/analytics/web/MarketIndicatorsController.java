@@ -1,6 +1,7 @@
 package com.fixup.analytics.web;
 
 import com.fixup.analytics.api.IndicatorFreshness;
+import com.fixup.analytics.api.IndicatorSource;
 import com.fixup.analytics.application.GetMarketIndicators;
 import com.fixup.analytics.application.MarketIndicatorsView;
 import com.fixup.identityaccess.api.CurrentActorProvider;
@@ -48,26 +49,31 @@ class MarketIndicatorsController {
 
     @GetMapping("/zones/{zone}/market-indicators")
     @Operation(summary = "Read the real estate market indicators of a zone",
-            description = "freshness says where the value comes from: LIVE from the external source in "
-                    + "this request, CACHED from a still fresh cache entry, DEGRADED when the source did "
-                    + "not answer and the last known value is served instead. observedAt always carries "
-                    + "the moment the source produced the value, so a degraded answer is never presented "
-                    + "as a current one.")
+            description = "freshness says how the value was obtained: LIVE in this request, CACHED "
+                    + "from a still fresh cache entry, DEGRADED when the source did not answer and the "
+                    + "last known value is served instead. source says who produced it: "
+                    + "EXTERNAL_PROVIDER is a real market observation, DEVELOPMENT_SYNTHETIC is the "
+                    + "development fallback, whose numbers are generated and do not represent the "
+                    + "market; synthetic repeats that as a flag. observedAt always carries the moment "
+                    + "the source produced the value and is never filled in by the backend, so a "
+                    + "degraded or synthetic answer is never presented as a current real one.")
     @ApiResponse(responseCode = "200", description = "Indicators of that zone, with their provenance")
     IndicatorsResponse ofZone(@PathVariable @NotBlank @Size(max = 64) String zone) {
         return IndicatorsResponse.of(getIndicators.execute(actors.currentActor(), zone));
     }
 
     @Schema(requiredProperties = {"zone", "pricePerSquareMeter", "yearOverYearVariationPercent",
-        "averageDaysOnMarket", "observedAt", "freshness", "degraded"})
+        "averageDaysOnMarket", "observedAt", "freshness", "degraded", "source", "synthetic"})
     record IndicatorsResponse(String zone, BigDecimal pricePerSquareMeter,
             BigDecimal yearOverYearVariationPercent, int averageDaysOnMarket, Instant observedAt,
-            IndicatorFreshness freshness, boolean degraded) {
+            IndicatorFreshness freshness, boolean degraded, IndicatorSource source,
+            boolean synthetic) {
 
         static IndicatorsResponse of(MarketIndicatorsView view) {
             return new IndicatorsResponse(view.zone(), view.pricePerSquareMeter(),
                     view.yearOverYearVariationPercent(), view.averageDaysOnMarket(),
-                    view.observedAt(), view.freshness(), view.degraded());
+                    view.observedAt(), view.freshness(), view.degraded(), view.source(),
+                    view.synthetic());
         }
     }
 }

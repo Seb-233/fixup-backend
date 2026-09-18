@@ -1,6 +1,7 @@
 package com.fixup.analytics.application;
 
 import com.fixup.analytics.api.IndicatorFreshness;
+import com.fixup.analytics.api.IndicatorSource;
 import com.fixup.analytics.api.MarketIndicatorsUnavailableException;
 import com.fixup.analytics.domain.FreshnessWindow;
 import com.fixup.analytics.domain.MarketIndicatorSnapshots;
@@ -34,8 +35,12 @@ class GetMarketIndicatorsTest {
             Set.of(Role.TENANT), UserStatus.ACTIVE);
 
     private static MarketIndicators indicators(Instant observedAt, long price) {
+        return indicators(observedAt, price, IndicatorSource.EXTERNAL_PROVIDER);
+    }
+
+    private static MarketIndicators indicators(Instant observedAt, long price, IndicatorSource source) {
         return new MarketIndicators("CHAPINERO", BigDecimal.valueOf(price), BigDecimal.valueOf(2.5),
-                40, observedAt);
+                40, observedAt, source);
     }
 
     private static final class InMemorySnapshots implements MarketIndicatorSnapshots {
@@ -106,6 +111,41 @@ class GetMarketIndicatorsTest {
         assertThat(view.pricePerSquareMeter()).isEqualTo(stale.pricePerSquareMeter());
         // El dato degradado conserva la fecha real de observación: no se presenta como actual.
         assertThat(view.observedAt()).isEqualTo(stale.observedAt());
+    }
+
+    /** LIVE dice cómo se obtuvo el dato, source dice de quién: son cosas distintas y viajan ambas. */
+    @Test
+    void aSyntheticValueIsReportedAsSyntheticEvenWhenItIsLive() {
+        var snapshots = new InMemorySnapshots();
+        var synthetic = indicators(Instant.now(), 4_800_000, IndicatorSource.DEVELOPMENT_SYNTHETIC);
+
+        var view = useCase(zone -> synthetic, snapshots).execute(ACTOR, "CHAPINERO");
+
+        assertThat(view.freshness()).isEqualTo(IndicatorFreshness.LIVE);
+        assertThat(view.source()).isEqualTo(IndicatorSource.DEVELOPMENT_SYNTHETIC);
+        assertThat(view.synthetic()).isTrue();
+    }
+
+    @Test
+    void aDegradedAnswerKeepsTheProvenanceOfTheValueItServes() {
+        var snapshots = new InMemorySnapshots();
+        snapshots.save(indicators(Instant.now().minus(Duration.ofDays(3)), 3_500_000,
+                IndicatorSource.DEVELOPMENT_SYNTHETIC));
+
+        var view = useCase(new FailingSource(), snapshots).execute(ACTOR, "CHAPINERO");
+
+        assertThat(view.freshness()).isEqualTo(IndicatorFreshness.DEGRADED);
+        assertThat(view.source()).isEqualTo(IndicatorSource.DEVELOPMENT_SYNTHETIC);
+        assertThat(view.synthetic()).isTrue();
+    }
+
+    @Test
+    void aValueFromTheExternalProviderIsNotReportedAsSynthetic() {
+        var view = useCase(zone -> indicators(Instant.now(), 5_000_000), new InMemorySnapshots())
+                .execute(ACTOR, "CHAPINERO");
+
+        assertThat(view.source()).isEqualTo(IndicatorSource.EXTERNAL_PROVIDER);
+        assertThat(view.synthetic()).isFalse();
     }
 
     @Test

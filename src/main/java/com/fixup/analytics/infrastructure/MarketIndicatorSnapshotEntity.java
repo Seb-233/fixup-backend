@@ -1,8 +1,11 @@
 package com.fixup.analytics.infrastructure;
 
+import com.fixup.analytics.api.IndicatorSource;
 import com.fixup.analytics.domain.MarketIndicators;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.math.BigDecimal;
@@ -33,6 +36,14 @@ class MarketIndicatorSnapshotEntity {
     @Column(name = "cached_at", nullable = false)
     private Instant cachedAt;
 
+    /**
+     * Quién produjo el dato. Se guarda con él para que un valor sintético siga declarándose
+     * sintético cuando después se sirva como CACHED o DEGRADED.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "source", nullable = false, length = 32)
+    private IndicatorSource source;
+
     protected MarketIndicatorSnapshotEntity() {
     }
 
@@ -49,10 +60,11 @@ class MarketIndicatorSnapshotEntity {
         this.averageDaysOnMarket = indicators.averageDaysOnMarket();
         this.observedAt = indicators.observedAt();
         this.cachedAt = Instant.now();
+        this.source = indicators.source();
     }
 
     MarketIndicators toDomain() {
         return new MarketIndicators(zone, pricePerSquareMeter, yearOverYearVariationPercent,
-                averageDaysOnMarket, observedAt);
+                averageDaysOnMarket, observedAt, source);
     }
 }

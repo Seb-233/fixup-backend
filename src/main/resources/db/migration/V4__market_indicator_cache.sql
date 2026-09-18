@@ -12,7 +12,11 @@ CREATE TABLE market_indicator_snapshots (
     -- Marca de frescura: cuándo la fuente produjo el dato, no cuándo se guardó.
     observed_at TIMESTAMP WITH TIME ZONE NOT NULL,
     cached_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    -- Quién produjo el dato. Se guarda junto al valor para que un número sintético siga
+    -- declarándose sintético cuando después se sirva desde la caché o degradado.
+    source VARCHAR(32) NOT NULL,
     CONSTRAINT ck_market_zone CHECK (length(trim(zone)) > 0),
     CONSTRAINT ck_market_price CHECK (price_per_square_meter > 0),
-    CONSTRAINT ck_market_days CHECK (average_days_on_market >= 0)
+    CONSTRAINT ck_market_days CHECK (average_days_on_market >= 0),
+    CONSTRAINT ck_market_source CHECK (source IN ('EXTERNAL_PROVIDER', 'DEVELOPMENT_SYNTHETIC'))
 );

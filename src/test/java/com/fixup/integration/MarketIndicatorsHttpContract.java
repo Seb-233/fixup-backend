@@ -1,6 +1,7 @@
 package com.fixup.integration;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fixup.analytics.api.IndicatorSource;
 import com.fixup.analytics.domain.MarketIndicators;
 import com.fixup.analytics.domain.MarketIndicatorsSource;
 import com.fixup.analytics.domain.MarketSourceUnavailableException;
@@ -39,6 +40,8 @@ abstract class MarketIndicatorsHttpContract {
         static final AtomicInteger CALLS = new AtomicInteger();
         static final AtomicReference<Instant> OBSERVED_AT =
                 new AtomicReference<>(Instant.parse("2026-09-18T09:00:00Z"));
+        static final AtomicReference<IndicatorSource> SOURCE =
+                new AtomicReference<>(IndicatorSource.EXTERNAL_PROVIDER);
 
         @Override
         public MarketIndicators fetch(String zone) {
@@ -47,7 +50,7 @@ abstract class MarketIndicatorsHttpContract {
                 throw new MarketSourceUnavailableException("synthetic outage");
             }
             return new MarketIndicators(zone, BigDecimal.valueOf(5_250_000), BigDecimal.valueOf(3.40),
-                    52, OBSERVED_AT.get());
+                    52, OBSERVED_AT.get(), SOURCE.get());
         }
     }
 
@@ -74,6 +77,7 @@ abstract class MarketIndicatorsHttpContract {
         ControllableSource.DOWN.set(false);
         ControllableSource.CALLS.set(0);
         ControllableSource.OBSERVED_AT.set(Instant.now().minus(Duration.ofMinutes(30)));
+        ControllableSource.SOURCE.set(IndicatorSource.EXTERNAL_PROVIDER);
     }
 
     private RequestPostProcessor identity(String subject) {
@@ -111,10 +115,35 @@ abstract class MarketIndicatorsHttpContract {
                 .andExpect(jsonPath("$.yearOverYearVariationPercent").value(3.40))
                 .andExpect(jsonPath("$.averageDaysOnMarket").value(52))
                 .andExpect(jsonPath("$.freshness").value("LIVE"))
-                .andExpect(jsonPath("$.degraded").value(false));
+                .andExpect(jsonPath("$.degraded").value(false))
+                .andExpect(jsonPath("$.source").value("EXTERNAL_PROVIDER"))
+                .andExpect(jsonPath("$.synthetic").value(false));
 
         assertThat(jdbc.queryForObject("SELECT count(*) FROM market_indicator_snapshots", Integer.class))
                 .isEqualTo(1);
+    }
+
+    /**
+     * Un dato sintético recién generado es LIVE, y decir solo LIVE haría creer al cliente que es
+     * una observación del mercado. La procedencia viaja aparte y sobrevive a la caché.
+     */
+    @Test
+    void aSyntheticValueSaysSoEvenWhenItIsLiveAndKeepsSayingSoFromTheCache() throws Exception {
+        bootstrap("auth0|market-reader");
+        ControllableSource.SOURCE.set(IndicatorSource.DEVELOPMENT_SYNTHETIC);
+
+        read("auth0|market-reader", "CHAPINERO").andExpect(status().isOk())
+                .andExpect(jsonPath("$.freshness").value("LIVE"))
+                .andExpect(jsonPath("$.source").value("DEVELOPMENT_SYNTHETIC"))
+                .andExpect(jsonPath("$.synthetic").value(true));
+
+        assertThat(jdbc.queryForObject("SELECT source FROM market_indicator_snapshots WHERE zone = ?",
+                String.class, "CHAPINERO")).isEqualTo("DEVELOPMENT_SYNTHETIC");
+
+        read("auth0|market-reader", "CHAPINERO").andExpect(status().isOk())
+                .andExpect(jsonPath("$.freshness").value("CACHED"))
+                .andExpect(jsonPath("$.source").value("DEVELOPMENT_SYNTHETIC"))
+                .andExpect(jsonPath("$.synthetic").value(true));
     }
 
     @Test

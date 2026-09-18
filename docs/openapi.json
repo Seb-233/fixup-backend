@@ -505,7 +505,7 @@
       "get" : {
         "tags" : [ "market-indicators-controller" ],
         "summary" : "Read the real estate market indicators of a zone",
-        "description" : "freshness says where the value comes from: LIVE from the external source in this request, CACHED from a still fresh cache entry, DEGRADED when the source did not answer and the last known value is served instead. observedAt always carries the moment the source produced the value, so a degraded answer is never presented as a current one.",
+        "description" : "freshness says how the value was obtained: LIVE in this request, CACHED from a still fresh cache entry, DEGRADED when the source did not answer and the last known value is served instead. source says who produced it: EXTERNAL_PROVIDER is a real market observation, DEVELOPMENT_SYNTHETIC is the development fallback, whose numbers are generated and do not represent the market; synthetic repeats that as a flag. observedAt always carries the moment the source produced the value and is never filled in by the backend, so a degraded or synthetic answer is never presented as a current real one.",
         "operationId" : "ofZone",
         "parameters" : [ {
           "name" : "zone",
@@ -795,9 +795,16 @@
           },
           "degraded" : {
             "type" : "boolean"
+          },
+          "source" : {
+            "type" : "string",
+            "enum" : [ "EXTERNAL_PROVIDER", "DEVELOPMENT_SYNTHETIC" ]
+          },
+          "synthetic" : {
+            "type" : "boolean"
           }
         },
-        "required" : [ "averageDaysOnMarket", "degraded", "freshness", "observedAt", "pricePerSquareMeter", "yearOverYearVariationPercent", "zone" ]
+        "required" : [ "averageDaysOnMarket", "degraded", "freshness", "observedAt", "pricePerSquareMeter", "source", "synthetic", "yearOverYearVariationPercent", "zone" ]
       }
     },
     "securitySchemes" : {

@@ -14,7 +14,6 @@ import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 /**
  * FR-UC-15: consulta de indicadores del mercado inmobiliario por zona.
@@ -32,6 +31,12 @@ import org.springframework.transaction.annotation.Transactional;
  *   <li>Si la fuente falla y no hay nada guardado no se inventa un dato: se informa la
  *       indisponibilidad.</li>
  * </ol>
+ *
+ * <p>Este método no abre una transacción. La llamada externa, con sus reintentos y sus esperas,
+ * puede tardar segundos: sostener una transacción de PostgreSQL mientras tanto retiene una
+ * conexión del pool y mantiene abierta una transacción que no está haciendo trabajo de base de
+ * datos. La lectura y la escritura de la caché se hacen en transacciones cortas e independientes,
+ * declaradas en el adaptador de persistencia, y la llamada HTTP queda fuera de todas ellas.
  */
 @Service
 public class GetMarketIndicators {
@@ -48,7 +53,6 @@ public class GetMarketIndicators {
         this.freshnessWindow = freshnessWindow;
     }
 
-    @Transactional
     public MarketIndicatorsView execute(CurrentActor actor, String requestedZone) {
         // Cualquier cuenta activa puede consultar indicadores: no hay restricción por rol, pero
         // resolver el actor ya exige que la cuenta exista y esté ACTIVE en PostgreSQL.
