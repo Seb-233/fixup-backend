@@ -16,6 +16,7 @@ import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
 import java.time.Instant;
 import org.springframework.validation.annotation.Validated;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -23,7 +24,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 /** FR-UC-15: indicadores del mercado inmobiliario. Controllers stay thin and never touch JPA. */
 @RestController
-@RequestMapping("/analytics")
+@RequestMapping(value = "/analytics", produces = MediaType.APPLICATION_JSON_VALUE)
 @Validated
 @SecurityRequirement(name = "bearerAuth")
 @ApiResponses({

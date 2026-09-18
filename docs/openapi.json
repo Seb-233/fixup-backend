@@ -246,7 +246,7 @@
           "400" : {
             "description" : "The zone is missing or too long",
             "content" : {
-              "*/*" : {
+              "application/json" : {
                 "schema" : {
                   "$ref" : "#/components/schemas/ErrorResponse"
                 }
@@ -256,7 +256,7 @@
           "401" : {
             "description" : "Missing or invalid bearer token",
             "content" : {
-              "*/*" : {
+              "application/json" : {
                 "schema" : {
                   "$ref" : "#/components/schemas/ErrorResponse"
                 }
@@ -266,7 +266,7 @@
           "403" : {
             "description" : "Inactive account",
             "content" : {
-              "*/*" : {
+              "application/json" : {
                 "schema" : {
                   "$ref" : "#/components/schemas/ErrorResponse"
                 }
@@ -276,7 +276,7 @@
           "503" : {
             "description" : "The external source failed and no known value exists",
             "content" : {
-              "*/*" : {
+              "application/json" : {
                 "schema" : {
                   "$ref" : "#/components/schemas/ErrorResponse"
                 }
@@ -286,7 +286,7 @@
           "200" : {
             "description" : "Indicators of that zone, with their provenance",
             "content" : {
-              "*/*" : {
+              "application/json" : {
                 "schema" : {
                   "$ref" : "#/components/schemas/IndicatorsResponse"
                 }
