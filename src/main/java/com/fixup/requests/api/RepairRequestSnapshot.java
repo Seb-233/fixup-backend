@@ -21,4 +21,9 @@ public record RepairRequestSnapshot(UUID requestId, UUID ownerUserId, Specialty 
             throw new RepairRequestAccessDeniedException();
         }
     }
+
+    @Override
+    public UUID ownerUserId() {
+        return ownerUserId;
+    }
 }

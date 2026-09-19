@@ -1,16 +1,8 @@
 package com.fixup.integration;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fixup.fixers.api.FixerEligibility;
-import com.fixup.fixers.api.FixerReview;
-import com.fixup.identityaccess.api.CurrentActor;
-import com.fixup.identityaccess.api.Role;
-import com.fixup.identityaccess.api.UserStatus;
 import com.fixup.quotations.api.QuotationAccepted;
-import java.time.Instant;
-import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
@@ -24,7 +16,6 @@ import org.springframework.context.event.EventListener;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.stereotype.Component;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
 

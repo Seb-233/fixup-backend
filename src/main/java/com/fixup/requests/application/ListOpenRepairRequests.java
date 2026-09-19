@@ -2,7 +2,6 @@ package com.fixup.requests.application;
 
 import com.fixup.fixers.api.FixerEligibility;
 import com.fixup.fixers.api.FixerNotEligibleException;
-import com.fixup.fixers.api.Specialty;
 import com.fixup.identityaccess.api.CurrentActor;
 import com.fixup.identityaccess.api.Role;
 import com.fixup.identityaccess.api.UserStatus;
