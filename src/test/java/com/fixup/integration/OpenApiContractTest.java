@@ -42,9 +42,15 @@ class OpenApiContractTest {
                 "/fixers/me/verification", "/fixers/me/verification/documents",
                 "/fixers/{fixerUserId}/verification/approve", "/fixers/{fixerUserId}/verification/reject",
                 "/media/uploads", "/media/uploads/{mediaId}/confirm",
-                "/media/me/portfolio", "/media/me/portfolio/publish", "/media/me/portfolio/unpublish",
-                "/media/me/portfolio/{pieceId}", "/media/me/portfolio/{pieceId}/hide",
-                "/media/me/portfolio/{pieceId}/show", "/media/fixers/{fixerUserId}/portfolio");
+                "/media/me/portfolio", "/media/me/portfolio/pieces",
+                "/media/me/portfolio/publish", "/media/me/portfolio/unpublish",
+                "/media/me/portfolio/pieces/{pieceId}", "/media/me/portfolio/pieces/{pieceId}/hide",
+                "/media/me/portfolio/pieces/{pieceId}/show", "/media/fixers/{fixerUserId}/portfolio");
+        assertThat(paths.fieldNames()).toIterable().doesNotContain(
+                "/media/me/portfolio/{pieceId}",
+                "/media/me/portfolio/{pieceId}/hide",
+                "/media/me/portfolio/{pieceId}/show");
+        assertThat(paths.get("/media/me/portfolio").has("post")).as("Old POST /media/me/portfolio must not exist").isFalse();
         for (var endpoint : new String[][]{
                 {"/auth/bootstrap", "post", "200"}, {"/auth/me", "get", "200"},
                 {"/auth/select-role", "post", "200"},
@@ -54,19 +60,32 @@ class OpenApiContractTest {
                 {"/fixers/{fixerUserId}/verification/reject", "post", "204"},
                 {"/media/uploads", "post", "201"},
                 {"/media/uploads/{mediaId}/confirm", "post", "200"},
-                {"/media/me/portfolio", "post", "201"}, {"/media/me/portfolio", "get", "200"},
+                {"/media/me/portfolio/pieces", "post", "201"}, {"/media/me/portfolio", "get", "200"},
                 {"/media/me/portfolio/publish", "post", "200"},
                 {"/media/me/portfolio/unpublish", "post", "200"},
-                {"/media/me/portfolio/{pieceId}", "delete", "204"},
-                {"/media/me/portfolio/{pieceId}/hide", "post", "200"},
-                {"/media/me/portfolio/{pieceId}/show", "post", "200"},
+                {"/media/me/portfolio/pieces/{pieceId}", "delete", "204"},
+                {"/media/me/portfolio/pieces/{pieceId}/hide", "post", "200"},
+                {"/media/me/portfolio/pieces/{pieceId}/show", "post", "200"},
                 {"/media/fixers/{fixerUserId}/portfolio", "get", "200"}}) {
             var operation = paths.get(endpoint[0]).get(endpoint[1]);
             assertThat(operation.get("security").toString()).contains("bearerAuth");
             for (String code : new String[]{endpoint[2], "400", "401", "403", "409"}) {
                 assertThat(operation.get("responses").has(code)).as(endpoint[0] + " status " + code).isTrue();
             }
+            if (endpoint[0].startsWith("/media")) {
+                assertThat(operation.get("responses").has("404")).as(endpoint[0] + " status 404").isTrue();
+            }
             assertThat(operation.get("responses").has("402")).isFalse();
+        }
+        for (String piecePath : java.util.List.of(
+                "/media/me/portfolio/pieces/{pieceId}",
+                "/media/me/portfolio/pieces/{pieceId}/hide",
+                "/media/me/portfolio/pieces/{pieceId}/show")) {
+            var pieceOp = piecePath.contains("hide") || piecePath.contains("show")
+                    ? paths.get(piecePath).get("post")
+                    : paths.get(piecePath).get("delete");
+            assertThat(pieceOp.get("responses").has("404")).isTrue();
+            assertThat(pieceOp.get("responses").get("404").get("description").asText()).contains("PIECE_NOT_FOUND");
         }
         assertThat(paths.get("/auth/bootstrap").get("post").get("responses").has("201")).isTrue();
         assertThat(contract.at("/components/schemas/UserResponse/properties/email/type").toString()).contains("null");

@@ -2,7 +2,6 @@ package com.fixup.integration;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fixup.media.domain.PortfolioPolicy;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -31,14 +30,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-/** Reused unchanged against H2 and PostgreSQL to keep the HTTP/security contract equivalent. */
-abstract class PortfolioHttpContract {
-    @Autowired MockMvc mvc;
-    @Autowired JdbcTemplate jdbc;
-    @Autowired ObjectMapper mapper;
+public abstract class PortfolioHttpContract {
+    @Autowired protected MockMvc mvc;
+    @Autowired protected JdbcTemplate jdbc;
+    @Autowired protected ObjectMapper mapper;
 
     @BeforeEach
-    void clearIsolatedTestDatabase() {
+    void resetDatabase() {
         SecurityContextHolder.clearContext();
         TestStorageConfiguration.instance().clear();
         jdbc.update("DELETE FROM media_deletion_jobs");
@@ -50,40 +48,32 @@ abstract class PortfolioHttpContract {
         jdbc.update("DELETE FROM users");
     }
 
-    private RequestPostProcessor identity(String subject) {
-        return jwt().jwt(token -> token.subject(subject).claim("email", "fixer@example.test")
-                .claim("name", "Synthetic fixer"));
+    protected RequestPostProcessor identity(String subject) {
+        return jwt().jwt(token -> token.subject(subject).claim("email", subject + "@example.test")
+                .claim("name", "Synthetic Fixer"));
     }
 
-    private UUID bootstrap(String subject, String role) throws Exception {
+    protected UUID verifiedFixer(String subject) throws Exception {
         var created = mvc.perform(post("/auth/bootstrap").with(identity(subject)))
                 .andExpect(status().isCreated()).andReturn();
-        var id = UUID.fromString(mapper.readTree(created.getResponse().getContentAsString())
-                .get("id").asText());
+        var id = UUID.fromString(mapper.readTree(created.getResponse().getContentAsString()).get("id").asText());
         mvc.perform(post("/auth/select-role").with(identity(subject))
-                .contentType(MediaType.APPLICATION_JSON).content("{\"role\":\"" + role + "\"}"))
+                .contentType(MediaType.APPLICATION_JSON).content("{\"role\":\"FIXER\"}"))
                 .andExpect(status().isOk());
-        return id;
-    }
-
-    private UUID verifiedFixer(String subject) throws Exception {
-        var id = bootstrap(subject, "FIXER");
         jdbc.update("UPDATE fixer_profiles SET verification_status = 'VERIFIED' WHERE user_id = ?", id);
         return id;
     }
 
-    private UUID uploadAndConfirm(String subject, byte[] magicBytes, String contentType) throws Exception {
-        var req = "{\"purpose\":\"FIXER_PORTFOLIO\",\"contentType\":\"" + contentType + "\",\"sizeBytes\":" + magicBytes.length + "}";
+    private UUID uploadAndConfirm(String subject, byte[] content, String declaredMime) throws Exception {
+        var req = "{\"purpose\":\"FIXER_PORTFOLIO\",\"contentType\":\"" + declaredMime + "\",\"sizeBytes\":" + content.length + "}";
         var uploadRes = mvc.perform(post("/media/uploads").with(identity(subject))
                 .contentType(MediaType.APPLICATION_JSON).content(req))
                 .andExpect(status().isCreated()).andReturn();
 
-        var tree = mapper.readTree(uploadRes.getResponse().getContentAsString());
-        var mediaId = UUID.fromString(tree.get("mediaId").asText());
-
-        // Extract objectKey from database to store bytes in test storage
+        var mediaId = UUID.fromString(mapper.readTree(uploadRes.getResponse().getContentAsString()).get("mediaId").asText());
         var objectKey = jdbc.queryForObject("SELECT object_key FROM media_assets WHERE id = ?", String.class, mediaId);
-        TestStorageConfiguration.instance().put(objectKey, magicBytes, contentType);
+
+        TestStorageConfiguration.instance().put(objectKey, content, declaredMime);
 
         mvc.perform(post("/media/uploads/" + mediaId + "/confirm").with(identity(subject)))
                 .andExpect(status().isOk())
@@ -98,7 +88,7 @@ abstract class PortfolioHttpContract {
 
     private ResultActions publishPieceWithMedia(String subject, UUID mediaId, String title) throws Exception {
         var req = "{\"mediaId\":\"" + mediaId + "\",\"title\":\"" + title + "\",\"description\":\"Trabajo terminado\"}";
-        return mvc.perform(post("/media/me/portfolio").with(identity(subject))
+        return mvc.perform(post("/media/me/portfolio/pieces").with(identity(subject))
                 .contentType(MediaType.APPLICATION_JSON).content(req));
     }
 
@@ -119,17 +109,32 @@ abstract class PortfolioHttpContract {
                 post("/media/uploads").contentType(MediaType.APPLICATION_JSON)
                         .content("{\"purpose\":\"FIXER_PORTFOLIO\",\"contentType\":\"image/jpeg\",\"sizeBytes\":10}"),
                 post("/media/uploads/" + UUID.randomUUID() + "/confirm"),
-                post("/media/me/portfolio").contentType(MediaType.APPLICATION_JSON)
+                post("/media/me/portfolio/pieces").contentType(MediaType.APPLICATION_JSON)
                         .content("{\"mediaId\":\"" + UUID.randomUUID() + "\",\"title\":\"t\"}"),
                 post("/media/me/portfolio/publish"),
                 post("/media/me/portfolio/unpublish"),
-                delete("/media/me/portfolio/" + UUID.randomUUID()),
-                post("/media/me/portfolio/" + UUID.randomUUID() + "/hide"),
+                delete("/media/me/portfolio/pieces/" + UUID.randomUUID()),
+                post("/media/me/portfolio/pieces/" + UUID.randomUUID() + "/hide"),
+                post("/media/me/portfolio/pieces/" + UUID.randomUUID() + "/show"),
                 get("/media/fixers/" + UUID.randomUUID() + "/portfolio"))) {
             mvc.perform(request).andExpect(status().isUnauthorized())
                     .andExpect(header().string("WWW-Authenticate", "Bearer"))
                     .andExpect(jsonPath("$.code").value("UNAUTHENTICATED"));
         }
+    }
+
+    @Test
+    void deprecatedRoutesWithoutPiecesDoNotExist() throws Exception {
+        verifiedFixer("auth0|route-checker");
+        mvc.perform(post("/media/me/portfolio").with(identity("auth0|route-checker"))
+                .contentType(MediaType.APPLICATION_JSON).content("{\"mediaId\":\"" + UUID.randomUUID() + "\",\"title\":\"t\"}"))
+                .andExpect(status().isMethodNotAllowed());
+        mvc.perform(delete("/media/me/portfolio/" + UUID.randomUUID()).with(identity("auth0|route-checker")))
+                .andExpect(status().isNotFound());
+        mvc.perform(post("/media/me/portfolio/" + UUID.randomUUID() + "/hide").with(identity("auth0|route-checker")))
+                .andExpect(status().isNotFound());
+        mvc.perform(post("/media/me/portfolio/" + UUID.randomUUID() + "/show").with(identity("auth0|route-checker")))
+                .andExpect(status().isNotFound());
     }
 
     @Test
@@ -149,73 +154,96 @@ abstract class PortfolioHttpContract {
     @Test
     void piecesAreAppendedSoTheGalleryKeepsPublicationOrder() throws Exception {
         verifiedFixer("auth0|ordered");
-        publish("auth0|ordered", "Primera").andExpect(jsonPath("$.position").value(1));
-        publish("auth0|ordered", "Segunda").andExpect(jsonPath("$.position").value(2));
-        publish("auth0|ordered", "Tercera").andExpect(jsonPath("$.position").value(3));
+
+        publish("auth0|ordered", "Primero").andExpect(status().isCreated());
+        publish("auth0|ordered", "Segundo").andExpect(status().isCreated());
+        publish("auth0|ordered", "Tercero").andExpect(status().isCreated());
 
         mvc.perform(get("/media/me/portfolio").with(identity("auth0|ordered")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(3))
-                .andExpect(jsonPath("$[0].title").value("Primera"))
-                .andExpect(jsonPath("$[2].title").value("Tercera"));
+                .andExpect(jsonPath("$[0].position").value(1))
+                .andExpect(jsonPath("$[0].title").value("Primero"))
+                .andExpect(jsonPath("$[1].position").value(2))
+                .andExpect(jsonPath("$[1].title").value("Segundo"))
+                .andExpect(jsonPath("$[2].position").value(3))
+                .andExpect(jsonPath("$[2].title").value("Tercero"));
     }
 
     @Test
-    void aPendingFixerCannotPublish() throws Exception {
-        bootstrap("auth0|pending-fixer", "FIXER");
+    void anUnverifiedFixerCannotUploadMedia() throws Exception {
+        var created = mvc.perform(post("/auth/bootstrap").with(identity("auth0|pending-fixer")))
+                .andExpect(status().isCreated()).andReturn();
+        mvc.perform(post("/auth/select-role").with(identity("auth0|pending-fixer"))
+                .contentType(MediaType.APPLICATION_JSON).content("{\"role\":\"FIXER\"}"))
+                .andExpect(status().isOk());
 
-        var req = "{\"purpose\":\"FIXER_PORTFOLIO\",\"contentType\":\"image/jpeg\",\"sizeBytes\":10}";
+        var req = "{\"purpose\":\"FIXER_PORTFOLIO\",\"contentType\":\"image/jpeg\",\"sizeBytes\":100}";
         mvc.perform(post("/media/uploads").with(identity("auth0|pending-fixer"))
-                        .contentType(MediaType.APPLICATION_JSON).content(req))
+                .contentType(MediaType.APPLICATION_JSON).content(req))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
     }
 
     @Test
-    void anOwnerWithoutTheFixerRoleCannotPublish() throws Exception {
-        bootstrap("auth0|owner", "OWNER");
+    void anOwnerCannotUploadFixerPortfolioMedia() throws Exception {
+        mvc.perform(post("/auth/bootstrap").with(identity("auth0|owner"))).andExpect(status().isCreated());
+        mvc.perform(post("/auth/select-role").with(identity("auth0|owner"))
+                .contentType(MediaType.APPLICATION_JSON).content("{\"role\":\"OWNER\"}")).andExpect(status().isOk());
 
-        var req = "{\"purpose\":\"FIXER_PORTFOLIO\",\"contentType\":\"image/jpeg\",\"sizeBytes\":10}";
+        var req = "{\"purpose\":\"FIXER_PORTFOLIO\",\"contentType\":\"image/jpeg\",\"sizeBytes\":100}";
         mvc.perform(post("/media/uploads").with(identity("auth0|owner"))
-                        .contentType(MediaType.APPLICATION_JSON).content(req))
+                .contentType(MediaType.APPLICATION_JSON).content(req))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
     }
 
     @Test
-    void aSuspendedAccountCannotPublishEvenWhenVerified() throws Exception {
+    void aSuspendedUserCannotUploadMedia() throws Exception {
         var id = verifiedFixer("auth0|suspended");
         jdbc.update("UPDATE users SET status = 'SUSPENDED' WHERE id = ?", id);
 
-        var req = "{\"purpose\":\"FIXER_PORTFOLIO\",\"contentType\":\"image/jpeg\",\"sizeBytes\":10}";
+        var req = "{\"purpose\":\"FIXER_PORTFOLIO\",\"contentType\":\"image/jpeg\",\"sizeBytes\":100}";
         mvc.perform(post("/media/uploads").with(identity("auth0|suspended"))
-                        .contentType(MediaType.APPLICATION_JSON).content(req))
-                .andExpect(status().isForbidden());
+                .contentType(MediaType.APPLICATION_JSON).content(req))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
     }
 
     @Test
-    void portfolioRequiresAtLeastThreePhotosToPublish() throws Exception {
-        verifiedFixer("auth0|three-photos");
+    void portfolioCannotBePublishedWithFewerThanThreePublicPhotos() throws Exception {
+        verifiedFixer("auth0|few-photos");
 
-        publish("auth0|three-photos", "Foto 1").andExpect(status().isCreated());
-        publish("auth0|three-photos", "Foto 2").andExpect(status().isCreated());
+        publish("auth0|few-photos", "P1").andExpect(status().isCreated());
+        publish("auth0|few-photos", "P2").andExpect(status().isCreated());
 
-        // With 2 photos, publish must be rejected with 409
-        mvc.perform(post("/media/me/portfolio/publish").with(identity("auth0|three-photos")))
+        mvc.perform(post("/media/me/portfolio/publish").with(identity("auth0|few-photos")))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("PORTFOLIO_INSUFFICIENT_PIECES"));
+    }
 
-        // With 3 photos, publish succeeds
-        publish("auth0|three-photos", "Foto 3").andExpect(status().isCreated());
+    @Test
+    void portfolioPublishesWithThreePhotosAndIsIdempotent() throws Exception {
+        verifiedFixer("auth0|three-photos");
+
+        publish("auth0|three-photos", "P1").andExpect(status().isCreated());
+        publish("auth0|three-photos", "P2").andExpect(status().isCreated());
+        publish("auth0|three-photos", "P3").andExpect(status().isCreated());
+
+        mvc.perform(post("/media/me/portfolio/publish").with(identity("auth0|three-photos")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("PUBLISHED"))
+                .andExpect(jsonPath("$.publishedAt").isNotEmpty());
+
+        // Repeated publication is idempotent
         mvc.perform(post("/media/me/portfolio/publish").with(identity("auth0|three-photos")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("PUBLISHED"));
     }
 
     @Test
-    void deletingAPieceLeavingLessThanThreeRevertsToDraft() throws Exception {
+    void deletingAPieceRevertsPortfolioToDraftIfUnderThreeVisiblePhotos() throws Exception {
         var fixerId = verifiedFixer("auth0|deleter");
-
         var p1 = publishAndReadId("auth0|deleter", "P1");
         var p2 = publishAndReadId("auth0|deleter", "P2");
         var p3 = publishAndReadId("auth0|deleter", "P3");
@@ -224,7 +252,7 @@ abstract class PortfolioHttpContract {
                 .andExpect(status().isOk());
 
         // Delete one piece -> 204 No Content
-        mvc.perform(delete("/media/me/portfolio/" + p1).with(identity("auth0|deleter")))
+        mvc.perform(delete("/media/me/portfolio/pieces/" + p1).with(identity("auth0|deleter")))
                 .andExpect(status().isNoContent());
 
         // Piece is deleted from portfolio
@@ -252,7 +280,7 @@ abstract class PortfolioHttpContract {
                 .andExpect(status().isOk());
 
         // Hiding 1 piece leaves 2 visible (< 3) -> portfolio automatically reverts to DRAFT
-        mvc.perform(post("/media/me/portfolio/" + p3 + "/hide").with(identity("auth0|curator")))
+        mvc.perform(post("/media/me/portfolio/pieces/" + p3 + "/hide").with(identity("auth0|curator")))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.visibility").value("HIDDEN"));
 
         // Public consultation returns 404 because portfolio reverted to DRAFT
@@ -265,7 +293,7 @@ abstract class PortfolioHttpContract {
                 .andExpect(jsonPath("$.length()").value(3));
 
         // Showing piece restores it to PUBLIC, but does not publish automatically
-        mvc.perform(post("/media/me/portfolio/" + p3 + "/show").with(identity("auth0|curator")))
+        mvc.perform(post("/media/me/portfolio/pieces/" + p3 + "/show").with(identity("auth0|curator")))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.visibility").value("PUBLIC"));
 
         // Must explicitly publish again
@@ -283,7 +311,7 @@ abstract class PortfolioHttpContract {
         verifiedFixer("auth0|repeat");
         var piece = publishAndReadId("auth0|repeat", "Obra");
 
-        mvc.perform(post("/media/me/portfolio/" + piece + "/show").with(identity("auth0|repeat")))
+        mvc.perform(post("/media/me/portfolio/pieces/" + piece + "/show").with(identity("auth0|repeat")))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("VISIBILITY_UNCHANGED"));
     }
@@ -294,11 +322,21 @@ abstract class PortfolioHttpContract {
         verifiedFixer("auth0|other-fixer");
         var foreign = publishAndReadId("auth0|owner-fixer", "Ajena");
 
-        mvc.perform(post("/media/me/portfolio/" + foreign + "/hide").with(identity("auth0|other-fixer")))
-                .andExpect(status().isConflict())
+        // Foreign piece returns 404 PIECE_NOT_FOUND
+        mvc.perform(post("/media/me/portfolio/pieces/" + foreign + "/hide").with(identity("auth0|other-fixer")))
+                .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("PIECE_NOT_FOUND"));
-        mvc.perform(delete("/media/me/portfolio/" + foreign).with(identity("auth0|other-fixer")))
-                .andExpect(status().isConflict())
+        mvc.perform(delete("/media/me/portfolio/pieces/" + foreign).with(identity("auth0|other-fixer")))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("PIECE_NOT_FOUND"));
+
+        // Nonexistent piece returns identical 404 PIECE_NOT_FOUND
+        var nonexistent = UUID.randomUUID();
+        mvc.perform(post("/media/me/portfolio/pieces/" + nonexistent + "/hide").with(identity("auth0|other-fixer")))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("PIECE_NOT_FOUND"));
+        mvc.perform(delete("/media/me/portfolio/pieces/" + nonexistent).with(identity("auth0|other-fixer")))
+                .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("PIECE_NOT_FOUND"));
     }
 
@@ -339,6 +377,55 @@ abstract class PortfolioHttpContract {
     }
 
     @Test
+    void confirmingInvalidMediaReturnsConflictAndDoesNotDegradeToNotFound() throws Exception {
+        verifiedFixer("auth0|repeat-invalid");
+
+        var req = "{\"purpose\":\"FIXER_PORTFOLIO\",\"contentType\":\"image/jpeg\",\"sizeBytes\":8}";
+        var uploadRes = mvc.perform(post("/media/uploads").with(identity("auth0|repeat-invalid"))
+                        .contentType(MediaType.APPLICATION_JSON).content(req))
+                .andExpect(status().isCreated()).andReturn();
+
+        var mediaId = UUID.fromString(mapper.readTree(uploadRes.getResponse().getContentAsString()).get("mediaId").asText());
+        var objectKey = jdbc.queryForObject("SELECT object_key FROM media_assets WHERE id = ?", String.class, mediaId);
+
+        // Put invalid bytes
+        TestStorageConfiguration.instance().put(objectKey, TestStorageConfiguration.EXE_MAGIC, "image/jpeg");
+
+        // First confirm -> 415 MEDIA_TYPE_NOT_ALLOWED
+        mvc.perform(post("/media/uploads/" + mediaId + "/confirm").with(identity("auth0|repeat-invalid")))
+                .andExpect(status().isUnsupportedMediaType())
+                .andExpect(jsonPath("$.code").value("MEDIA_TYPE_NOT_ALLOWED"));
+
+        // Simulate physical file deletion after purge job
+        TestStorageConfiguration.instance().delete(objectKey);
+
+        // Subsequent confirm must be 409 MEDIA_INVALID, NEVER 404 MEDIA_NOT_FOUND
+        mvc.perform(post("/media/uploads/" + mediaId + "/confirm").with(identity("auth0|repeat-invalid")))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("MEDIA_INVALID"));
+    }
+
+    @Test
+    void contentTypeMismatchBetweenStorageAndDeclarationIsRejected() throws Exception {
+        verifiedFixer("auth0|mismatch-type");
+
+        var req = "{\"purpose\":\"FIXER_PORTFOLIO\",\"contentType\":\"image/jpeg\",\"sizeBytes\":6}";
+        var uploadRes = mvc.perform(post("/media/uploads").with(identity("auth0|mismatch-type"))
+                        .contentType(MediaType.APPLICATION_JSON).content(req))
+                .andExpect(status().isCreated()).andReturn();
+
+        var mediaId = UUID.fromString(mapper.readTree(uploadRes.getResponse().getContentAsString()).get("mediaId").asText());
+        var objectKey = jdbc.queryForObject("SELECT object_key FROM media_assets WHERE id = ?", String.class, mediaId);
+
+        // Put valid JPEG bytes but set storage metadata to image/png
+        TestStorageConfiguration.instance().put(objectKey, TestStorageConfiguration.JPEG_MAGIC, "image/png");
+
+        mvc.perform(post("/media/uploads/" + mediaId + "/confirm").with(identity("auth0|mismatch-type")))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("MEDIA_NOT_READY"));
+    }
+
+    @Test
     void invalidMagicBytesRejectedWith415() throws Exception {
         verifiedFixer("auth0|bad-bytes");
 
@@ -359,6 +446,11 @@ abstract class PortfolioHttpContract {
 
         var status = jdbc.queryForObject("SELECT status FROM media_assets WHERE id = ?", String.class, mediaId);
         assertThat(status).isEqualTo("INVALID");
+
+        // Check that a purge job was recorded
+        var jobs = jdbc.queryForList("SELECT job_type, status FROM media_deletion_jobs WHERE media_asset_id = ?", mediaId);
+        assertThat(jobs).hasSize(1);
+        assertThat(jobs.get(0).get("job_type")).isEqualTo("INVALID_PURGE");
     }
 
     @Test
@@ -384,19 +476,19 @@ abstract class PortfolioHttpContract {
     }
 
     @Test
-    void twoSimultaneousPublicationsNeitherCollideNorFail() throws Exception {
-        verifiedFixer("auth0|concurrent");
-        publish("auth0|concurrent", "Base").andExpect(status().isCreated());
+    void twoSimultaneousFirstPublicationsNeitherCollideNorFail() throws Exception {
+        var fixerId = verifiedFixer("auth0|first-concurrent");
 
-        var m1 = uploadAndConfirmJpeg("auth0|concurrent");
-        var m2 = uploadAndConfirmJpeg("auth0|concurrent");
+        // Do not pre-create fixer_portfolios; verify first publication concurrency
+        var m1 = uploadAndConfirmJpeg("auth0|first-concurrent");
+        var m2 = uploadAndConfirmJpeg("auth0|first-concurrent");
 
         var start = new CountDownLatch(1);
         var pool = Executors.newFixedThreadPool(2);
         List<Integer> statuses;
         try {
-            Callable<Integer> first = () -> statusOfPublication("auth0|concurrent", m1, "Simultanea1", start);
-            Callable<Integer> second = () -> statusOfPublication("auth0|concurrent", m2, "Simultanea2", start);
+            Callable<Integer> first = () -> statusOfPublication("auth0|first-concurrent", m1, "Primera1", start);
+            Callable<Integer> second = () -> statusOfPublication("auth0|first-concurrent", m2, "Primera2", start);
             var attempts = List.of(pool.submit(first), pool.submit(second));
             start.countDown();
             statuses = new ArrayList<>();
@@ -410,10 +502,44 @@ abstract class PortfolioHttpContract {
         assertThat(statuses).as("a concurrent publication is 201 or 409, never 500")
                 .allMatch(s -> s == 201 || s == 409);
         assertThat(statuses).as("at least one publication goes through").contains(201);
+
+        var portfolioCount = jdbc.queryForObject(
+                "SELECT count(*) FROM fixer_portfolios WHERE fixer_user_id = ?", Integer.class, fixerId);
+        assertThat(portfolioCount).as("fixer_portfolios row must exist exactly once").isEqualTo(1);
+
         var positions = jdbc.queryForList(
-                "SELECT display_position FROM portfolio_pieces ORDER BY display_position", Integer.class);
+                "SELECT display_position FROM portfolio_pieces WHERE fixer_user_id = ? ORDER BY display_position",
+                Integer.class, fixerId);
         assertThat(positions).doesNotHaveDuplicates()
-                .hasSize(1 + java.util.Collections.frequency(statuses, 201));
+                .hasSize(java.util.Collections.frequency(statuses, 201));
+    }
+
+    @Test
+    void concurrentAttachmentOfSameMediaIdYieldsOneCreationAndOneConflict() throws Exception {
+        var fixerId = verifiedFixer("auth0|same-media-concurrent");
+        var mediaId = uploadAndConfirmJpeg("auth0|same-media-concurrent");
+
+        var start = new CountDownLatch(1);
+        var pool = Executors.newFixedThreadPool(2);
+        List<Integer> statuses;
+        try {
+            Callable<Integer> first = () -> statusOfPublication("auth0|same-media-concurrent", mediaId, "Intento1", start);
+            Callable<Integer> second = () -> statusOfPublication("auth0|same-media-concurrent", mediaId, "Intento2", start);
+            var attempts = List.of(pool.submit(first), pool.submit(second));
+            start.countDown();
+            statuses = new ArrayList<>();
+            for (var attempt : attempts) {
+                statuses.add(attempt.get(30, TimeUnit.SECONDS));
+            }
+        } finally {
+            pool.shutdownNow();
+        }
+
+        assertThat(statuses).contains(201);
+        assertThat(statuses).contains(409);
+        var pieceCount = jdbc.queryForObject(
+                "SELECT count(*) FROM portfolio_pieces WHERE media_asset_id = ?", Integer.class, mediaId);
+        assertThat(pieceCount).isEqualTo(1);
     }
 
     private int statusOfPublication(String subject, UUID mediaId, String title, CountDownLatch start) throws Exception {
@@ -436,7 +562,7 @@ abstract class PortfolioHttpContract {
     void malformedBodiesAreRejectedBeforeReachingTheDomain(String payload) throws Exception {
         verifiedFixer("auth0|malformed");
 
-        mvc.perform(post("/media/me/portfolio").with(identity("auth0|malformed"))
+        mvc.perform(post("/media/me/portfolio/pieces").with(identity("auth0|malformed"))
                         .contentType(MediaType.APPLICATION_JSON).content(payload))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));

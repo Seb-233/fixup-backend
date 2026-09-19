@@ -109,8 +109,8 @@ class PortfolioPieceTest {
 
         assertThatCode(() -> published.requireOwnedBy(FIXER)).doesNotThrowAnyException();
         assertThatThrownBy(() -> published.requireOwnedBy(UUID.randomUUID()))
-                .isInstanceOf(PortfolioRuleException.class)
-                .extracting(problem -> ((PortfolioRuleException) problem).code()).isEqualTo("PIECE_NOT_FOUND");
+                .isInstanceOf(com.fixup.media.api.PieceNotFoundException.class)
+                .extracting(problem -> ((com.fixup.media.api.PieceNotFoundException) problem).code()).isEqualTo("PIECE_NOT_FOUND");
     }
 
     @Test

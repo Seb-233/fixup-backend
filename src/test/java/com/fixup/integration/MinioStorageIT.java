@@ -134,7 +134,7 @@ class MinioStorageIT {
                     .andExpect(jsonPath("$.status").value("READY"));
 
             // 4. Attach to portfolio
-            var pieceRes = mvc.perform(post("/media/me/portfolio").with(identity(subject))
+            var pieceRes = mvc.perform(post("/media/me/portfolio/pieces").with(identity(subject))
                     .contentType(MediaType.APPLICATION_JSON)
                     .content("{\"mediaId\":\"" + mediaId + "\",\"title\":\"Foto " + i + "\",\"description\":\"Desc " + i + "\"}"))
                     .andExpect(status().isCreated()).andReturn();
@@ -182,7 +182,7 @@ class MinioStorageIT {
         assertThat(directRes.statusCode()).as("Direct anonymous GET to private bucket must be 403").isEqualTo(403);
 
         // 8. Delete a piece
-        mvc.perform(delete("/media/me/portfolio/" + firstPieceId).with(identity(subject)))
+        mvc.perform(delete("/media/me/portfolio/pieces/" + firstPieceId).with(identity(subject)))
                 .andExpect(status().isNoContent());
 
         // 9. Confirm that the portfolio reverted to DRAFT and is no longer public
@@ -190,10 +190,15 @@ class MinioStorageIT {
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("PORTFOLIO_NOT_FOUND"));
 
-        // 10. Confirm another user cannot modify or delete
+        // 10. Confirm another user cannot modify or delete -> 404 PIECE_NOT_FOUND
         bootstrapFixer("auth0|other-guy");
-        mvc.perform(delete("/media/me/portfolio/" + firstPieceId).with(identity("auth0|other-guy")))
-                .andExpect(status().isConflict())
+        mvc.perform(delete("/media/me/portfolio/pieces/" + firstPieceId).with(identity("auth0|other-guy")))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("PIECE_NOT_FOUND"));
+
+        // Nonexistent piece produces indistinguishable 404
+        mvc.perform(delete("/media/me/portfolio/pieces/" + UUID.randomUUID()).with(identity("auth0|other-guy")))
+                .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("PIECE_NOT_FOUND"));
     }
 }
