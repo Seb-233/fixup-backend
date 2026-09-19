@@ -160,16 +160,41 @@ class GetMarketIndicatorsTest {
     }
 
     @Test
-    void ifConcurrentSaveRejectsOlderDataTheExistingCacheIsReturnedAsCached() {
+    void whenConcurrentSaveRejectsDataAndWinningSnapshotIsFreshThenCachedIsReturned() {
         var snapshots = new InMemorySnapshots();
-        var newer = indicators(Instant.now(), 6_000_000);
-        snapshots.save(newer);
+        var freshWinner = indicators(Instant.now().minus(Duration.ofMinutes(30)), 7_000_000);
+        var incomingOlder = indicators(Instant.now().minus(Duration.ofHours(1)), 6_000_000);
 
-        var older = indicators(Instant.now().minus(Duration.ofHours(1)), 5_000_000);
-        var view = useCase(zone -> older, snapshots).execute(ACTOR, "CHAPINERO");
+        MarketIndicatorsSource source = zone -> {
+            // Concurrent save happens during fetch: winner is saved with higher observedAt
+            snapshots.save(freshWinner);
+            return incomingOlder;
+        };
 
-        assertThat(view.pricePerSquareMeter()).isEqualTo(newer.pricePerSquareMeter());
+        var view = useCase(source, snapshots).execute(ACTOR, "CHAPINERO");
+
         assertThat(view.freshness()).isEqualTo(IndicatorFreshness.CACHED);
+        assertThat(view.degraded()).isFalse();
+        assertThat(view.pricePerSquareMeter()).isEqualTo(freshWinner.pricePerSquareMeter());
+        assertThat(view.observedAt()).isEqualTo(freshWinner.observedAt());
+        assertThat(snapshots.findByZone("CHAPINERO")).contains(freshWinner);
+    }
+
+    @Test
+    void whenConcurrentSaveRejectsDataAndWinningSnapshotIsExpiredThenDegradedIsReturned() {
+        var snapshots = new InMemorySnapshots();
+        var expiredWinner = indicators(Instant.now().minus(Duration.ofHours(8)), 7_000_000);
+        snapshots.save(expiredWinner);
+
+        var incomingOlder = indicators(Instant.now().minus(Duration.ofHours(10)), 6_000_000);
+
+        var view = useCase(zone -> incomingOlder, snapshots).execute(ACTOR, "CHAPINERO");
+
+        assertThat(view.freshness()).isEqualTo(IndicatorFreshness.DEGRADED);
+        assertThat(view.degraded()).isTrue();
+        assertThat(view.pricePerSquareMeter()).isEqualTo(expiredWinner.pricePerSquareMeter());
+        assertThat(view.observedAt()).isEqualTo(expiredWinner.observedAt());
+        assertThat(snapshots.findByZone("CHAPINERO")).contains(expiredWinner);
     }
 
     /** LIVE dice cómo se obtuvo el dato, source dice de quién: son cosas distintas y viajan ambas. */

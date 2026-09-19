@@ -32,11 +32,15 @@ class DevelopmentMarketSourceClient implements MarketSourceClient {
 
     @Override
     public MarketIndicators fetchOnce(String zone) {
-        int seed = Math.floorMod(zone.hashCode(), 1_000_000);
+        return computeIndicators(zone, zone.hashCode(), Instant.now());
+    }
+
+    static MarketIndicators computeIndicators(String zone, int rawHashCode, Instant observedAt) {
+        int seed = Math.floorMod(rawHashCode, 1_000_000);
         var price = BigDecimal.valueOf(3_000_000L + (seed % 4_000) * 1_000L).setScale(2, RoundingMode.UNNECESSARY);
         var variation = BigDecimal.valueOf((seed % 210) - 60).divide(BigDecimal.TEN, 2, RoundingMode.HALF_UP);
         int daysOnMarket = 25 + (seed % 120);
-        return new MarketIndicators(zone, price, variation, daysOnMarket, Instant.now(),
+        return new MarketIndicators(zone, price, variation, daysOnMarket, observedAt,
                 IndicatorSource.DEVELOPMENT_SYNTHETIC);
     }
 

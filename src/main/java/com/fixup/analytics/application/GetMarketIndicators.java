@@ -74,9 +74,11 @@ public class GetMarketIndicators {
             if (accepted) {
                 return MarketIndicatorsView.of(fresh, IndicatorFreshness.LIVE);
             }
-            return snapshots.findByZone(zone)
-                    .map(stored -> MarketIndicatorsView.of(stored, IndicatorFreshness.CACHED))
-                    .orElseGet(() -> MarketIndicatorsView.of(fresh, IndicatorFreshness.LIVE));
+            var winner = snapshots.findByZone(zone).orElse(fresh);
+            IndicatorFreshness freshness = freshnessWindow.isFresh(winner.observedAt(), now)
+                    ? IndicatorFreshness.CACHED
+                    : IndicatorFreshness.DEGRADED;
+            return MarketIndicatorsView.of(winner, freshness);
         } catch (MarketSourceUnavailableException unavailable) {
             // No se registra la causa con detalle del proveedor: solo el hecho y la zona.
             LOG.warn("Market source unavailable for zone {}; falling back to the last known value", zone);

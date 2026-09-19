@@ -8,6 +8,7 @@ import java.math.RoundingMode;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Objects;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
@@ -42,15 +43,11 @@ class RestMarketSourceClient implements MarketSourceClient {
 
     RestMarketSourceClient(MarketSourceProperties properties, Clock clock) {
         this.baseUrl = properties.getBaseUrl();
-        this.clock = clock != null ? clock : Clock.systemUTC();
+        this.clock = Objects.requireNonNull(clock, "clock");
         var factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(properties.getConnectTimeout());
         factory.setReadTimeout(properties.getReadTimeout());
         this.restClient = RestClient.builder().requestFactory(factory).baseUrl(baseUrl).build();
-    }
-
-    RestMarketSourceClient(MarketSourceProperties properties) {
-        this(properties, Clock.systemUTC());
     }
 
     @Override

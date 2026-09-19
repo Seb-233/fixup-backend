@@ -62,13 +62,19 @@ class JpaMarketIndicatorSnapshots implements MarketIndicatorSnapshots {
 
     private static boolean determineIfPostgres(DataSource dataSource) {
         if (dataSource == null) {
-            return true;
+            throw new IllegalStateException("DataSource is null, cannot determine database engine");
         }
         try (Connection conn = dataSource.getConnection()) {
             String name = conn.getMetaData().getDatabaseProductName();
-            return name != null && name.toLowerCase().contains("postgres");
+            if (name == null || name.isBlank()) {
+                throw new IllegalStateException("Database product name is empty, cannot determine database engine");
+            }
+            return name.toLowerCase().contains("postgres");
         } catch (Exception ex) {
-            return true;
+            if (ex instanceof IllegalStateException ise) {
+                throw ise;
+            }
+            throw new IllegalStateException("Failed to determine database engine from DataSource", ex);
         }
     }
 
@@ -97,22 +103,7 @@ class JpaMarketIndicatorSnapshots implements MarketIndicatorSnapshots {
             return updated > 0;
         }
 
-        // Para H2 u otros entornos de prueba en memoria:
-        // Intentar primero POSTGRES_UPSERT ya que H2 2.3 corre con MODE=PostgreSQL.
-        // Si no soporta EXCLUDED en WHERE o la sintaxis, se aplica la lógica atómica/sincronizada.
-        try {
-            int updated = jdbc.update(POSTGRES_UPSERT,
-                    indicators.zone(),
-                    indicators.pricePerSquareMeter(),
-                    indicators.yearOverYearVariationPercent(),
-                    indicators.averageDaysOnMarket(),
-                    observedTs,
-                    cachedTs,
-                    indicators.source().name());
-            return updated > 0;
-        } catch (Exception h2SyntaxOrUnsupported) {
-            return saveH2Fallback(indicators, now);
-        }
+        return saveH2Fallback(indicators, now);
     }
 
     private synchronized boolean saveH2Fallback(MarketIndicators indicators, Instant now) {
