@@ -1,6 +1,5 @@
 package com.fixup.media;
 
-import com.fixup.media.api.PortfolioPieceKind;
 import com.fixup.media.api.PortfolioRuleException;
 import com.fixup.media.api.PortfolioVisibility;
 import com.fixup.media.domain.PortfolioPiece;
@@ -18,11 +17,11 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 /** FR-UC-17: publication rules of the portfolio, with no Spring context involved. */
 class PortfolioPieceTest {
     private static final UUID FIXER = UUID.randomUUID();
+    private static final UUID MEDIA_ID = UUID.randomUUID();
     private static final Instant NOW = Instant.parse("2026-09-18T10:15:30Z");
 
     private PortfolioPiece piece(String title, String description) {
-        return PortfolioPiece.publish(FIXER, PortfolioPieceKind.PHOTO, "fixers/portfolio/a.jpg",
-                title, description, 1, NOW);
+        return PortfolioPiece.publish(FIXER, MEDIA_ID, title, description, 1, NOW);
     }
 
     @Test
@@ -33,15 +32,16 @@ class PortfolioPieceTest {
         assertThat(published.isPublic()).isTrue();
         assertThat(published.position()).isEqualTo(1);
         assertThat(published.fixerUserId()).isEqualTo(FIXER);
+        assertThat(published.mediaId()).isEqualTo(MEDIA_ID);
         assertThat(published.createdAt()).isEqualTo(published.updatedAt());
     }
 
     @Test
-    void theBackendKeepsTheStorageKeyAndNeverTheFile() {
-        var published = PortfolioPiece.publish(FIXER, PortfolioPieceKind.VIDEO, "  fixers/portfolio/clip.mp4  ",
+    void thePieceReferencesTheMediaIdAndTrimsText() {
+        var published = PortfolioPiece.publish(FIXER, MEDIA_ID,
                 "  Instalación  ", "  Antes y después  ", 3, NOW);
 
-        assertThat(published.storageKey()).isEqualTo("fixers/portfolio/clip.mp4");
+        assertThat(published.mediaId()).isEqualTo(MEDIA_ID);
         assertThat(published.title()).isEqualTo("Instalación");
         assertThat(published.description()).isEqualTo("Antes y después");
     }
@@ -61,10 +61,9 @@ class PortfolioPieceTest {
     }
 
     @Test
-    void aPieceWithoutStorageKeyIsRejected() {
-        assertThatThrownBy(() -> PortfolioPiece.publish(FIXER, PortfolioPieceKind.PHOTO, "  ", "t", null, 1, NOW))
-                .isInstanceOf(PortfolioRuleException.class)
-                .extracting(problem -> ((PortfolioRuleException) problem).code()).isEqualTo("INVALID_PIECE");
+    void aPieceWithoutMediaIdIsRejected() {
+        assertThatThrownBy(() -> PortfolioPiece.publish(FIXER, null, "t", null, 1, NOW))
+                .isInstanceOf(NullPointerException.class);
     }
 
     @Test
@@ -127,7 +126,7 @@ class PortfolioPieceTest {
 
     @Test
     void aPositionBelowOneIsRejected() {
-        assertThatThrownBy(() -> PortfolioPiece.publish(FIXER, PortfolioPieceKind.PHOTO, "k", "t", null, 0, NOW))
+        assertThatThrownBy(() -> PortfolioPiece.publish(FIXER, MEDIA_ID, "t", null, 0, NOW))
                 .isInstanceOf(PortfolioRuleException.class)
                 .extracting(problem -> ((PortfolioRuleException) problem).code()).isEqualTo("INVALID_POSITION");
     }

@@ -1,6 +1,5 @@
 package com.fixup.media.infrastructure;
 
-import com.fixup.media.api.PortfolioPieceKind;
 import com.fixup.media.api.PortfolioVisibility;
 import com.fixup.media.domain.PortfolioPiece;
 import jakarta.persistence.Column;
@@ -23,12 +22,8 @@ class PortfolioPieceEntity {
     @Column(name = "fixer_user_id", nullable = false)
     private UUID fixerUserId;
 
-    @Enumerated(EnumType.STRING)
-    @Column(name = "kind", nullable = false, length = 32)
-    private PortfolioPieceKind kind;
-
-    @Column(name = "storage_key", nullable = false, length = 512)
-    private String storageKey;
+    @Column(name = "media_asset_id", nullable = false, unique = true)
+    private UUID mediaAssetId;
 
     @Column(name = "title", nullable = false, length = 120)
     private String title;
@@ -61,8 +56,7 @@ class PortfolioPieceEntity {
     }
 
     void apply(PortfolioPiece piece) {
-        this.kind = piece.kind();
-        this.storageKey = piece.storageKey();
+        this.mediaAssetId = piece.mediaId();
         this.title = piece.title();
         this.description = piece.description();
         this.position = piece.position();
@@ -72,7 +66,7 @@ class PortfolioPieceEntity {
     }
 
     PortfolioPiece toDomain() {
-        return new PortfolioPiece(id, fixerUserId, kind, storageKey, title, description, position,
+        return new PortfolioPiece(id, fixerUserId, mediaAssetId, title, description, position,
                 visibility, createdAt, updatedAt);
     }
 }

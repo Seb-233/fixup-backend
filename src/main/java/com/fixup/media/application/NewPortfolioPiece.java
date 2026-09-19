@@ -1,10 +1,6 @@
 package com.fixup.media.application;
 
-import com.fixup.media.api.PortfolioPieceKind;
+import java.util.UUID;
 
-/**
- * What the client sends to publish: a storage key, never the file itself. The key is not yet
- * issued nor verified by the backend; see {@code docs/media-storage.md}.
- */
-public record NewPortfolioPiece(PortfolioPieceKind kind, String storageKey, String title, String description) {
+public record NewPortfolioPiece(UUID mediaId, String title, String description) {
 }

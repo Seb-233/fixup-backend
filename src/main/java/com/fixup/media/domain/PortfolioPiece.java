@@ -1,6 +1,5 @@
 package com.fixup.media.domain;
 
-import com.fixup.media.api.PortfolioPieceKind;
 import com.fixup.media.api.PortfolioRuleException;
 import com.fixup.media.api.PortfolioVisibility;
 import java.time.Instant;
@@ -8,25 +7,27 @@ import java.util.Objects;
 import java.util.UUID;
 
 /**
- * FR-UC-17: a portfolio piece. The backend stores only the object key; no media content crosses
- * this API. Same decision as the verification documents of FR-UC-16.
- *
- * <p>The signed upload URL that should issue that key does not exist yet, so today the key is
- * whatever the client sends and it does not prove ownership of the stored object. The conditions
- * that must hold before production are written down in {@code docs/media-storage.md}.
+ * FR-UC-17: a portfolio piece. References an owned, confirmed media asset.
+ * Internal storage keys are never exposed to the client or domain.
  */
-public record PortfolioPiece(UUID id, UUID fixerUserId, PortfolioPieceKind kind, String storageKey,
-        String title, String description, int position, PortfolioVisibility visibility,
-        Instant createdAt, Instant updatedAt) {
+public record PortfolioPiece(
+        UUID id,
+        UUID fixerUserId,
+        UUID mediaId,
+        String title,
+        String description,
+        int position,
+        PortfolioVisibility visibility,
+        Instant createdAt,
+        Instant updatedAt) {
 
     public PortfolioPiece {
-        Objects.requireNonNull(id);
-        Objects.requireNonNull(fixerUserId);
-        Objects.requireNonNull(kind);
-        Objects.requireNonNull(visibility);
-        Objects.requireNonNull(createdAt);
-        Objects.requireNonNull(updatedAt);
-        storageKey = required(storageKey, "storage key", PortfolioPolicy.STORAGE_KEY_MAX);
+        Objects.requireNonNull(id, "id must not be null");
+        Objects.requireNonNull(fixerUserId, "fixerUserId must not be null");
+        Objects.requireNonNull(mediaId, "mediaId must not be null");
+        Objects.requireNonNull(visibility, "visibility must not be null");
+        Objects.requireNonNull(createdAt, "createdAt must not be null");
+        Objects.requireNonNull(updatedAt, "updatedAt must not be null");
         title = required(title, "title", PortfolioPolicy.TITLE_MAX);
         description = optional(description, PortfolioPolicy.DESCRIPTION_MAX);
         if (position < 1) {
@@ -34,9 +35,9 @@ public record PortfolioPiece(UUID id, UUID fixerUserId, PortfolioPieceKind kind,
         }
     }
 
-    public static PortfolioPiece publish(UUID fixerUserId, PortfolioPieceKind kind, String storageKey,
-            String title, String description, int position, Instant now) {
-        return new PortfolioPiece(UUID.randomUUID(), fixerUserId, kind, storageKey, title, description,
+    public static PortfolioPiece publish(UUID fixerUserId, UUID mediaId, String title,
+            String description, int position, Instant now) {
+        return new PortfolioPiece(UUID.randomUUID(), fixerUserId, mediaId, title, description,
                 position, PortfolioVisibility.PUBLIC, now, now);
     }
 
@@ -64,7 +65,7 @@ public record PortfolioPiece(UUID id, UUID fixerUserId, PortfolioPieceKind kind,
             throw new PortfolioRuleException("VISIBILITY_UNCHANGED",
                     "The piece is already " + target.name().toLowerCase());
         }
-        return new PortfolioPiece(id, fixerUserId, kind, storageKey, title, description, position,
+        return new PortfolioPiece(id, fixerUserId, mediaId, title, description, position,
                 target, createdAt, now);
     }
 

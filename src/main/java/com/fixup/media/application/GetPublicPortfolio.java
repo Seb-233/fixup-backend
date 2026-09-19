@@ -1,6 +1,5 @@
 package com.fixup.media.application;
 
-import com.fixup.media.domain.PortfolioPiece;
 import com.fixup.media.domain.PortfolioPieces;
 import java.util.List;
 import java.util.UUID;
@@ -8,19 +7,20 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * FR-UC-17: any authenticated user may read the public portfolio of a fixer. Hidden pieces never
- * leave this use case, so visibility is enforced in the query and not by the caller.
+ * FR-UC-17: read the public portfolio of a fixer with secure presigned read URLs.
  */
 @Service
 public class GetPublicPortfolio {
     private final PortfolioPieces pieces;
+    private final PortfolioViewResolver resolver;
 
-    GetPublicPortfolio(PortfolioPieces pieces) {
+    GetPublicPortfolio(PortfolioPieces pieces, PortfolioViewResolver resolver) {
         this.pieces = pieces;
+        this.resolver = resolver;
     }
 
     @Transactional(readOnly = true)
-    public List<PortfolioPiece> execute(UUID fixerUserId) {
-        return pieces.findPublicOfFixer(fixerUserId);
+    public List<PortfolioPieceView> execute(UUID fixerUserId) {
+        return resolver.toViews(pieces.findPublicOfFixer(fixerUserId));
     }
 }
