@@ -10,10 +10,19 @@ services:
       AUTH0_AUDIENCE: ${AUTH0_AUDIENCE:?Define AUTH0_AUDIENCE in .env}
       AUTH0_JWK_SET_URI: ${AUTH0_JWK_SET_URI:-${AUTH0_ISSUER_URI}.well-known/jwks.json}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:?Define CORS_ALLOWED_ORIGINS in .env}
+      FIXUP_STORAGE_ENDPOINT: http://minio:9000
+      FIXUP_STORAGE_PUBLIC_ENDPOINT: ${FIXUP_STORAGE_PUBLIC_ENDPOINT:-http://localhost:9000}
+      FIXUP_STORAGE_ACCESS_KEY: ${FIXUP_STORAGE_ACCESS_KEY:-fixup}
+      FIXUP_STORAGE_SECRET_KEY: ${FIXUP_STORAGE_SECRET_KEY:-development-only-secret}
+      FIXUP_STORAGE_BUCKET: ${FIXUP_STORAGE_BUCKET:-fixup-private}
+      FIXUP_STORAGE_REGION: ${FIXUP_STORAGE_REGION:-us-east-1}
     ports:
       - "127.0.0.1:${BACKEND_PORT:-8080}:8080"
     depends_on:
       database:
+        condition: service_healthy
+        required: false
+      minio:
         condition: service_healthy
         required: false
   database:
@@ -33,5 +42,24 @@ services:
       timeout: 5s
       retries: 12
       start_period: 10s
+  minio:
+    image: quay.io/minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
+    profiles: [storage]
+    environment:
+      MINIO_ROOT_USER: ${FIXUP_STORAGE_ACCESS_KEY:-fixup}
+      MINIO_ROOT_PASSWORD: ${FIXUP_STORAGE_SECRET_KEY:-development-only-secret}
+    command: server /data --console-address ":9001"
+    ports:
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9000/minio/health/live || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
 volumes:
   postgres-data:
+  minio-data:
