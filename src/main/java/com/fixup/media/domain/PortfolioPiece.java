@@ -56,7 +56,7 @@ public record PortfolioPiece(
     /** Only the owner curates a portfolio, even when another fixer is verified too. */
     public void requireOwnedBy(UUID candidate) {
         if (!fixerUserId.equals(candidate)) {
-            throw new PortfolioRuleException("PIECE_NOT_FOUND", "There is no such piece in this portfolio");
+            throw new com.fixup.media.api.PieceNotFoundException("There is no such piece in this portfolio");
         }
     }
 

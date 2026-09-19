@@ -2,11 +2,12 @@ package com.fixup.media.application;
 
 import com.fixup.fixers.api.FixerEligibility;
 import com.fixup.identityaccess.api.CurrentActor;
-import com.fixup.media.api.PortfolioRuleException;
+import com.fixup.media.api.PieceNotFoundException;
 import com.fixup.media.domain.FixerPortfolios;
 import com.fixup.media.domain.MediaAssetStatus;
 import com.fixup.media.domain.MediaAssets;
 import com.fixup.media.domain.PortfolioPieces;
+import java.time.Clock;
 import java.time.Instant;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
@@ -19,18 +20,21 @@ public class DeletePortfolioPiece {
     private final FixerPortfolios fixerPortfolios;
     private final MediaDeletionService deletionService;
     private final FixerEligibility eligibility;
+    private final Clock clock;
 
     public DeletePortfolioPiece(
             PortfolioPieces pieces,
             MediaAssets mediaAssets,
             FixerPortfolios fixerPortfolios,
             MediaDeletionService deletionService,
-            FixerEligibility eligibility) {
+            FixerEligibility eligibility,
+            Clock clock) {
         this.pieces = pieces;
         this.mediaAssets = mediaAssets;
         this.fixerPortfolios = fixerPortfolios;
         this.deletionService = deletionService;
         this.eligibility = eligibility;
+        this.clock = clock;
     }
 
     @Transactional
@@ -40,13 +44,13 @@ public class DeletePortfolioPiece {
         var portfolio = fixerPortfolios.findOrCreateForUpdate(actor.internalUserId());
 
         var piece = pieces.findById(pieceId)
-                .orElseThrow(() -> new PortfolioRuleException("PIECE_NOT_FOUND", "There is no such piece in this portfolio"));
+                .orElseThrow(() -> new PieceNotFoundException("There is no such piece in this portfolio"));
         piece.requireOwnedBy(actor.internalUserId());
 
         mediaAssets.findByIdForUpdate(piece.mediaId()).ifPresent(asset -> {
             var marked = asset.markDeletionPending();
             mediaAssets.save(marked);
-            deletionService.scheduleDeletion(marked.id(), marked.objectKey());
+            deletionService.schedulePieceDeletion(marked.id(), marked.objectKey());
         });
 
         pieces.delete(pieceId);
@@ -59,7 +63,7 @@ public class DeletePortfolioPiece {
                         .orElse(false))
                 .count();
 
-        Instant now = Instant.now();
+        Instant now = Instant.now(clock);
         var updatedPortfolio = portfolio.revertToDraftIfInsufficient(remainingCount, now);
         fixerPortfolios.save(updatedPortfolio);
     }

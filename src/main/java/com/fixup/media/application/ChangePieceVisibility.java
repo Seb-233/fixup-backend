@@ -2,34 +2,37 @@ package com.fixup.media.application;
 
 import com.fixup.fixers.api.FixerEligibility;
 import com.fixup.identityaccess.api.CurrentActor;
-import com.fixup.media.api.PortfolioRuleException;
+import com.fixup.media.api.PieceNotFoundException;
 import com.fixup.media.domain.FixerPortfolios;
 import com.fixup.media.domain.MediaAssetStatus;
 import com.fixup.media.domain.MediaAssets;
 import com.fixup.media.domain.PortfolioPiece;
 import com.fixup.media.domain.PortfolioPieces;
+import java.time.Clock;
 import java.time.Instant;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/** FR-UC-17: the fixer curates which pieces the public portfolio shows. */
 @Service
 public class ChangePieceVisibility {
     private final PortfolioPieces pieces;
     private final MediaAssets mediaAssets;
     private final FixerPortfolios fixerPortfolios;
     private final FixerEligibility eligibility;
+    private final Clock clock;
 
-    ChangePieceVisibility(
+    public ChangePieceVisibility(
             PortfolioPieces pieces,
             MediaAssets mediaAssets,
             FixerPortfolios fixerPortfolios,
-            FixerEligibility eligibility) {
+            FixerEligibility eligibility,
+            Clock clock) {
         this.pieces = pieces;
         this.mediaAssets = mediaAssets;
         this.fixerPortfolios = fixerPortfolios;
         this.eligibility = eligibility;
+        this.clock = clock;
     }
 
     @Transactional
@@ -38,10 +41,10 @@ public class ChangePieceVisibility {
         var portfolio = fixerPortfolios.findOrCreateForUpdate(actor.internalUserId());
 
         var piece = pieces.findById(pieceId)
-                .orElseThrow(() -> new PortfolioRuleException("PIECE_NOT_FOUND", "There is no such piece in this portfolio"));
+                .orElseThrow(() -> new PieceNotFoundException("There is no such piece in this portfolio"));
         piece.requireOwnedBy(actor.internalUserId());
 
-        Instant now = Instant.now();
+        Instant now = Instant.now(clock);
         var hidden = piece.hide(now);
         pieces.save(hidden);
 
@@ -65,10 +68,10 @@ public class ChangePieceVisibility {
         fixerPortfolios.findOrCreateForUpdate(actor.internalUserId());
 
         var piece = pieces.findById(pieceId)
-                .orElseThrow(() -> new PortfolioRuleException("PIECE_NOT_FOUND", "There is no such piece in this portfolio"));
+                .orElseThrow(() -> new PieceNotFoundException("There is no such piece in this portfolio"));
         piece.requireOwnedBy(actor.internalUserId());
 
-        var shown = piece.show(Instant.now());
+        var shown = piece.show(Instant.now(clock));
         pieces.save(shown);
         return shown;
     }
