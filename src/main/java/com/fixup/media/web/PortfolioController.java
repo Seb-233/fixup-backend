@@ -7,6 +7,7 @@ import com.fixup.media.application.DeletePortfolioPiece;
 import com.fixup.media.application.GetPublicPortfolio;
 import com.fixup.media.application.ListOwnPortfolio;
 import com.fixup.media.application.NewPortfolioPiece;
+import com.fixup.media.application.OwnPortfolioView;
 import com.fixup.media.application.PortfolioPieceView;
 import com.fixup.media.application.PortfolioStatusResponse;
 import com.fixup.media.application.PortfolioViewResolver;
@@ -129,9 +130,9 @@ class PortfolioController {
 
     @GetMapping("/me/portfolio")
     @Operation(summary = "List the fixer's own portfolio, hidden pieces included")
-    @ApiResponse(responseCode = "200", description = "Every piece of the current fixer, in publication order")
-    List<PieceResponse> myPortfolio() {
-        return listOwn.execute(actors.currentActor()).stream().map(PieceResponse::of).toList();
+    @ApiResponse(responseCode = "200", description = "The current fixer's portfolio with status and all pieces")
+    OwnPortfolioResponse myPortfolio() {
+        return OwnPortfolioResponse.of(listOwn.execute(actors.currentActor()));
     }
 
     @PostMapping("/me/portfolio/pieces/{pieceId}/hide")
@@ -159,7 +160,7 @@ class PortfolioController {
             description = "Returns only the pieces the fixer chose to show, in publication order with secure read URLs.")
     @ApiResponse(responseCode = "200", description = "The public portfolio of that fixer")
     List<PieceResponse> portfolioOf(@PathVariable UUID fixerUserId) {
-        return publicPortfolio.execute(fixerUserId).stream().map(PieceResponse::of).toList();
+        return publicPortfolio.execute(actors.currentActor(), fixerUserId).stream().map(PieceResponse::of).toList();
     }
 
     @Schema(additionalProperties = Schema.AdditionalPropertiesValue.FALSE)
@@ -167,6 +168,22 @@ class PortfolioController {
             @NotNull UUID mediaId,
             @NotBlank @Size(max = 120) String title,
             @Size(max = 1000) String description) {
+    }
+
+    @Schema(requiredProperties = {"fixerUserId", "status", "pieces"})
+    record OwnPortfolioResponse(
+            UUID fixerUserId,
+            String status,
+            @Schema(types = {"string", "null"}) Instant publishedAt,
+            List<PieceResponse> pieces) {
+
+        static OwnPortfolioResponse of(OwnPortfolioView view) {
+            return new OwnPortfolioResponse(
+                    view.fixerUserId(),
+                    view.status(),
+                    view.publishedAt(),
+                    view.pieces().stream().map(PieceResponse::of).toList());
+        }
     }
 
     @Schema(requiredProperties = {"id", "mediaId", "title", "position", "visibility", "readUrl", "readUrlExpiresAt"})

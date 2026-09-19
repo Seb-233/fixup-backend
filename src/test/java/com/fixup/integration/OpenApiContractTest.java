@@ -106,6 +106,12 @@ class OpenApiContractTest {
         assertThat(contract.at("/components/schemas/PieceResponse/properties").toString())
                 .contains("mediaId", "readUrl")
                 .doesNotContain("storageKey", "kind");
+        var myPortfolioSchema = paths.get("/media/me/portfolio").get("get").get("responses").get("200")
+                .get("content").get("application/json").get("schema");
+        assertThat(myPortfolioSchema.get("$ref").asText()).contains("OwnPortfolioResponse");
+        assertThat(contract.at("/components/schemas/OwnPortfolioResponse/properties").toString())
+                .contains("fixerUserId", "status", "publishedAt", "pieces");
+        assertThat(contract.at("/components/schemas/OwnPortfolioResponse/properties/pieces/type").asText()).isEqualTo("array");
         Files.createDirectories(Path.of("target"));
         Files.createDirectories(Path.of("docs"));
         String json = mapper.writerWithDefaultPrettyPrinter().writeValueAsString(contract) + System.lineSeparator();

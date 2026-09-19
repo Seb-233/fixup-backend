@@ -167,13 +167,14 @@ public abstract class PortfolioHttpContract {
 
         mvc.perform(get("/media/me/portfolio").with(identity("auth0|ordered")))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(3))
-                .andExpect(jsonPath("$[0].position").value(1))
-                .andExpect(jsonPath("$[0].title").value("Primero"))
-                .andExpect(jsonPath("$[1].position").value(2))
-                .andExpect(jsonPath("$[1].title").value("Segundo"))
-                .andExpect(jsonPath("$[2].position").value(3))
-                .andExpect(jsonPath("$[2].title").value("Tercero"));
+                .andExpect(jsonPath("$.status").value("DRAFT"))
+                .andExpect(jsonPath("$.pieces.length()").value(3))
+                .andExpect(jsonPath("$.pieces[0].position").value(1))
+                .andExpect(jsonPath("$.pieces[0].title").value("Primero"))
+                .andExpect(jsonPath("$.pieces[1].position").value(2))
+                .andExpect(jsonPath("$.pieces[1].title").value("Segundo"))
+                .andExpect(jsonPath("$.pieces[2].position").value(3))
+                .andExpect(jsonPath("$.pieces[2].title").value("Tercero"));
     }
 
     @Test
@@ -263,7 +264,8 @@ public abstract class PortfolioHttpContract {
 
         // Piece is deleted from portfolio
         mvc.perform(get("/media/me/portfolio").with(identity("auth0|deleter")))
-                .andExpect(jsonPath("$.length()").value(2));
+                .andExpect(jsonPath("$.pieces.length()").value(2))
+                .andExpect(jsonPath("$.status").value("DRAFT"));
 
         // Portfolio status in db reverted to DRAFT
         var status = jdbc.queryForObject("SELECT status FROM fixer_portfolios WHERE fixer_user_id = ?", String.class, fixerId);
@@ -296,7 +298,8 @@ public abstract class PortfolioHttpContract {
 
         // The owner still sees everything (3 pieces)
         mvc.perform(get("/media/me/portfolio").with(identity("auth0|curator")))
-                .andExpect(jsonPath("$.length()").value(3));
+                .andExpect(jsonPath("$.pieces.length()").value(3))
+                .andExpect(jsonPath("$.status").value("DRAFT"));
 
         // Showing piece restores it to PUBLIC, but does not publish automatically
         mvc.perform(post("/media/me/portfolio/pieces/" + p3 + "/show").with(identity("auth0|curator")))
@@ -460,10 +463,18 @@ public abstract class PortfolioHttpContract {
     }
 
     @Test
-    void thePublicPortfolioOfAFixerInDraftReturns404() throws Exception {
-        verifiedFixer("auth0|reader");
+    void draftAndNonExistentPortfoliosReturnIndistinguishable404() throws Exception {
+        var draftFixer = verifiedFixer("auth0|draft-fixer");
+        publish("auth0|draft-fixer", "Borrador").andExpect(status().isCreated());
+        verifiedFixer("auth0|active-reader");
 
-        mvc.perform(get("/media/fixers/" + UUID.randomUUID() + "/portfolio").with(identity("auth0|reader")))
+        // Existing fixer with DRAFT portfolio -> 404 PORTFOLIO_NOT_FOUND
+        mvc.perform(get("/media/fixers/" + draftFixer + "/portfolio").with(identity("auth0|active-reader")))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("PORTFOLIO_NOT_FOUND"));
+
+        // Non-existent fixer -> identical 404 PORTFOLIO_NOT_FOUND
+        mvc.perform(get("/media/fixers/" + UUID.randomUUID() + "/portfolio").with(identity("auth0|active-reader")))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("PORTFOLIO_NOT_FOUND"));
     }
@@ -599,5 +610,130 @@ public abstract class PortfolioHttpContract {
 
         var portfolio = portfolios.findOrCreateForUpdate(fixerId);
         assertThat(portfolio.status().name()).isEqualTo("PUBLISHED");
+    }
+
+    @Test
+    void ownPortfolioWhenNonExistentReturnsDraftWithNullPublishedAtAndEmptyPieces() throws Exception {
+        var fixerId = verifiedFixer("auth0|brand-new-fixer");
+
+        mvc.perform(get("/media/me/portfolio").with(identity("auth0|brand-new-fixer")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.fixerUserId").value(fixerId.toString()))
+                .andExpect(jsonPath("$.status").value("DRAFT"))
+                .andExpect(jsonPath("$.publishedAt").doesNotExist())
+                .andExpect(jsonPath("$.pieces").isArray())
+                .andExpect(jsonPath("$.pieces.length()").value(0));
+    }
+
+    @Test
+    void ownPortfolioInDraftReturnsDraftStatus() throws Exception {
+        var fixerId = verifiedFixer("auth0|draft-owner");
+        publish("auth0|draft-owner", "Foto 1").andExpect(status().isCreated());
+
+        mvc.perform(get("/media/me/portfolio").with(identity("auth0|draft-owner")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.fixerUserId").value(fixerId.toString()))
+                .andExpect(jsonPath("$.status").value("DRAFT"))
+                .andExpect(jsonPath("$.publishedAt").doesNotExist())
+                .andExpect(jsonPath("$.pieces.length()").value(1));
+    }
+
+    @Test
+    void ownPortfolioPublishedReturnsPublishedStatusAndPublishedAt() throws Exception {
+        var fixerId = verifiedFixer("auth0|pub-owner");
+        publish("auth0|pub-owner", "P1").andExpect(status().isCreated());
+        publish("auth0|pub-owner", "P2").andExpect(status().isCreated());
+        publish("auth0|pub-owner", "P3").andExpect(status().isCreated());
+
+        mvc.perform(post("/media/me/portfolio/publish").with(identity("auth0|pub-owner")))
+                .andExpect(status().isOk());
+
+        mvc.perform(get("/media/me/portfolio").with(identity("auth0|pub-owner")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.fixerUserId").value(fixerId.toString()))
+                .andExpect(jsonPath("$.status").value("PUBLISHED"))
+                .andExpect(jsonPath("$.publishedAt").isNotEmpty())
+                .andExpect(jsonPath("$.pieces.length()").value(3));
+    }
+
+    @Test
+    void ownPortfolioIncludesHiddenPieces() throws Exception {
+        verifiedFixer("auth0|hide-check");
+        publish("auth0|hide-check", "Visible").andExpect(status().isCreated());
+        var hiddenId = publishAndReadId("auth0|hide-check", "ToHide");
+
+        mvc.perform(post("/media/me/portfolio/pieces/" + hiddenId + "/hide").with(identity("auth0|hide-check")))
+                .andExpect(status().isOk());
+
+        mvc.perform(get("/media/me/portfolio").with(identity("auth0|hide-check")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.pieces.length()").value(2))
+                .andExpect(jsonPath("$.pieces[?(@.id == '" + hiddenId + "')].visibility").value("HIDDEN"));
+    }
+
+    @Test
+    void activeUserCanConsultPublicPublishedPortfolio() throws Exception {
+        var fixerId = verifiedFixer("auth0|public-fixer");
+        publish("auth0|public-fixer", "P1").andExpect(status().isCreated());
+        publish("auth0|public-fixer", "P2").andExpect(status().isCreated());
+        publish("auth0|public-fixer", "P3").andExpect(status().isCreated());
+        mvc.perform(post("/media/me/portfolio/publish").with(identity("auth0|public-fixer")))
+                .andExpect(status().isOk());
+
+        mvc.perform(post("/auth/bootstrap").with(identity("auth0|client-reader")))
+                .andExpect(status().isCreated());
+        mvc.perform(post("/auth/select-role").with(identity("auth0|client-reader"))
+                .contentType(MediaType.APPLICATION_JSON).content("{\"role\":\"OWNER\"}"))
+                .andExpect(status().isOk());
+
+        mvc.perform(get("/media/fixers/" + fixerId + "/portfolio").with(identity("auth0|client-reader")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(3))
+                .andExpect(jsonPath("$[0].readUrl").isNotEmpty());
+    }
+
+    @Test
+    void suspendedUserCannotConsultPublicPortfolio() throws Exception {
+        var fixerId = verifiedFixer("auth0|target-fixer");
+        publish("auth0|target-fixer", "P1").andExpect(status().isCreated());
+        publish("auth0|target-fixer", "P2").andExpect(status().isCreated());
+        publish("auth0|target-fixer", "P3").andExpect(status().isCreated());
+        mvc.perform(post("/media/me/portfolio/publish").with(identity("auth0|target-fixer")))
+                .andExpect(status().isOk());
+
+        var readerCreated = mvc.perform(post("/auth/bootstrap").with(identity("auth0|suspended-reader")))
+                .andExpect(status().isCreated()).andReturn();
+        var readerId = UUID.fromString(mapper.readTree(readerCreated.getResponse().getContentAsString()).get("id").asText());
+        mvc.perform(post("/auth/select-role").with(identity("auth0|suspended-reader"))
+                .contentType(MediaType.APPLICATION_JSON).content("{\"role\":\"OWNER\"}"))
+                .andExpect(status().isOk());
+
+        jdbc.update("UPDATE users SET status = 'SUSPENDED' WHERE id = ?", readerId);
+
+        mvc.perform(get("/media/fixers/" + fixerId + "/portfolio").with(identity("auth0|suspended-reader")))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+    }
+
+    @Test
+    void portfolioConsultationsNeverExposeStorageKeysOrBucket() throws Exception {
+        var fixerId = verifiedFixer("auth0|no-leak-fixer");
+        publish("auth0|no-leak-fixer", "P1").andExpect(status().isCreated());
+        publish("auth0|no-leak-fixer", "P2").andExpect(status().isCreated());
+        publish("auth0|no-leak-fixer", "P3").andExpect(status().isCreated());
+        mvc.perform(post("/media/me/portfolio/publish").with(identity("auth0|no-leak-fixer")))
+                .andExpect(status().isOk());
+
+        mvc.perform(get("/media/me/portfolio").with(identity("auth0|no-leak-fixer")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$..storageKey").doesNotExist())
+                .andExpect(jsonPath("$..objectKey").doesNotExist())
+                .andExpect(jsonPath("$..bucket").doesNotExist());
+
+        mvc.perform(get("/media/fixers/" + fixerId + "/portfolio").with(identity("auth0|no-leak-fixer")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$..storageKey").doesNotExist())
+                .andExpect(jsonPath("$..objectKey").doesNotExist())
+                .andExpect(jsonPath("$..bucket").doesNotExist());
     }
 }

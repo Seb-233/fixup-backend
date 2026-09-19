@@ -1030,14 +1030,11 @@
             }
           },
           "200" : {
-            "description" : "Every piece of the current fixer, in publication order",
+            "description" : "The current fixer's portfolio with status and all pieces",
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "type" : "array",
-                  "items" : {
-                    "$ref" : "#/components/schemas/PieceResponse"
-                  }
+                  "$ref" : "#/components/schemas/OwnPortfolioResponse"
                 }
               }
             }
@@ -1634,6 +1631,29 @@
       "UserStatus" : {
         "type" : "string",
         "enum" : [ "ACTIVE", "SUSPENDED", "DISABLED" ]
+      },
+      "OwnPortfolioResponse" : {
+        "type" : "object",
+        "properties" : {
+          "fixerUserId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "status" : {
+            "type" : "string"
+          },
+          "publishedAt" : {
+            "type" : [ "string", "null" ],
+            "format" : "date-time"
+          },
+          "pieces" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/PieceResponse"
+            }
+          }
+        },
+        "required" : [ "fixerUserId", "pieces", "status" ]
       },
       "UserResponse" : {
         "type" : "object",
