@@ -8,6 +8,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -45,7 +46,13 @@ abstract class EarningsHttpContract {
     @Autowired ObjectMapper mapper;
     @Autowired com.fixup.testsupport.IntegrationDatabaseCleaner databaseCleaner;
 
+    /**
+     * También después de cada prueba: este contrato crea solicitudes y cotizaciones, y otras
+     * clases que corren más tarde limpian con su propio orden de borrado, anterior al módulo
+     * `requests`. Dejar la base vacía es lo que evita que hereden filas que no saben borrar.
+     */
     @BeforeEach
+    @AfterEach
     void clearIsolatedTestDatabase() {
         SecurityContextHolder.clearContext();
         databaseCleaner.clean();
