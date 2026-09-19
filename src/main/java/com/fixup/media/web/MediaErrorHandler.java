@@ -1,5 +1,6 @@
 package com.fixup.media.web;
 
+import com.fixup.media.api.MediaException;
 import com.fixup.media.api.PortfolioRuleException;
 import com.fixup.shared.errors.ErrorResponse;
 import jakarta.servlet.http.HttpServletRequest;
@@ -14,5 +15,11 @@ class MediaErrorHandler {
     ResponseEntity<ErrorResponse> rule(PortfolioRuleException exception, HttpServletRequest request) {
         return ResponseEntity.status(409).body(new ErrorResponse(409, exception.code(),
                 exception.getMessage(), request.getRequestURI()));
+    }
+
+    @ExceptionHandler(MediaException.class)
+    ResponseEntity<ErrorResponse> media(MediaException exception, HttpServletRequest request) {
+        return ResponseEntity.status(exception.status()).body(new ErrorResponse(exception.status(),
+                exception.code(), exception.getMessage(), request.getRequestURI()));
     }
 }

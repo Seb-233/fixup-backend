@@ -1,5 +1,42 @@
--- FR-UC-17: portafolio visual del técnico.
+-- FR-UC-17: portafolio visual del técnico y ciclo de vida de medios.
 -- Owned by media. No JPA association exposes another module's entity.
+
+CREATE TABLE media_assets (
+    id UUID PRIMARY KEY,
+    owner_user_id UUID NOT NULL,
+    purpose VARCHAR(50) NOT NULL,
+    object_key VARCHAR(512) NOT NULL UNIQUE,
+    content_type VARCHAR(100) NOT NULL,
+    size_bytes BIGINT NOT NULL,
+    status VARCHAR(32) NOT NULL,
+    upload_expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    confirmed_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    CONSTRAINT fk_media_owner
+        FOREIGN KEY (owner_user_id) REFERENCES users(id),
+    CONSTRAINT ck_media_size
+        CHECK (size_bytes > 0),
+    CONSTRAINT ck_media_status
+        CHECK (status IN ('PENDING', 'READY', 'ATTACHED', 'EXPIRED', 'INVALID', 'DELETION_PENDING', 'DELETED')),
+    CONSTRAINT ck_media_purpose
+        CHECK (purpose IN ('FIXER_PORTFOLIO'))
+);
+
+CREATE INDEX ix_media_assets_owner ON media_assets (owner_user_id, status);
+
+CREATE TABLE media_deletion_jobs (
+    id UUID PRIMARY KEY,
+    media_asset_id UUID NOT NULL,
+    object_key VARCHAR(512) NOT NULL,
+    status VARCHAR(32) NOT NULL,
+    attempts INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    CONSTRAINT ck_deletion_job_status
+        CHECK (status IN ('PENDING', 'COMPLETED', 'FAILED'))
+);
+
+CREATE INDEX ix_media_deletion_jobs_status ON media_deletion_jobs (status);
 
 CREATE TABLE portfolio_pieces (
     id UUID PRIMARY KEY,

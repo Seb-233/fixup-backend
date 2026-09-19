@@ -5,3 +5,8 @@ spring:
 springdoc:
   api-docs:
     enabled: true
+fixup:
+  storage:
+    access-key: ${FIXUP_STORAGE_ACCESS_KEY:fixup}
+    secret-key: ${FIXUP_STORAGE_SECRET_KEY:development-only-secret}
+    auto-create-bucket: true

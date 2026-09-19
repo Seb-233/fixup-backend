@@ -41,3 +41,14 @@ springdoc:
 fixup:
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS}
+  storage:
+    endpoint: ${FIXUP_STORAGE_ENDPOINT:http://localhost:9000}
+    public-endpoint: ${FIXUP_STORAGE_PUBLIC_ENDPOINT:${fixup.storage.endpoint}}
+    access-key: ${FIXUP_STORAGE_ACCESS_KEY}
+    secret-key: ${FIXUP_STORAGE_SECRET_KEY}
+    bucket: ${FIXUP_STORAGE_BUCKET:fixup-private}
+    region: ${FIXUP_STORAGE_REGION:us-east-1}
+    auto-create-bucket: false
+  media:
+    portfolio:
+      max-file-size: 10485760
