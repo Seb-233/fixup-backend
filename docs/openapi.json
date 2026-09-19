@@ -214,324 +214,6 @@
         } ]
       }
     },
-    "/media/me/portfolio" : {
-      "get" : {
-        "tags" : [ "portfolio-controller" ],
-        "summary" : "List the fixer's own portfolio, hidden pieces included",
-        "operationId" : "myPortfolio",
-        "responses" : {
-          "400" : {
-            "description" : "Missing or invalid field",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "401" : {
-            "description" : "Missing or invalid bearer token",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "403" : {
-            "description" : "Inactive account, or the fixer is not verified",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "404" : {
-            "description" : "Media, piece or portfolio not found",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "409" : {
-            "description" : "A publication or media rule rejected the operation",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "200" : {
-            "description" : "Every piece of the current fixer, in publication order",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "type" : "array",
-                  "items" : {
-                    "$ref" : "#/components/schemas/PieceResponse"
-                  }
-                }
-              }
-            }
-          }
-        },
-        "security" : [ {
-          "bearerAuth" : [ ]
-        } ]
-      },
-      "post" : {
-        "tags" : [ "portfolio-controller" ],
-        "summary" : "Publish a piece in the fixer's own portfolio",
-        "description" : "Attaches a confirmed media asset to the portfolio. Requires a verified fixer.",
-        "operationId" : "publish",
-        "requestBody" : {
-          "content" : {
-            "application/json" : {
-              "schema" : {
-                "$ref" : "#/components/schemas/PieceRequest"
-              }
-            }
-          },
-          "required" : true
-        },
-        "responses" : {
-          "400" : {
-            "description" : "Missing or invalid field",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "401" : {
-            "description" : "Missing or invalid bearer token",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "403" : {
-            "description" : "Inactive account, or the fixer is not verified",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "404" : {
-            "description" : "Media, piece or portfolio not found",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "409" : {
-            "description" : "A publication or media rule rejected the operation",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "201" : {
-            "description" : "The piece was published",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/PieceResponse"
-                }
-              }
-            }
-          }
-        },
-        "security" : [ {
-          "bearerAuth" : [ ]
-        } ]
-      }
-    },
-    "/media/me/portfolio/{pieceId}/show" : {
-      "post" : {
-        "tags" : [ "portfolio-controller" ],
-        "summary" : "Put a hidden piece back in the public portfolio",
-        "operationId" : "show",
-        "parameters" : [ {
-          "name" : "pieceId",
-          "in" : "path",
-          "required" : true,
-          "schema" : {
-            "type" : "string",
-            "format" : "uuid"
-          }
-        } ],
-        "responses" : {
-          "400" : {
-            "description" : "Missing or invalid field",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "401" : {
-            "description" : "Missing or invalid bearer token",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "403" : {
-            "description" : "Inactive account, or the fixer is not verified",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "404" : {
-            "description" : "Media, piece or portfolio not found",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "409" : {
-            "description" : "A publication or media rule rejected the operation",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "200" : {
-            "description" : "The piece is public again",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/PieceResponse"
-                }
-              }
-            }
-          }
-        },
-        "security" : [ {
-          "bearerAuth" : [ ]
-        } ]
-      }
-    },
-    "/media/me/portfolio/{pieceId}/hide" : {
-      "post" : {
-        "tags" : [ "portfolio-controller" ],
-        "summary" : "Take a piece out of the public portfolio",
-        "operationId" : "hide",
-        "parameters" : [ {
-          "name" : "pieceId",
-          "in" : "path",
-          "required" : true,
-          "schema" : {
-            "type" : "string",
-            "format" : "uuid"
-          }
-        } ],
-        "responses" : {
-          "400" : {
-            "description" : "Missing or invalid field",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "401" : {
-            "description" : "Missing or invalid bearer token",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "403" : {
-            "description" : "Inactive account, or the fixer is not verified",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "404" : {
-            "description" : "Media, piece or portfolio not found",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "409" : {
-            "description" : "A publication or media rule rejected the operation",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "200" : {
-            "description" : "The piece is hidden",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/PieceResponse"
-                }
-              }
-            }
-          }
-        },
-        "security" : [ {
-          "bearerAuth" : [ ]
-        } ]
-      }
-    },
     "/media/me/portfolio/unpublish" : {
       "post" : {
         "tags" : [ "portfolio-controller" ],
@@ -570,7 +252,7 @@
             }
           },
           "404" : {
-            "description" : "Media, piece or portfolio not found",
+            "description" : "PIECE_NOT_FOUND, media or portfolio not found",
             "content" : {
               "application/json" : {
                 "schema" : {
@@ -643,7 +325,7 @@
             }
           },
           "404" : {
-            "description" : "Media, piece or portfolio not found",
+            "description" : "PIECE_NOT_FOUND, media or portfolio not found",
             "content" : {
               "application/json" : {
                 "schema" : {
@@ -668,6 +350,251 @@
               "application/json" : {
                 "schema" : {
                   "$ref" : "#/components/schemas/PortfolioStatusResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/media/me/portfolio/pieces" : {
+      "post" : {
+        "tags" : [ "portfolio-controller" ],
+        "summary" : "Publish a piece in the fixer's own portfolio",
+        "description" : "Attaches a confirmed media asset to the portfolio. Requires a verified fixer.",
+        "operationId" : "publish",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/PieceRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "400" : {
+            "description" : "Missing or invalid field",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Inactive account, or the fixer is not verified",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "PIECE_NOT_FOUND, media or portfolio not found",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "A publication or media rule rejected the operation",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "201" : {
+            "description" : "The piece was published",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PieceResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/media/me/portfolio/pieces/{pieceId}/show" : {
+      "post" : {
+        "tags" : [ "portfolio-controller" ],
+        "summary" : "Put a hidden piece back in the public portfolio",
+        "operationId" : "show",
+        "parameters" : [ {
+          "name" : "pieceId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "The piece is public again",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PieceResponse"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "PIECE_NOT_FOUND, media or portfolio not found",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "400" : {
+            "description" : "Missing or invalid field",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Inactive account, or the fixer is not verified",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "A publication or media rule rejected the operation",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/media/me/portfolio/pieces/{pieceId}/hide" : {
+      "post" : {
+        "tags" : [ "portfolio-controller" ],
+        "summary" : "Take a piece out of the public portfolio",
+        "operationId" : "hide",
+        "parameters" : [ {
+          "name" : "pieceId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "The piece is hidden",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PieceResponse"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "PIECE_NOT_FOUND, media or portfolio not found",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "400" : {
+            "description" : "Missing or invalid field",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Inactive account, or the fixer is not verified",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "A publication or media rule rejected the operation",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -1046,6 +973,81 @@
         } ]
       }
     },
+    "/media/me/portfolio" : {
+      "get" : {
+        "tags" : [ "portfolio-controller" ],
+        "summary" : "List the fixer's own portfolio, hidden pieces included",
+        "operationId" : "myPortfolio",
+        "responses" : {
+          "400" : {
+            "description" : "Missing or invalid field",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Inactive account, or the fixer is not verified",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "PIECE_NOT_FOUND, media or portfolio not found",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "A publication or media rule rejected the operation",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "200" : {
+            "description" : "Every piece of the current fixer, in publication order",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/PieceResponse"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
     "/media/fixers/{fixerUserId}/portfolio" : {
       "get" : {
         "tags" : [ "portfolio-controller" ],
@@ -1093,7 +1095,7 @@
             }
           },
           "404" : {
-            "description" : "Media, piece or portfolio not found",
+            "description" : "PIECE_NOT_FOUND, media or portfolio not found",
             "content" : {
               "application/json" : {
                 "schema" : {
@@ -1255,7 +1257,7 @@
         } ]
       }
     },
-    "/media/me/portfolio/{pieceId}" : {
+    "/media/me/portfolio/pieces/{pieceId}" : {
       "delete" : {
         "tags" : [ "portfolio-controller" ],
         "summary" : "Delete a piece from the portfolio",
@@ -1271,6 +1273,19 @@
           }
         } ],
         "responses" : {
+          "204" : {
+            "description" : "Piece deleted"
+          },
+          "404" : {
+            "description" : "PIECE_NOT_FOUND, media or portfolio not found",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "400" : {
             "description" : "Missing or invalid field",
             "content" : {
@@ -1301,16 +1316,6 @@
               }
             }
           },
-          "404" : {
-            "description" : "Media, piece or portfolio not found",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
           "409" : {
             "description" : "A publication or media rule rejected the operation",
             "content" : {
@@ -1320,9 +1325,6 @@
                 }
               }
             }
-          },
-          "204" : {
-            "description" : "Piece deleted"
           }
         },
         "security" : [ {
@@ -1409,6 +1411,22 @@
         },
         "required" : [ "mediaId", "status" ]
       },
+      "PortfolioStatusResponse" : {
+        "type" : "object",
+        "properties" : {
+          "fixerUserId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "status" : {
+            "type" : "string"
+          },
+          "publishedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          }
+        }
+      },
       "PieceRequest" : {
         "type" : "object",
         "additionalProperties" : false,
@@ -1468,22 +1486,6 @@
           }
         },
         "required" : [ "id", "mediaId", "position", "readUrl", "readUrlExpiresAt", "title", "visibility" ]
-      },
-      "PortfolioStatusResponse" : {
-        "type" : "object",
-        "properties" : {
-          "fixerUserId" : {
-            "type" : "string",
-            "format" : "uuid"
-          },
-          "status" : {
-            "type" : "string"
-          },
-          "publishedAt" : {
-            "type" : "string",
-            "format" : "date-time"
-          }
-        }
       },
       "RejectionRequest" : {
         "type" : "object",
