@@ -64,4 +64,10 @@ class JpaPortfolioPieces implements PortfolioPieces {
                 fixerUserId, PortfolioVisibility.PUBLIC).stream()
                 .map(PortfolioPieceEntity::toDomain).toList();
     }
+
+    @Override
+    public void delete(UUID pieceId) {
+        repository.deleteById(pieceId);
+        repository.flush();
+    }
 }

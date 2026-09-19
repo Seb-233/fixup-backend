@@ -23,4 +23,6 @@ public interface PortfolioPieces {
 
     /** Only the pieces the fixer chose to show, in publication order. */
     List<PortfolioPiece> findPublicOfFixer(UUID fixerUserId);
+
+    void delete(UUID pieceId);
 }

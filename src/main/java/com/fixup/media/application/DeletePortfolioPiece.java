@@ -6,44 +6,50 @@ import com.fixup.media.api.PieceNotFoundException;
 import com.fixup.media.domain.FixerPortfolios;
 import com.fixup.media.domain.MediaAssetStatus;
 import com.fixup.media.domain.MediaAssets;
-import com.fixup.media.domain.PortfolioPiece;
 import com.fixup.media.domain.PortfolioPieces;
 import java.time.Instant;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/** FR-UC-17: the fixer curates which pieces the public portfolio shows. */
 @Service
-public class ChangePieceVisibility {
+public class DeletePortfolioPiece {
     private final PortfolioPieces pieces;
     private final MediaAssets mediaAssets;
     private final FixerPortfolios fixerPortfolios;
+    private final MediaDeletionService deletionService;
     private final FixerEligibility eligibility;
 
-    ChangePieceVisibility(
+    public DeletePortfolioPiece(
             PortfolioPieces pieces,
             MediaAssets mediaAssets,
             FixerPortfolios fixerPortfolios,
+            MediaDeletionService deletionService,
             FixerEligibility eligibility) {
         this.pieces = pieces;
         this.mediaAssets = mediaAssets;
         this.fixerPortfolios = fixerPortfolios;
+        this.deletionService = deletionService;
         this.eligibility = eligibility;
     }
 
     @Transactional
-    public PortfolioPiece hide(CurrentActor actor, UUID pieceId) {
+    public void execute(CurrentActor actor, UUID pieceId) {
         eligibility.requireVerified(actor);
+
         var portfolio = fixerPortfolios.findOrCreateForUpdate(actor.internalUserId());
 
         var piece = pieces.findById(pieceId)
                 .orElseThrow(() -> new PieceNotFoundException("There is no such piece in this portfolio"));
         piece.requireOwnedBy(actor.internalUserId());
 
-        Instant now = Instant.now();
-        var hidden = piece.hide(now);
-        pieces.save(hidden);
+        mediaAssets.findByIdForUpdate(piece.mediaId()).ifPresent(asset -> {
+            var marked = asset.markDeletionPending();
+            mediaAssets.save(marked);
+            deletionService.scheduleDeletion(marked.id(), marked.objectKey());
+        });
+
+        pieces.delete(pieceId);
 
         var publicPieces = pieces.findPublicOfFixer(actor.internalUserId());
         int remainingCount = (int) publicPieces.stream()
@@ -53,23 +59,8 @@ public class ChangePieceVisibility {
                         .orElse(false))
                 .count();
 
+        Instant now = Instant.now();
         var updatedPortfolio = portfolio.revertToDraftIfInsufficient(remainingCount, now);
         fixerPortfolios.save(updatedPortfolio);
-
-        return hidden;
-    }
-
-    @Transactional
-    public PortfolioPiece show(CurrentActor actor, UUID pieceId) {
-        eligibility.requireVerified(actor);
-        fixerPortfolios.findOrCreateForUpdate(actor.internalUserId());
-
-        var piece = pieces.findById(pieceId)
-                .orElseThrow(() -> new PieceNotFoundException("There is no such piece in this portfolio"));
-        piece.requireOwnedBy(actor.internalUserId());
-
-        var shown = piece.show(Instant.now());
-        pieces.save(shown);
-        return shown;
     }
 }

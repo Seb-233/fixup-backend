@@ -3,12 +3,16 @@ package com.fixup.media.web;
 import com.fixup.identityaccess.api.CurrentActorProvider;
 import com.fixup.media.api.PortfolioVisibility;
 import com.fixup.media.application.ChangePieceVisibility;
+import com.fixup.media.application.DeletePortfolioPiece;
 import com.fixup.media.application.GetPublicPortfolio;
 import com.fixup.media.application.ListOwnPortfolio;
 import com.fixup.media.application.NewPortfolioPiece;
 import com.fixup.media.application.PortfolioPieceView;
+import com.fixup.media.application.PortfolioStatusResponse;
 import com.fixup.media.application.PortfolioViewResolver;
+import com.fixup.media.application.PublishPortfolio;
 import com.fixup.media.application.PublishPortfolioPiece;
+import com.fixup.media.application.UnpublishPortfolio;
 import com.fixup.shared.errors.ErrorResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -25,6 +29,7 @@ import java.util.List;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -58,6 +63,9 @@ class PortfolioController {
     private final ListOwnPortfolio listOwn;
     private final ChangePieceVisibility changeVisibility;
     private final GetPublicPortfolio publicPortfolio;
+    private final PublishPortfolio publishPortfolio;
+    private final UnpublishPortfolio unpublishPortfolio;
+    private final DeletePortfolioPiece deletePiece;
     private final PortfolioViewResolver resolver;
 
     PortfolioController(
@@ -66,12 +74,18 @@ class PortfolioController {
             ListOwnPortfolio listOwn,
             ChangePieceVisibility changeVisibility,
             GetPublicPortfolio publicPortfolio,
+            PublishPortfolio publishPortfolio,
+            UnpublishPortfolio unpublishPortfolio,
+            DeletePortfolioPiece deletePiece,
             PortfolioViewResolver resolver) {
         this.actors = actors;
         this.publishPiece = publishPiece;
         this.listOwn = listOwn;
         this.changeVisibility = changeVisibility;
         this.publicPortfolio = publicPortfolio;
+        this.publishPortfolio = publishPortfolio;
+        this.unpublishPortfolio = unpublishPortfolio;
+        this.deletePiece = deletePiece;
         this.resolver = resolver;
     }
 
@@ -84,6 +98,31 @@ class PortfolioController {
         var piece = publishPiece.execute(actors.currentActor(),
                 new NewPortfolioPiece(request.mediaId(), request.title(), request.description()));
         return PieceResponse.of(resolver.toView(piece));
+    }
+
+    @PostMapping("/me/portfolio/publish")
+    @Operation(summary = "Publish the fixer's portfolio",
+            description = "Requires at least 3 active visible photos. Requires a verified fixer.")
+    @ApiResponse(responseCode = "200", description = "Portfolio published")
+    PortfolioStatusResponse publishPortfolio() {
+        return publishPortfolio.execute(actors.currentActor());
+    }
+
+    @PostMapping("/me/portfolio/unpublish")
+    @Operation(summary = "Unpublish the fixer's portfolio back to draft",
+            description = "Reverts portfolio to DRAFT. Requires a verified fixer.")
+    @ApiResponse(responseCode = "200", description = "Portfolio unpublished")
+    PortfolioStatusResponse unpublishPortfolio() {
+        return unpublishPortfolio.execute(actors.currentActor());
+    }
+
+    @DeleteMapping({"/me/portfolio/pieces/{pieceId}", "/me/portfolio/{pieceId}"})
+    @Operation(summary = "Delete a piece from the portfolio",
+            description = "Removes the piece, marks media deleted, and triggers secure storage deletion. If remaining visible photos < 3, reverts portfolio to DRAFT. Requires a verified fixer.")
+    @ApiResponse(responseCode = "204", description = "Piece deleted")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    void deletePiece(@PathVariable UUID pieceId) {
+        deletePiece.execute(actors.currentActor(), pieceId);
     }
 
     @GetMapping("/me/portfolio")

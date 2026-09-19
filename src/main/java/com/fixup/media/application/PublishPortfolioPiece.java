@@ -7,6 +7,7 @@ import com.fixup.media.api.MediaInvalidException;
 import com.fixup.media.api.MediaNotFoundException;
 import com.fixup.media.api.MediaNotReadyException;
 import com.fixup.media.api.UploadExpiredException;
+import com.fixup.media.domain.FixerPortfolios;
 import com.fixup.media.domain.MediaAsset;
 import com.fixup.media.domain.MediaAssetStatus;
 import com.fixup.media.domain.MediaAssets;
@@ -19,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * FR-UC-17: only a verified fixer publishes a piece. Attaches an owned and confirmed MediaAsset.
+ * Locks the fixer's portfolio row for strict serialization.
  */
 @Service
 public class PublishPortfolioPiece {
@@ -26,17 +28,26 @@ public class PublishPortfolioPiece {
 
     private final PortfolioPieces pieces;
     private final MediaAssets mediaAssets;
+    private final FixerPortfolios fixerPortfolios;
     private final FixerEligibility eligibility;
 
-    PublishPortfolioPiece(PortfolioPieces pieces, MediaAssets mediaAssets, FixerEligibility eligibility) {
+    PublishPortfolioPiece(
+            PortfolioPieces pieces,
+            MediaAssets mediaAssets,
+            FixerPortfolios fixerPortfolios,
+            FixerEligibility eligibility) {
         this.pieces = pieces;
         this.mediaAssets = mediaAssets;
+        this.fixerPortfolios = fixerPortfolios;
         this.eligibility = eligibility;
     }
 
     @Transactional
     public PortfolioPiece execute(CurrentActor actor, NewPortfolioPiece request) {
         eligibility.requireVerified(actor);
+
+        // Lock fixer portfolio row to serialize publications, position calculations and piece limits
+        fixerPortfolios.findOrCreateForUpdate(actor.internalUserId());
 
         MediaAsset asset = mediaAssets.findByIdForUpdate(request.mediaId())
                 .orElseThrow(() -> new MediaNotFoundException("There is no such media for this user"));

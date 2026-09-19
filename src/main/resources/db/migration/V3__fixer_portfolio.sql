@@ -63,3 +63,14 @@ CREATE TABLE portfolio_pieces (
 -- media owns this table and does not join against another module's tables, so the fixer
 -- reference is not a foreign key: it is resolved through the fixers api contract.
 CREATE INDEX ix_portfolio_pieces_fixer ON portfolio_pieces (fixer_user_id, display_position);
+
+CREATE TABLE fixer_portfolios (
+    fixer_user_id UUID PRIMARY KEY,
+    status VARCHAR(32) NOT NULL,
+    published_at TIMESTAMP WITH TIME ZONE,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    CONSTRAINT fk_portfolio_user
+        FOREIGN KEY (fixer_user_id) REFERENCES users(id),
+    CONSTRAINT ck_portfolio_status
+        CHECK (status IN ('DRAFT', 'PUBLISHED'))
+);
