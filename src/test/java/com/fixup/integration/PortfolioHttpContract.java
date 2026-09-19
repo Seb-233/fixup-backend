@@ -178,8 +178,8 @@ public abstract class PortfolioHttpContract {
 
     @Test
     void anUnverifiedFixerCannotUploadMedia() throws Exception {
-        var created = mvc.perform(post("/auth/bootstrap").with(identity("auth0|pending-fixer")))
-                .andExpect(status().isCreated()).andReturn();
+        mvc.perform(post("/auth/bootstrap").with(identity("auth0|pending-fixer")))
+                .andExpect(status().isCreated());
         mvc.perform(post("/auth/select-role").with(identity("auth0|pending-fixer"))
                 .contentType(MediaType.APPLICATION_JSON).content("{\"role\":\"FIXER\"}"))
                 .andExpect(status().isOk());
@@ -251,8 +251,8 @@ public abstract class PortfolioHttpContract {
     void deletingAPieceRevertsPortfolioToDraftIfUnderThreeVisiblePhotos() throws Exception {
         var fixerId = verifiedFixer("auth0|deleter");
         var p1 = publishAndReadId("auth0|deleter", "P1");
-        var p2 = publishAndReadId("auth0|deleter", "P2");
-        var p3 = publishAndReadId("auth0|deleter", "P3");
+        publishAndReadId("auth0|deleter", "P2");
+        publishAndReadId("auth0|deleter", "P3");
 
         mvc.perform(post("/media/me/portfolio/publish").with(identity("auth0|deleter")))
                 .andExpect(status().isOk());
@@ -278,8 +278,8 @@ public abstract class PortfolioHttpContract {
     @Test
     void hidingRemovesThePieceFromThePublicPortfolioAndRevertsToDraftIfUnderThree() throws Exception {
         var fixer = verifiedFixer("auth0|curator");
-        var p1 = publishAndReadId("auth0|curator", "Visible1");
-        var p2 = publishAndReadId("auth0|curator", "Visible2");
+        publishAndReadId("auth0|curator", "Visible1");
+        publishAndReadId("auth0|curator", "Visible2");
         var p3 = publishAndReadId("auth0|curator", "ToHide");
 
         mvc.perform(post("/media/me/portfolio/publish").with(identity("auth0|curator")))
@@ -522,7 +522,7 @@ public abstract class PortfolioHttpContract {
 
     @Test
     void concurrentAttachmentOfSameMediaIdYieldsOneCreationAndOneConflict() throws Exception {
-        var fixerId = verifiedFixer("auth0|same-media-concurrent");
+        verifiedFixer("auth0|same-media-concurrent");
         var mediaId = uploadAndConfirmJpeg("auth0|same-media-concurrent");
 
         var start = new CountDownLatch(1);

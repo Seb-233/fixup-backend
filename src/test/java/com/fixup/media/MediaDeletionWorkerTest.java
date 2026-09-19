@@ -11,8 +11,6 @@ import com.fixup.media.application.MediaDeletionWorker;
 import com.fixup.media.domain.MediaAsset;
 import com.fixup.media.domain.MediaAssetStatus;
 import com.fixup.media.domain.MediaAssets;
-import com.fixup.media.domain.MediaDeletionJobType;
-import com.fixup.media.infrastructure.MediaDeletionJobEntity;
 import com.fixup.media.infrastructure.MediaDeletionJobJpaRepository;
 import java.time.Clock;
 import java.time.Duration;

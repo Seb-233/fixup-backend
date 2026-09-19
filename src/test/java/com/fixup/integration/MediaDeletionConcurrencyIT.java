@@ -9,7 +9,6 @@ import com.fixup.media.infrastructure.MediaDeletionJobEntity;
 import com.fixup.media.infrastructure.MediaDeletionJobJpaRepository;
 import java.time.Clock;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
