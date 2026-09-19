@@ -37,27 +37,64 @@ class OpenApiContractTest {
         assertThat(contract.at("/components/schemas/Role/enum").toString()).contains("PLATFORM_ADMIN", "OWNER", "FIXER");
         assertThat(contract.at("/components/schemas/UserStatus/enum").toString()).contains("ACTIVE", "SUSPENDED", "DISABLED");
         var paths = contract.get("paths");
-        // The exported surface is pinned by name: an endpoint may only appear here deliberately.
         assertThat(paths.fieldNames()).toIterable().containsExactlyInAnyOrder(
                 "/auth/bootstrap", "/auth/me", "/auth/select-role",
                 "/fixers/me/verification", "/fixers/me/verification/documents",
                 "/fixers/{fixerUserId}/verification/approve", "/fixers/{fixerUserId}/verification/reject",
+                "/media/uploads", "/media/uploads/{mediaId}/confirm",
+                "/media/me/portfolio", "/media/me/portfolio/pieces",
+                "/media/me/portfolio/publish", "/media/me/portfolio/unpublish",
+                "/media/me/portfolio/pieces/{pieceId}", "/media/me/portfolio/pieces/{pieceId}/hide",
+                "/media/me/portfolio/pieces/{pieceId}/show", "/media/fixers/{fixerUserId}/portfolio",
                 "/analytics/zones/{zone}/market-indicators");
+        assertThat(paths.fieldNames()).toIterable().doesNotContain(
+                "/media/me/portfolio/{pieceId}",
+                "/media/me/portfolio/{pieceId}/hide",
+                "/media/me/portfolio/{pieceId}/show");
+        assertThat(paths.get("/media/me/portfolio").has("post")).as("Old POST /media/me/portfolio must not exist").isFalse();
         for (var endpoint : new String[][]{
-                {"/auth/bootstrap", "post", "200,400,401,403,409"},
-                {"/auth/me", "get", "200,400,401,403,409"},
-                {"/auth/select-role", "post", "200,400,401,403,409"},
-                {"/fixers/me/verification", "get", "200,400,401,403,409"},
-                {"/fixers/me/verification/documents", "post", "200,400,401,403,409"},
-                {"/fixers/{fixerUserId}/verification/approve", "post", "204,400,401,403,409"},
-                {"/fixers/{fixerUserId}/verification/reject", "post", "204,400,401,403,409"},
-                {"/analytics/zones/{zone}/market-indicators", "get", "200,400,401,403,503"}}) {
+                {"/auth/bootstrap", "post", "200"}, {"/auth/me", "get", "200"},
+                {"/auth/select-role", "post", "200"},
+                {"/fixers/me/verification", "get", "200"},
+                {"/fixers/me/verification/documents", "post", "200"},
+                {"/fixers/{fixerUserId}/verification/approve", "post", "204"},
+                {"/fixers/{fixerUserId}/verification/reject", "post", "204"},
+                {"/media/uploads", "post", "201"},
+                {"/media/uploads/{mediaId}/confirm", "post", "200"},
+                {"/media/me/portfolio/pieces", "post", "201"}, {"/media/me/portfolio", "get", "200"},
+                {"/media/me/portfolio/publish", "post", "200"},
+                {"/media/me/portfolio/unpublish", "post", "200"},
+                {"/media/me/portfolio/pieces/{pieceId}", "delete", "204"},
+                {"/media/me/portfolio/pieces/{pieceId}/hide", "post", "200"},
+                {"/media/me/portfolio/pieces/{pieceId}/show", "post", "200"},
+                {"/media/fixers/{fixerUserId}/portfolio", "get", "200"}}) {
             var operation = paths.get(endpoint[0]).get(endpoint[1]);
             assertThat(operation.get("security").toString()).contains("bearerAuth");
-            for (String code : endpoint[2].split(",")) {
+            for (String code : new String[]{endpoint[2], "400", "401", "403", "409"}) {
                 assertThat(operation.get("responses").has(code)).as(endpoint[0] + " status " + code).isTrue();
             }
+            if (endpoint[0].startsWith("/media")) {
+                assertThat(operation.get("responses").has("404")).as(endpoint[0] + " status 404").isTrue();
+            }
             assertThat(operation.get("responses").has("402")).isFalse();
+        }
+        var analyticsOp = paths.get("/analytics/zones/{zone}/market-indicators").get("get");
+        assertThat(analyticsOp.get("security").toString()).contains("bearerAuth");
+        for (String code : new String[]{"200", "400", "401", "403", "503"}) {
+            assertThat(analyticsOp.get("responses").has(code))
+                    .as("/analytics/zones/{zone}/market-indicators status " + code).isTrue();
+        }
+        assertThat(analyticsOp.get("responses").has("402")).isFalse();
+
+        for (String piecePath : java.util.List.of(
+                "/media/me/portfolio/pieces/{pieceId}",
+                "/media/me/portfolio/pieces/{pieceId}/hide",
+                "/media/me/portfolio/pieces/{pieceId}/show")) {
+            var pieceOp = piecePath.contains("hide") || piecePath.contains("show")
+                    ? paths.get(piecePath).get("post")
+                    : paths.get(piecePath).get("delete");
+            assertThat(pieceOp.get("responses").has("404")).isTrue();
+            assertThat(pieceOp.get("responses").get("404").get("description").asText()).contains("PIECE_NOT_FOUND");
         }
         assertThat(paths.get("/auth/bootstrap").get("post").get("responses").has("201")).isTrue();
         assertThat(contract.at("/components/schemas/UserResponse/properties/email/type").toString()).contains("null");
@@ -69,6 +106,21 @@ class OpenApiContractTest {
         // No document content crosses this API: the request carries storage keys only.
         assertThat(contract.at("/components/schemas/DocumentRequest/properties").toString())
                 .contains("storageKey").doesNotContain("content", "file");
+        // PieceRequest now references mediaId instead of raw storageKey or kind
+        assertThat(contract.at("/components/schemas/PieceRequest/properties").toString())
+                .contains("mediaId", "title")
+                .doesNotContain("storageKey", "kind", "content", "file", "bytes");
+        assertThat(contract.at("/components/schemas/PieceResponse/properties/visibility/enum").toString())
+                .contains("PUBLIC", "HIDDEN");
+        assertThat(contract.at("/components/schemas/PieceResponse/properties").toString())
+                .contains("mediaId", "readUrl")
+                .doesNotContain("storageKey", "kind");
+        var myPortfolioSchema = paths.get("/media/me/portfolio").get("get").get("responses").get("200")
+                .get("content").get("application/json").get("schema");
+        assertThat(myPortfolioSchema.get("$ref").asText()).contains("OwnPortfolioResponse");
+        assertThat(contract.at("/components/schemas/OwnPortfolioResponse/properties").toString())
+                .contains("fixerUserId", "status", "publishedAt", "pieces");
+        assertThat(contract.at("/components/schemas/OwnPortfolioResponse/properties/pieces/type").asText()).isEqualTo("array");
         // FR-UC-15 no miente al cliente: la procedencia del dato es parte del contrato.
         assertThat(contract.at("/components/schemas/IndicatorsResponse/properties/freshness/enum").toString())
                 .contains("LIVE", "CACHED", "DEGRADED");
@@ -77,7 +129,9 @@ class OpenApiContractTest {
         assertThat(contract.at("/components/schemas/IndicatorsResponse/required").toString())
                 .contains("freshness", "degraded", "observedAt", "source", "synthetic");
         Files.createDirectories(Path.of("target"));
-        Files.writeString(Path.of("target", "openapi.json"),
-                mapper.writerWithDefaultPrettyPrinter().writeValueAsString(contract) + System.lineSeparator());
+        Files.createDirectories(Path.of("docs"));
+        String json = mapper.writerWithDefaultPrettyPrinter().writeValueAsString(contract) + System.lineSeparator();
+        Files.writeString(Path.of("target", "openapi.json"), json);
+        Files.writeString(Path.of("docs", "openapi.json"), json);
     }
 }

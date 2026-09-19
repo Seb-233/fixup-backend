@@ -6,6 +6,18 @@ springdoc:
   api-docs:
     enabled: true
 fixup:
+  storage:
+    access-key: ${FIXUP_STORAGE_ACCESS_KEY:fixup}
+    secret-key: ${FIXUP_STORAGE_SECRET_KEY:development-only-secret}
+    auto-create-bucket: true
+  media:
+    deletion:
+      enabled: true
+      polling-delay: 30s
+      batch-size: 10
+      lock-timeout: 5m
+      max-attempts: 5
+      initial-backoff: 30s
   analytics:
     market-source:
       # Respaldo sintético de FR-UC-15: solo bajo el perfil dev y solo declarándolo aquí. Ningún
