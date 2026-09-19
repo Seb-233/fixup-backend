@@ -28,7 +28,7 @@ public class ConfirmUpload {
         this.eligibility = eligibility;
     }
 
-    @Transactional
+    @Transactional(noRollbackFor = {MediaTypeNotAllowedException.class, UploadExpiredException.class})
     public ConfirmationResponse execute(CurrentActor actor, UUID mediaId) {
         eligibility.requireVerified(actor);
 

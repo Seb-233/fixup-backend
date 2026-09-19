@@ -2,7 +2,7 @@ package com.fixup.media.application;
 
 import com.fixup.fixers.api.FixerEligibility;
 import com.fixup.identityaccess.api.CurrentActor;
-import com.fixup.media.api.PieceNotFoundException;
+import com.fixup.media.api.PortfolioRuleException;
 import com.fixup.media.domain.FixerPortfolios;
 import com.fixup.media.domain.MediaAssetStatus;
 import com.fixup.media.domain.MediaAssets;
@@ -40,7 +40,7 @@ public class DeletePortfolioPiece {
         var portfolio = fixerPortfolios.findOrCreateForUpdate(actor.internalUserId());
 
         var piece = pieces.findById(pieceId)
-                .orElseThrow(() -> new PieceNotFoundException("There is no such piece in this portfolio"));
+                .orElseThrow(() -> new PortfolioRuleException("PIECE_NOT_FOUND", "There is no such piece in this portfolio"));
         piece.requireOwnedBy(actor.internalUserId());
 
         mediaAssets.findByIdForUpdate(piece.mediaId()).ifPresent(asset -> {

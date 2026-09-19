@@ -89,7 +89,7 @@ class PortfolioController {
         this.resolver = resolver;
     }
 
-    @PostMapping({"/me/portfolio/pieces", "/me/portfolio"})
+    @PostMapping("/me/portfolio")
     @Operation(summary = "Publish a piece in the fixer's own portfolio",
             description = "Attaches a confirmed media asset to the portfolio. Requires a verified fixer.")
     @ApiResponse(responseCode = "201", description = "The piece was published")
@@ -116,7 +116,7 @@ class PortfolioController {
         return unpublishPortfolio.execute(actors.currentActor());
     }
 
-    @DeleteMapping({"/me/portfolio/pieces/{pieceId}", "/me/portfolio/{pieceId}"})
+    @DeleteMapping("/me/portfolio/{pieceId}")
     @Operation(summary = "Delete a piece from the portfolio",
             description = "Removes the piece, marks media deleted, and triggers secure storage deletion. If remaining visible photos < 3, reverts portfolio to DRAFT. Requires a verified fixer.")
     @ApiResponse(responseCode = "204", description = "Piece deleted")
@@ -132,7 +132,7 @@ class PortfolioController {
         return listOwn.execute(actors.currentActor()).stream().map(PieceResponse::of).toList();
     }
 
-    @PostMapping({"/me/portfolio/pieces/{pieceId}/hide", "/me/portfolio/{pieceId}/hide"})
+    @PostMapping("/me/portfolio/{pieceId}/hide")
     @Operation(summary = "Take a piece out of the public portfolio")
     @ApiResponse(responseCode = "200", description = "The piece is hidden")
     PieceResponse hide(@PathVariable UUID pieceId) {
@@ -140,7 +140,7 @@ class PortfolioController {
         return PieceResponse.of(resolver.toView(piece));
     }
 
-    @PostMapping({"/me/portfolio/pieces/{pieceId}/show", "/me/portfolio/{pieceId}/show"})
+    @PostMapping("/me/portfolio/{pieceId}/show")
     @Operation(summary = "Put a hidden piece back in the public portfolio")
     @ApiResponse(responseCode = "200", description = "The piece is public again")
     PieceResponse show(@PathVariable UUID pieceId) {
