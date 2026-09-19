@@ -9,8 +9,10 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import com.fixup.media.domain.FixerPortfolios;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -35,7 +37,10 @@ public abstract class PortfolioHttpContract {
     @Autowired protected JdbcTemplate jdbc;
     @Autowired protected ObjectMapper mapper;
 
+    @Autowired protected FixerPortfolios portfolios;
+
     @BeforeEach
+    @AfterEach
     void resetDatabase() {
         SecurityContextHolder.clearContext();
         TestStorageConfiguration.instance().clear();
@@ -43,6 +48,7 @@ public abstract class PortfolioHttpContract {
         jdbc.update("DELETE FROM portfolio_pieces");
         jdbc.update("DELETE FROM fixer_portfolios");
         jdbc.update("DELETE FROM media_assets");
+        jdbc.update("DELETE FROM fixer_verification_documents");
         jdbc.update("DELETE FROM fixer_profiles");
         jdbc.update("DELETE FROM user_roles");
         jdbc.update("DELETE FROM users");
@@ -578,5 +584,20 @@ public abstract class PortfolioHttpContract {
                 .map(name -> name.toLowerCase(java.util.Locale.ROOT)).toList();
         assertThat(columns).contains("media_asset_id")
                 .doesNotContain("storage_key", "content", "file", "bytes", "data");
+    }
+
+    @Test
+    void findOrCreateForUpdatePreservesPublishedStatus() throws Exception {
+        UUID fixerId = verifiedFixer("auth0|persists-published");
+        publish("auth0|persists-published", "First piece").andExpect(status().isCreated());
+        publish("auth0|persists-published", "Second piece").andExpect(status().isCreated());
+        publish("auth0|persists-published", "Third piece").andExpect(status().isCreated());
+
+        mvc.perform(post("/media/me/portfolio/publish").with(identity("auth0|persists-published")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("PUBLISHED"));
+
+        var portfolio = portfolios.findOrCreateForUpdate(fixerId);
+        assertThat(portfolio.status().name()).isEqualTo("PUBLISHED");
     }
 }

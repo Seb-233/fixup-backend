@@ -43,16 +43,11 @@ public class MediaDeletionService {
         registerJob(mediaAssetId, objectKey, MediaDeletionJobType.INVALID_PURGE);
     }
 
-    @Transactional
-    public void scheduleDeletion(UUID mediaAssetId, String objectKey) {
-        schedulePieceDeletion(mediaAssetId, objectKey);
-    }
-
     private void registerJob(UUID mediaAssetId, String objectKey, MediaDeletionJobType jobType) {
         UUID jobId = UUID.randomUUID();
         Instant now = Instant.now(clock);
         var job = MediaDeletionJobEntity.pending(jobId, mediaAssetId, objectKey, jobType, maxAttempts, now);
         jobRepository.save(job);
-        events.publishEvent(new MediaDeletionRequested(jobId, mediaAssetId, objectKey));
+        events.publishEvent(new MediaDeletionRequested(jobId));
     }
 }

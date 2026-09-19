@@ -20,6 +20,7 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.UUID;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -111,6 +112,18 @@ class MediaDeletionWorkerTest {
         ownerId = UUID.randomUUID();
         jdbc.update("INSERT INTO users (id, auth0_subject, email, display_name, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
                 ownerId, "auth0|" + ownerId, "owner@example.test", "Owner", "ACTIVE", clock.instant(), clock.instant());
+    }
+
+    @AfterEach
+    void tearDown() {
+        storage.clear();
+        jdbc.update("DELETE FROM media_deletion_jobs");
+        jdbc.update("DELETE FROM portfolio_pieces");
+        jdbc.update("DELETE FROM fixer_portfolios");
+        jdbc.update("DELETE FROM media_assets");
+        jdbc.update("DELETE FROM fixer_profiles");
+        jdbc.update("DELETE FROM user_roles");
+        jdbc.update("DELETE FROM users");
     }
 
     private MediaAsset createAsset(MediaAssetStatus status, String objectKey) {
@@ -326,5 +339,48 @@ class MediaDeletionWorkerTest {
         assertThat(completed.getStatus()).isEqualTo("COMPLETED");
         assertThat(storage.exists(key)).isFalse();
         assertThat(mediaAssets.findById(assetId).orElseThrow().status()).isEqualTo(MediaAssetStatus.DELETED);
+    }
+
+    @Test
+    void claimSpecificJobCannotBypassBackoff() {
+        UUID assetId = createAsset(MediaAssetStatus.DELETION_PENDING, "key-backoff").id();
+        deletionService.schedulePieceDeletion(assetId, "key-backoff");
+        UUID jobId = jobRepository.findAll().get(0).getId();
+
+        Instant start = clock.instant();
+        // Initial pending job with next_attempt_at <= now is claimable
+        var claim1 = claimer.claimSpecificJob(jobId, start).orElseThrow();
+        finalizer.failJob(claim1, new RuntimeException("Simulated error"));
+
+        var failedJob = jobRepository.findById(jobId).orElseThrow();
+        assertThat(failedJob.getStatus()).isEqualTo("FAILED");
+        Instant nextAttempt = failedJob.getNextAttemptAt();
+        assertThat(nextAttempt).isAfter(start);
+
+        // Before next_attempt_at: claimSpecificJob returns empty
+        clock.set(nextAttempt.minusSeconds(1));
+        var prematureClaim = claimer.claimSpecificJob(jobId, clock.instant());
+        assertThat(prematureClaim).isEmpty();
+
+        // After next_attempt_at: claimSpecificJob successfully claims it
+        clock.set(nextAttempt.plusSeconds(1));
+        var eligibleClaim = claimer.claimSpecificJob(jobId, clock.instant());
+        assertThat(eligibleClaim).isPresent();
+        assertThat(eligibleClaim.get().jobId()).isEqualTo(jobId);
+
+        // Once exhausted (attempts == max_attempts), next_attempt_at is null: claimSpecificJob returns empty
+        finalizer.failJob(eligibleClaim.get(), new RuntimeException("Fail 2"));
+        for (int i = 3; i <= 5; i++) {
+            clock.advance(Duration.ofHours(1));
+            var c = claimer.claimSpecificJob(jobId, clock.instant()).orElseThrow();
+            finalizer.failJob(c, new RuntimeException("Fail " + i));
+        }
+        var exhausted = jobRepository.findById(jobId).orElseThrow();
+        assertThat(exhausted.getAttempts()).isEqualTo(5);
+        assertThat(exhausted.getNextAttemptAt()).isNull();
+
+        clock.advance(Duration.ofDays(30));
+        var exhaustedClaim = claimer.claimSpecificJob(jobId, clock.instant());
+        assertThat(exhaustedClaim).isEmpty();
     }
 }

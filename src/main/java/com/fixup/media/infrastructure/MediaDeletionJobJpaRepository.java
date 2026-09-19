@@ -9,7 +9,23 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface MediaDeletionJobJpaRepository extends JpaRepository<MediaDeletionJobEntity, UUID> {
-    List<MediaDeletionJobEntity> findByStatus(String status);
+
+    @Modifying
+    @Query(value = """
+        UPDATE media_deletion_jobs
+        SET status = 'PROCESSING',
+            claim_token = :claimToken,
+            locked_at = :now,
+            updated_at = :now
+        WHERE id = :id
+          AND (status = 'PENDING' OR (status = 'FAILED' AND attempts < max_attempts))
+          AND next_attempt_at IS NOT NULL
+          AND next_attempt_at <= :now
+        """, nativeQuery = true)
+    int tryClaimSpecificJob(
+            @Param("id") UUID id,
+            @Param("claimToken") UUID claimToken,
+            @Param("now") Instant now);
 
     @Modifying
     @Query(value = """
@@ -22,21 +38,6 @@ public interface MediaDeletionJobJpaRepository extends JpaRepository<MediaDeleti
           AND locked_at < :cutoff
         """, nativeQuery = true)
     int recoverStaleJobs(@Param("cutoff") Instant cutoff, @Param("now") Instant now);
-
-    @Modifying
-    @Query(value = """
-        UPDATE media_deletion_jobs
-        SET status = 'PROCESSING',
-            claim_token = :claimToken,
-            locked_at = :now,
-            updated_at = :now
-        WHERE id = :id
-          AND (status = 'PENDING' OR (status = 'FAILED' AND attempts < max_attempts))
-        """, nativeQuery = true)
-    int tryClaimSpecificJob(
-            @Param("id") UUID id,
-            @Param("claimToken") UUID claimToken,
-            @Param("now") Instant now);
 
     @Modifying
     @Query(value = """

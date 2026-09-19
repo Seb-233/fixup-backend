@@ -10,6 +10,7 @@ import java.util.UUID;
 import javax.sql.DataSource;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
 @Repository
 class JpaFixerPortfolios implements FixerPortfolios {
@@ -83,15 +84,25 @@ class JpaFixerPortfolios implements FixerPortfolios {
     }
 
     @Override
+    @Transactional
     public FixerPortfolio findOrCreateForUpdate(UUID fixerUserId) {
         Instant now = Instant.now(clock);
         java.sql.Timestamp nowTs = java.sql.Timestamp.from(now);
         if (isPostgres) {
             jdbc.update(POSTGRES_INSERT, fixerUserId, nowTs);
-        } else {
-            jdbc.update(H2_INSERT, fixerUserId, nowTs);
+            return repository.lockByFixerUserId(fixerUserId)
+                    .map(FixerPortfolioEntity::toDomain)
+                    .orElseThrow(() -> new IllegalStateException("Failed to find or create portfolio for fixer: " + fixerUserId));
         }
 
+        // H2 fallback: Check if row already exists under write lock
+        var existing = repository.lockByFixerUserId(fixerUserId);
+        if (existing.isPresent()) {
+            return existing.get().toDomain();
+        }
+
+        // Row does not exist yet: run MERGE creation and re-lock
+        jdbc.update(H2_INSERT, fixerUserId, nowTs);
         return repository.lockByFixerUserId(fixerUserId)
                 .map(FixerPortfolioEntity::toDomain)
                 .orElseThrow(() -> new IllegalStateException("Failed to find or create portfolio for fixer: " + fixerUserId));
