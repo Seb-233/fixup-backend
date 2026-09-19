@@ -28,15 +28,24 @@ CREATE TABLE media_deletion_jobs (
     id UUID PRIMARY KEY,
     media_asset_id UUID NOT NULL,
     object_key VARCHAR(512) NOT NULL,
+    job_type VARCHAR(32) NOT NULL,
     status VARCHAR(32) NOT NULL,
     attempts INTEGER NOT NULL DEFAULT 0,
+    max_attempts INTEGER NOT NULL DEFAULT 5,
+    claim_token UUID,
+    locked_at TIMESTAMP WITH TIME ZONE,
+    next_attempt_at TIMESTAMP WITH TIME ZONE,
+    last_error VARCHAR(500),
     created_at TIMESTAMP WITH TIME ZONE NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    CONSTRAINT ck_deletion_job_type
+        CHECK (job_type IN ('PIECE_DELETION', 'INVALID_PURGE')),
     CONSTRAINT ck_deletion_job_status
-        CHECK (status IN ('PENDING', 'COMPLETED', 'FAILED'))
+        CHECK (status IN ('PENDING', 'PROCESSING', 'COMPLETED', 'FAILED'))
 );
 
-CREATE INDEX ix_media_deletion_jobs_status ON media_deletion_jobs (status);
+CREATE INDEX ix_media_deletion_jobs_claim ON media_deletion_jobs (status, next_attempt_at);
+CREATE INDEX ix_media_deletion_jobs_stale ON media_deletion_jobs (status, locked_at);
 
 CREATE TABLE portfolio_pieces (
     id UUID PRIMARY KEY,

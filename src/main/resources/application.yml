@@ -52,3 +52,10 @@ fixup:
   media:
     portfolio:
       max-file-size: 10485760
+    deletion:
+      enabled: ${FIXUP_MEDIA_DELETION_ENABLED:true}
+      polling-delay: ${FIXUP_MEDIA_DELETION_POLLING_DELAY:30s}
+      batch-size: ${FIXUP_MEDIA_DELETION_BATCH_SIZE:10}
+      lock-timeout: ${FIXUP_MEDIA_DELETION_LOCK_TIMEOUT:5m}
+      max-attempts: ${FIXUP_MEDIA_DELETION_MAX_ATTEMPTS:5}
+      initial-backoff: ${FIXUP_MEDIA_DELETION_INITIAL_BACKOFF:30s}

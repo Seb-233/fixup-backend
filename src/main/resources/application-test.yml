@@ -24,3 +24,5 @@ fixup:
   media:
     portfolio:
       max-file-size: 10485760
+    deletion:
+      enabled: false

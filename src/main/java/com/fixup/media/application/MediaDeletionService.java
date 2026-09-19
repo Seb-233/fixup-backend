@@ -1,85 +1,58 @@
 package com.fixup.media.application;
 
-import com.fixup.media.domain.MediaAssets;
+import com.fixup.media.domain.MediaDeletionJobType;
 import com.fixup.media.infrastructure.MediaDeletionJobEntity;
 import com.fixup.media.infrastructure.MediaDeletionJobJpaRepository;
+import java.time.Clock;
 import java.time.Instant;
 import java.util.UUID;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.event.TransactionPhase;
-import org.springframework.transaction.event.TransactionalEventListener;
 
+/**
+ * Registers durable media deletion jobs and publishes events.
+ * Does not directly invoke ObjectStorage or execute deletions.
+ */
 @Service
 public class MediaDeletionService {
-    private static final Logger log = LoggerFactory.getLogger(MediaDeletionService.class);
-
-    private final ObjectStorage objectStorage;
-    private final MediaAssets mediaAssets;
     private final MediaDeletionJobJpaRepository jobRepository;
     private final ApplicationEventPublisher events;
+    private final Clock clock;
+    private final int maxAttempts;
 
     public MediaDeletionService(
-            ObjectStorage objectStorage,
-            MediaAssets mediaAssets,
             MediaDeletionJobJpaRepository jobRepository,
-            ApplicationEventPublisher events) {
-        this.objectStorage = objectStorage;
-        this.mediaAssets = mediaAssets;
+            ApplicationEventPublisher events,
+            Clock clock,
+            @Value("${fixup.media.deletion.max-attempts:5}") int maxAttempts) {
         this.jobRepository = jobRepository;
         this.events = events;
+        this.clock = clock;
+        this.maxAttempts = maxAttempts;
+    }
+
+    @Transactional
+    public void schedulePieceDeletion(UUID mediaAssetId, String objectKey) {
+        registerJob(mediaAssetId, objectKey, MediaDeletionJobType.PIECE_DELETION);
+    }
+
+    @Transactional
+    public void scheduleInvalidObjectPurge(UUID mediaAssetId, String objectKey) {
+        registerJob(mediaAssetId, objectKey, MediaDeletionJobType.INVALID_PURGE);
     }
 
     @Transactional
     public void scheduleDeletion(UUID mediaAssetId, String objectKey) {
+        schedulePieceDeletion(mediaAssetId, objectKey);
+    }
+
+    private void registerJob(UUID mediaAssetId, String objectKey, MediaDeletionJobType jobType) {
         UUID jobId = UUID.randomUUID();
-        Instant now = Instant.now();
-        var job = new MediaDeletionJobEntity(jobId, mediaAssetId, objectKey, "PENDING", 0, now, now);
+        Instant now = Instant.now(clock);
+        var job = MediaDeletionJobEntity.pending(jobId, mediaAssetId, objectKey, jobType, maxAttempts, now);
         jobRepository.save(job);
         events.publishEvent(new MediaDeletionRequested(jobId, mediaAssetId, objectKey));
-    }
-
-    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
-    public void onDeletionRequested(MediaDeletionRequested event) {
-        executeJob(event.jobId(), event.mediaAssetId(), event.objectKey());
-    }
-
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void executeJob(UUID jobId, UUID mediaAssetId, String objectKey) {
-        var jobOpt = jobRepository.findById(jobId);
-        Instant now = Instant.now();
-        try {
-            objectStorage.delete(objectKey);
-            mediaAssets.findById(mediaAssetId).ifPresent(asset -> {
-                mediaAssets.save(asset.markDeleted());
-            });
-            jobOpt.ifPresent(job -> {
-                job.markCompleted(now);
-                jobRepository.save(job);
-            });
-            log.info("Media object deleted successfully: {}", objectKey);
-        } catch (Exception ex) {
-            log.warn("Failed to delete media object {}: {}", objectKey, ex.getMessage());
-            jobOpt.ifPresent(job -> {
-                job.markFailed(now);
-                jobRepository.save(job);
-            });
-        }
-    }
-
-    @Transactional
-    public void retryPendingDeletions() {
-        var pending = jobRepository.findByStatus("PENDING");
-        var failed = jobRepository.findByStatus("FAILED");
-        for (var job : pending) {
-            executeJob(job.getId(), job.getMediaAssetId(), job.getObjectKey());
-        }
-        for (var job : failed) {
-            executeJob(job.getId(), job.getMediaAssetId(), job.getObjectKey());
-        }
     }
 }
