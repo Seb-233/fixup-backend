@@ -59,6 +59,7 @@ class SecurityConfiguration {
                     requests.requestMatchers("/auth/**").authenticated()
                             .requestMatchers("/fixers/**").authenticated()
                             .requestMatchers("/media/**").authenticated()
+                            .requestMatchers("/analytics/**").authenticated()
                             .anyRequest().denyAll();
                 })
                 .exceptionHandling(errors -> errors.authenticationEntryPoint(entryPoint)

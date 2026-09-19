@@ -18,3 +18,8 @@ fixup:
       lock-timeout: 5m
       max-attempts: 5
       initial-backoff: 30s
+  analytics:
+    market-source:
+      # Respaldo sintético de FR-UC-15: solo bajo el perfil dev y solo declarándolo aquí. Ningún
+      # otro perfil puede activarlo, y la respuesta marca el dato como DEVELOPMENT_SYNTHETIC.
+      provider: development

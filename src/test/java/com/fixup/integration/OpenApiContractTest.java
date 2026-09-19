@@ -45,7 +45,8 @@ class OpenApiContractTest {
                 "/media/me/portfolio", "/media/me/portfolio/pieces",
                 "/media/me/portfolio/publish", "/media/me/portfolio/unpublish",
                 "/media/me/portfolio/pieces/{pieceId}", "/media/me/portfolio/pieces/{pieceId}/hide",
-                "/media/me/portfolio/pieces/{pieceId}/show", "/media/fixers/{fixerUserId}/portfolio");
+                "/media/me/portfolio/pieces/{pieceId}/show", "/media/fixers/{fixerUserId}/portfolio",
+                "/analytics/zones/{zone}/market-indicators");
         assertThat(paths.fieldNames()).toIterable().doesNotContain(
                 "/media/me/portfolio/{pieceId}",
                 "/media/me/portfolio/{pieceId}/hide",
@@ -77,6 +78,14 @@ class OpenApiContractTest {
             }
             assertThat(operation.get("responses").has("402")).isFalse();
         }
+        var analyticsOp = paths.get("/analytics/zones/{zone}/market-indicators").get("get");
+        assertThat(analyticsOp.get("security").toString()).contains("bearerAuth");
+        for (String code : new String[]{"200", "400", "401", "403", "503"}) {
+            assertThat(analyticsOp.get("responses").has(code))
+                    .as("/analytics/zones/{zone}/market-indicators status " + code).isTrue();
+        }
+        assertThat(analyticsOp.get("responses").has("402")).isFalse();
+
         for (String piecePath : java.util.List.of(
                 "/media/me/portfolio/pieces/{pieceId}",
                 "/media/me/portfolio/pieces/{pieceId}/hide",
@@ -112,6 +121,13 @@ class OpenApiContractTest {
         assertThat(contract.at("/components/schemas/OwnPortfolioResponse/properties").toString())
                 .contains("fixerUserId", "status", "publishedAt", "pieces");
         assertThat(contract.at("/components/schemas/OwnPortfolioResponse/properties/pieces/type").asText()).isEqualTo("array");
+        // FR-UC-15 no miente al cliente: la procedencia del dato es parte del contrato.
+        assertThat(contract.at("/components/schemas/IndicatorsResponse/properties/freshness/enum").toString())
+                .contains("LIVE", "CACHED", "DEGRADED");
+        assertThat(contract.at("/components/schemas/IndicatorsResponse/properties/source/enum").toString())
+                .contains("EXTERNAL_PROVIDER", "DEVELOPMENT_SYNTHETIC");
+        assertThat(contract.at("/components/schemas/IndicatorsResponse/required").toString())
+                .contains("freshness", "degraded", "observedAt", "source", "synthetic");
         Files.createDirectories(Path.of("target"));
         Files.createDirectories(Path.of("docs"));
         String json = mapper.writerWithDefaultPrettyPrinter().writeValueAsString(contract) + System.lineSeparator();
