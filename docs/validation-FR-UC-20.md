@@ -1,11 +1,12 @@
 # Validación FR-UC-20 — monitoreo de ingresos del técnico
 
 Fecha local: 2026-09-19 (America/Bogota). Repositorio: Seb-233/fixup-backend.
-Rama: `feature/fr-uc-20-fixer-earnings`, apilada sobre `feature/fr-uc-18-quotations`.
+Rama: `feature/fr-uc-20-fixer-earnings`, sobre `develop`.
 
-> **Rama apilada.** FR-UC-20 cuelga del evento `QuotationAccepted` y del módulo `quotations`,
-> que viven en el PR #28 y todavía no están en `develop`. Mientras ese PR no se integre, el
-> diff de este incluye también los commits de FR-UC-18. Se limpia solo cuando #28 entre.
+> **Base actualizada.** FR-UC-20 cuelga del evento `QuotationAccepted` y del módulo
+> `quotations`, que entraron a `develop` con el PR #28. La rama se rebasó sobre esa base, así
+> que su diff son solo los ocho commits del caso. La migración quedó como `V6`: `V3` y `V4` se
+> las llevaron el portafolio y los indicadores de mercado, y `V5` el caso 18.
 
 > **Estado de la verificación: pendiente.** El entorno donde se redactó este cambio no tiene
 > acceso a Maven Central, así que `clean verify` no se ejecutó aquí. Nadie debe marcar estas
@@ -77,8 +78,10 @@ contrato.
 - `FixerEarningTest`: la comisión del 10%, el residuo indivisible que queda del lado del técnico,
   que bruto = comisión + neto para varios montos, el ciclo completo del escrow, y que un ingreso
   descuadrado no se puede construir siquiera.
-- `OpenApiContractTest`: cinco rutas nuevas fijadas, los enums del ciclo del dinero, y que la
-  transferencia no acepta cuerpo.
+- `OpenApiContractTest`: cinco rutas nuevas fijadas junto a las de `media` y `analytics` que ya
+  estaban, los enums del ciclo del dinero, y que la transferencia no acepta cuerpo.
+- `IntegrationDatabaseCleaner`: las tres tablas del escrow se borran antes que `quotations`,
+  que es a quien apuntan.
 
 Falta el contrato HTTP de extremo a extremo: aceptar cotización, cerrar trabajo, consultar saldo
 y transferir, todo por HTTP contra la base.
