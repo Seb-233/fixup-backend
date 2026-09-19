@@ -5,12 +5,11 @@ Rama: `feature/fr-uc-20-fixer-earnings`, sobre `develop`.
 
 > **Base actualizada.** FR-UC-20 cuelga del evento `QuotationAccepted` y del módulo
 > `quotations`, que entraron a `develop` con el PR #28. La rama se rebasó sobre esa base, así
-> que su diff son solo los ocho commits del caso. La migración quedó como `V6`: `V3` y `V4` se
+> que su diff son solo los commits del caso. La migración quedó como `V6`: `V3` y `V4` se
 > las llevaron el portafolio y los indicadores de mercado, y `V5` el caso 18.
 
-> **Estado de la verificación: pendiente.** El entorno donde se redactó este cambio no tiene
-> acceso a Maven Central, así que `clean verify` no se ejecutó aquí. Nadie debe marcar estas
-> casillas sin haber corrido las órdenes.
+> **Estado de la verificación: ejecutada.** `clean verify` corrió en el CI sobre esta rama y
+> quedó en verde. Las casillas de abajo se llenaron con esa corrida, no a mano.
 
 ## Alcance
 
@@ -64,13 +63,20 @@ y solicitud de transferencia.
 
 | Ejecución | Resultado |
 | --- | --- |
-| `.\mvnw.cmd clean verify` | pendiente |
-| Arquitectura (ArchUnit y Spring Modulith, 14 módulos) | pendiente |
-| OpenAPI (rutas, respuestas y enums) | pendiente |
+| `clean verify` en el CI (Backend CI #58, Linux) | verde, 291 pruebas |
+| Arquitectura (ArchUnit y Spring Modulith, 14 módulos) | verde |
+| OpenAPI (rutas, respuestas y enums) | verde |
 
-`docs/openapi.json` **no** se regeneró: se produce desde `target/openapi.json` durante las
-pruebas. Debe regenerarse antes de abrir el PR, o el frontend no puede generarse contra este
-contrato.
+`docs/openapi.json` quedó regenerado con las cinco operaciones, que es de donde el frontend
+genera su cliente tipado.
+
+> **Intermitencia ajena, anotada para no perderla.** En Windows, `MediaDeletionAfterCommitTest`
+> —del módulo `media`— falla cerca de la mitad de las veces sobre esta rama, y nunca en el CI;
+> sobre `develop` pasa siempre en ambos. Esta rama no toca `media`. Al instrumentar la prueba, el
+> trabajo de borrado queda en `PENDING` con cero intentos y sin error, y sigue igual 500 ms
+> después: el listener de `AFTER_COMMIT` no se dispara. Con el diagnóstico puesto pasa siempre,
+> lo que apunta a una carrera sensible al tiempo de arranque y no a un error de lógica. Queda
+> reportado en el PR para que se atienda desde ese módulo.
 
 ## Pruebas agregadas
 
@@ -82,12 +88,16 @@ contrato.
   estaban, los enums del ciclo del dinero, y que la transferencia no acepta cuerpo.
 - `IntegrationDatabaseCleaner`: las tres tablas del escrow se borran antes que `quotations`,
   que es a quien apuntan.
-
-Falta el contrato HTTP de extremo a extremo: aceptar cotización, cerrar trabajo, consultar saldo
-y transferir, todo por HTTP contra la base.
+- `EarningsHttpContract`: el recorrido completo por HTTP contra la base —aceptar la cotización
+  retiene el dinero, cerrar el trabajo lo libera, la transferencia se lleva el saldo entero—,
+  que un tercero no cierra el trabajo ajeno ni libera esa plata, que cerrar dos veces no paga
+  dos veces, que un monto en el cuerpo de la transferencia no cambia lo que se transfiere, que
+  el propietario no ve trabajos ni saldo, y que dos transferencias simultáneas no se llevan el
+  mismo dinero. Corre contra H2 en `EarningsContextTest` y contra PostgreSQL real en
+  `PostgresEarningsIT`, que es donde el bloqueo de filas dice algo.
 
 ## Límites de la evidencia
 
-Nada de lo escrito aquí se ejecutó todavía. Además, la liquidación efectiva hacia una cuenta
+La liquidación efectiva hacia una cuenta
 bancaria no existe: el alcance académico llega a registrar la solicitud, igual que FR-UC-22
 declara para los pagos del propietario.
