@@ -37,12 +37,13 @@ class OpenApiContractTest {
         assertThat(contract.at("/components/schemas/Role/enum").toString()).contains("PLATFORM_ADMIN", "OWNER", "FIXER");
         assertThat(contract.at("/components/schemas/UserStatus/enum").toString()).contains("ACTIVE", "SUSPENDED", "DISABLED");
         var paths = contract.get("paths");
-        // The exported surface is pinned by name: an endpoint may only appear here deliberately.
         assertThat(paths.fieldNames()).toIterable().containsExactlyInAnyOrder(
                 "/auth/bootstrap", "/auth/me", "/auth/select-role",
                 "/fixers/me/verification", "/fixers/me/verification/documents",
                 "/fixers/{fixerUserId}/verification/approve", "/fixers/{fixerUserId}/verification/reject",
-                "/media/me/portfolio", "/media/me/portfolio/{pieceId}/hide",
+                "/media/uploads", "/media/uploads/{mediaId}/confirm",
+                "/media/me/portfolio", "/media/me/portfolio/publish", "/media/me/portfolio/unpublish",
+                "/media/me/portfolio/{pieceId}", "/media/me/portfolio/{pieceId}/hide",
                 "/media/me/portfolio/{pieceId}/show", "/media/fixers/{fixerUserId}/portfolio");
         for (var endpoint : new String[][]{
                 {"/auth/bootstrap", "post", "200"}, {"/auth/me", "get", "200"},
@@ -51,7 +52,12 @@ class OpenApiContractTest {
                 {"/fixers/me/verification/documents", "post", "200"},
                 {"/fixers/{fixerUserId}/verification/approve", "post", "204"},
                 {"/fixers/{fixerUserId}/verification/reject", "post", "204"},
+                {"/media/uploads", "post", "201"},
+                {"/media/uploads/{mediaId}/confirm", "post", "200"},
                 {"/media/me/portfolio", "post", "201"}, {"/media/me/portfolio", "get", "200"},
+                {"/media/me/portfolio/publish", "post", "200"},
+                {"/media/me/portfolio/unpublish", "post", "200"},
+                {"/media/me/portfolio/{pieceId}", "delete", "204"},
                 {"/media/me/portfolio/{pieceId}/hide", "post", "200"},
                 {"/media/me/portfolio/{pieceId}/show", "post", "200"},
                 {"/media/fixers/{fixerUserId}/portfolio", "get", "200"}}) {
@@ -72,15 +78,19 @@ class OpenApiContractTest {
         // No document content crosses this API: the request carries storage keys only.
         assertThat(contract.at("/components/schemas/DocumentRequest/properties").toString())
                 .contains("storageKey").doesNotContain("content", "file");
-        assertThat(contract.at("/components/schemas/PieceRequest/properties/kind/enum").toString())
-                .contains("PHOTO", "VIDEO");
+        // PieceRequest now references mediaId instead of raw storageKey or kind
+        assertThat(contract.at("/components/schemas/PieceRequest/properties").toString())
+                .contains("mediaId", "title")
+                .doesNotContain("storageKey", "kind", "content", "file", "bytes");
         assertThat(contract.at("/components/schemas/PieceResponse/properties/visibility/enum").toString())
                 .contains("PUBLIC", "HIDDEN");
-        // No media content crosses this API: the request carries a storage key only.
-        assertThat(contract.at("/components/schemas/PieceRequest/properties").toString())
-                .contains("storageKey").doesNotContain("content", "file", "bytes");
+        assertThat(contract.at("/components/schemas/PieceResponse/properties").toString())
+                .contains("mediaId", "readUrl")
+                .doesNotContain("storageKey", "kind");
         Files.createDirectories(Path.of("target"));
-        Files.writeString(Path.of("target", "openapi.json"),
-                mapper.writerWithDefaultPrettyPrinter().writeValueAsString(contract) + System.lineSeparator());
+        Files.createDirectories(Path.of("docs"));
+        String json = mapper.writerWithDefaultPrettyPrinter().writeValueAsString(contract) + System.lineSeparator();
+        Files.writeString(Path.of("target", "openapi.json"), json);
+        Files.writeString(Path.of("docs", "openapi.json"), json);
     }
 }
