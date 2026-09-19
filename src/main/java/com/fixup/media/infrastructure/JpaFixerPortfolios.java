@@ -2,18 +2,71 @@ package com.fixup.media.infrastructure;
 
 import com.fixup.media.domain.FixerPortfolio;
 import com.fixup.media.domain.FixerPortfolios;
+import java.sql.Connection;
+import java.time.Clock;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
-import org.springframework.dao.DataIntegrityViolationException;
+import javax.sql.DataSource;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
 @Repository
 class JpaFixerPortfolios implements FixerPortfolios {
-    private final FixerPortfolioJpaRepository repository;
+    private static final String POSTGRES_INSERT = """
+            INSERT INTO fixer_portfolios (
+                fixer_user_id,
+                status,
+                published_at,
+                updated_at
+            )
+            VALUES (
+                ?,
+                'DRAFT',
+                NULL,
+                ?
+            )
+            ON CONFLICT (fixer_user_id) DO NOTHING
+            """;
 
-    JpaFixerPortfolios(FixerPortfolioJpaRepository repository) {
+    private static final String H2_INSERT = """
+            MERGE INTO fixer_portfolios (
+                fixer_user_id,
+                status,
+                published_at,
+                updated_at
+            )
+            KEY (fixer_user_id)
+            VALUES (
+                ?,
+                'DRAFT',
+                NULL,
+                ?
+            )
+            """;
+
+    private final FixerPortfolioJpaRepository repository;
+    private final JdbcTemplate jdbc;
+    private final Clock clock;
+    private final boolean isPostgres;
+
+    JpaFixerPortfolios(FixerPortfolioJpaRepository repository, JdbcTemplate jdbc, Clock clock) {
         this.repository = repository;
+        this.jdbc = jdbc;
+        this.clock = clock;
+        this.isPostgres = determineIfPostgres(jdbc.getDataSource());
+    }
+
+    private static boolean determineIfPostgres(DataSource dataSource) {
+        if (dataSource == null) {
+            return true;
+        }
+        try (Connection conn = dataSource.getConnection()) {
+            String name = conn.getMetaData().getDatabaseProductName();
+            return name != null && name.toLowerCase().contains("postgres");
+        } catch (Exception ex) {
+            return true;
+        }
     }
 
     @Override
@@ -31,18 +84,16 @@ class JpaFixerPortfolios implements FixerPortfolios {
 
     @Override
     public FixerPortfolio findOrCreateForUpdate(UUID fixerUserId) {
-        var existing = repository.lockByFixerUserId(fixerUserId);
-        if (existing.isPresent()) {
-            return existing.get().toDomain();
+        Instant now = Instant.now(clock);
+        java.sql.Timestamp nowTs = java.sql.Timestamp.from(now);
+        if (isPostgres) {
+            jdbc.update(POSTGRES_INSERT, fixerUserId, nowTs);
+        } else {
+            jdbc.update(H2_INSERT, fixerUserId, nowTs);
         }
-        var initial = FixerPortfolio.initialDraft(fixerUserId, Instant.now());
-        try {
-            repository.saveAndFlush(FixerPortfolioEntity.from(initial));
-        } catch (DataIntegrityViolationException conflict) {
-            // Another thread inserted concurrently; lock it now.
-        }
+
         return repository.lockByFixerUserId(fixerUserId)
                 .map(FixerPortfolioEntity::toDomain)
-                .orElse(initial);
+                .orElseThrow(() -> new IllegalStateException("Failed to find or create portfolio for fixer: " + fixerUserId));
     }
 }
