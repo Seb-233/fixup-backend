@@ -43,7 +43,7 @@ class MinioStorageIT {
     private static final byte[] VALID_JPEG = new byte[] {(byte) 0xFF, (byte) 0xD8, (byte) 0xFF, 0x01, 0x02, 0x03, 0x04, 0x05};
 
     @Container
-    static final GenericContainer<?> MINIO = new GenericContainer<>("quay.io/minio/minio:latest")
+    static final GenericContainer<?> MINIO = new GenericContainer<>("quay.io/minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e")
             .withEnv("MINIO_ROOT_USER", "fixup")
             .withEnv("MINIO_ROOT_PASSWORD", "development-only-secret")
             .withCommand("server /data --console-address :9001")

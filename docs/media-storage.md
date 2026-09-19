@@ -24,7 +24,7 @@ Este documento describe la arquitectura de almacenamiento de objetos, el ciclo d
 El almacenamiento de objetos opera bajo el principio de menor privilegio: el bucket de almacenamiento es **estrictamente privado** y rechaza cualquier acceso anónimo directo (HTTP 403).
 
 ### 2.1 Proveedores y configuración
-- **Desarrollo y pruebas locales:** Servicio S3-compatible provisto por MinIO (`quay.io/minio/minio:latest`) configurado en `compose.development.yml`.
+- **Desarrollo y pruebas locales:** Servicio S3-compatible provisto por MinIO (`quay.io/minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e`) configurado en `compose.development.yml`.
 - **Producción:** Amazon Web Services S3.
 - **Credenciales:**
   - En producción, las variables de entorno `FIXUP_STORAGE_ACCESS_KEY` y `FIXUP_STORAGE_SECRET_KEY` son obligatorias (no existen credenciales por defecto en `application.yml`).
