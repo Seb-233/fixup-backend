@@ -19,6 +19,9 @@ public class IntegrationDatabaseCleaner {
 
     @Transactional
     public void clean() {
+        jdbc.update("DELETE FROM payouts");
+        jdbc.update("DELETE FROM fixer_earnings");
+        jdbc.update("DELETE FROM jobs");
         jdbc.update("DELETE FROM quotations");
         jdbc.update("DELETE FROM repair_request_photos");
         jdbc.update("DELETE FROM repair_requests");
