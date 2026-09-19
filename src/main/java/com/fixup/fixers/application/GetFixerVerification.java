@@ -25,6 +25,6 @@ public class GetFixerVerification {
         var submitted = documents.typesOf(actor.internalUserId());
         return new FixerVerificationSummary(profile.verificationStatus(), profile.isUnderReview(),
                 profile.submittedAt(), profile.decidedAt(), profile.rejectionReason(), submitted,
-                VerificationPolicy.missing(submitted));
+                VerificationPolicy.missing(submitted), profile.specialties());
     }
 }

@@ -17,22 +17,36 @@ import java.util.UUID;
  * storage keys; el contenido nunca cruza la API.
  */
 public record RepairRequest(UUID id, UUID ownerUserId, Specialty specialty, String title,
-        String description, List<String> photoKeys, RepairRequestStatus status,
+        String description, List<UUID> mediaIds, RepairRequestStatus status,
         UUID assignedFixerUserId, Instant createdAt, Instant updatedAt) {
 
     public static final int MAX_PHOTOS = 6;
 
     public RepairRequest {
-        photoKeys = List.copyOf(photoKeys);
-        if (photoKeys.size() > MAX_PHOTOS) {
+        if (mediaIds == null) {
+            mediaIds = List.of();
+        } else {
+            for (UUID mediaId : mediaIds) {
+                if (mediaId == null) {
+                    throw new RepairRequestConflictException("INVALID_PHOTOS",
+                            "Photo mediaIds cannot contain null elements");
+                }
+            }
+            if (new java.util.HashSet<>(mediaIds).size() != mediaIds.size()) {
+                throw new RepairRequestConflictException("DUPLICATE_PHOTOS",
+                        "Photo mediaIds cannot contain duplicates");
+            }
+            mediaIds = List.copyOf(mediaIds);
+        }
+        if (mediaIds.size() > MAX_PHOTOS) {
             throw new RepairRequestConflictException("TOO_MANY_PHOTOS",
                     "A repair request accepts at most " + MAX_PHOTOS + " photos");
         }
     }
 
     public static RepairRequest open(UUID id, UUID ownerUserId, Specialty specialty, String title,
-            String description, List<String> photoKeys, Instant now) {
-        return new RepairRequest(id, ownerUserId, specialty, title, description, photoKeys,
+            String description, List<UUID> mediaIds, Instant now) {
+        return new RepairRequest(id, ownerUserId, specialty, title, description, mediaIds,
                 RepairRequestStatus.OPEN, null, now, now);
     }
 
@@ -46,7 +60,7 @@ public record RepairRequest(UUID id, UUID ownerUserId, Specialty specialty, Stri
             throw new RepairRequestConflictException("SELF_ASSIGNMENT",
                     "The owner of the request cannot be assigned as its fixer");
         }
-        return new RepairRequest(id, ownerUserId, specialty, title, description, photoKeys,
+        return new RepairRequest(id, ownerUserId, specialty, title, description, mediaIds,
                 RepairRequestStatus.ASSIGNED, fixerUserId, createdAt, now);
     }
 

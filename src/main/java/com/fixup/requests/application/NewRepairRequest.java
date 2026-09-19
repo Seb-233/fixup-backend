@@ -2,8 +2,8 @@ package com.fixup.requests.application;
 
 import com.fixup.fixers.api.Specialty;
 import java.util.List;
+import java.util.UUID;
 
-/** The photo keys are provisional storage keys. */
 public record NewRepairRequest(Specialty specialty, String title, String description,
-        List<String> photoKeys) {
+        List<UUID> mediaIds) {
 }

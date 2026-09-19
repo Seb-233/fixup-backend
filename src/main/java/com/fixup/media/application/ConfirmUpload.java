@@ -2,9 +2,13 @@ package com.fixup.media.application;
 
 import com.fixup.fixers.api.FixerEligibility;
 import com.fixup.identityaccess.api.CurrentActor;
+import com.fixup.identityaccess.api.Role;
+import com.fixup.identityaccess.api.UserStatus;
+import com.fixup.media.api.MediaException;
 import com.fixup.media.api.MediaInvalidException;
 import com.fixup.media.api.MediaNotFoundException;
 import com.fixup.media.api.MediaNotReadyException;
+import com.fixup.media.api.MediaPurpose;
 import com.fixup.media.api.MediaTypeNotAllowedException;
 import com.fixup.media.api.UploadExpiredException;
 import com.fixup.media.domain.MediaAsset;
@@ -40,11 +44,17 @@ public class ConfirmUpload {
 
     @Transactional(noRollbackFor = {MediaTypeNotAllowedException.class, UploadExpiredException.class})
     public ConfirmationResponse execute(CurrentActor actor, UUID mediaId) {
-        eligibility.requireVerified(actor);
-
         MediaAsset asset = mediaAssets.findByIdForUpdate(mediaId)
                 .orElseThrow(() -> new MediaNotFoundException("There is no such media for this user"));
         asset.requireBelongsTo(actor.internalUserId());
+
+        if (asset.purpose() == MediaPurpose.FIXER_PORTFOLIO) {
+            eligibility.requireVerified(actor);
+        } else if (asset.purpose() == MediaPurpose.REPAIR_REQUEST) {
+            if (actor.status() != UserStatus.ACTIVE || (!actor.hasRole(Role.OWNER) && !actor.hasRole(Role.TENANT) && !actor.hasRole(Role.REAL_ESTATE_MANAGER))) {
+                throw new MediaException(403, "ACCESS_DENIED", "You do not have permission to perform this action");
+            }
+        }
 
         if (asset.status() == MediaAssetStatus.DELETED) {
             throw new MediaNotFoundException("Media not found");

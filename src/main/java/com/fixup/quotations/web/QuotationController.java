@@ -8,6 +8,7 @@ import com.fixup.quotations.application.ListQuotationsForRequest;
 import com.fixup.quotations.application.NewQuotation;
 import com.fixup.quotations.application.QuotationSummary;
 import com.fixup.quotations.application.SubmitQuotation;
+import com.fixup.quotations.domain.Quotation;
 import com.fixup.shared.errors.ErrorResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -114,7 +115,7 @@ class QuotationController {
     }
 
     @Schema(additionalProperties = Schema.AdditionalPropertiesValue.FALSE)
-    record QuotationRequest(@NotNull UUID requestId, @NotNull @Min(1) Long amount,
+    record QuotationRequest(@NotNull UUID requestId, @NotNull @Min(1) @Max(Quotation.MAX_AMOUNT) Long amount,
             @NotNull @Min(1) @Max(365) Integer estimatedDays, @Size(max = 1000) String message) {
     }
 

@@ -6,6 +6,7 @@ import com.fixup.media.api.MediaAlreadyAttachedException;
 import com.fixup.media.api.MediaInvalidException;
 import com.fixup.media.api.MediaNotFoundException;
 import com.fixup.media.api.MediaNotReadyException;
+import com.fixup.media.api.MediaPurpose;
 import com.fixup.media.api.UploadExpiredException;
 import com.fixup.media.domain.FixerPortfolios;
 import com.fixup.media.domain.MediaAsset;
@@ -24,7 +25,7 @@ import org.springframework.transaction.annotation.Transactional;
  */
 @Service
 public class PublishPortfolioPiece {
-    private static final String REQUIRED_PURPOSE = "FIXER_PORTFOLIO";
+    private static final MediaPurpose REQUIRED_PURPOSE = MediaPurpose.FIXER_PORTFOLIO;
 
     private final PortfolioPieces pieces;
     private final MediaAssets mediaAssets;
@@ -53,7 +54,7 @@ public class PublishPortfolioPiece {
                 .orElseThrow(() -> new MediaNotFoundException("There is no such media for this user"));
         asset.requireBelongsTo(actor.internalUserId());
 
-        if (!REQUIRED_PURPOSE.equals(asset.purpose())) {
+        if (asset.purpose() != REQUIRED_PURPOSE) {
             throw new MediaNotFoundException("Media not found for portfolio");
         }
         if (asset.status() == MediaAssetStatus.PENDING) {

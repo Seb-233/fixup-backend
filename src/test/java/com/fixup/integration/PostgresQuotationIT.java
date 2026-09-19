@@ -13,7 +13,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
-@Import({TestJwtConfiguration.class, QuotationHttpContract.EventRecorder.class})
+@Import({TestJwtConfiguration.class, TestStorageConfiguration.class, QuotationHttpContract.EventRecorder.class})
 @Testcontainers
 class PostgresQuotationIT extends QuotationHttpContract {
     @Container

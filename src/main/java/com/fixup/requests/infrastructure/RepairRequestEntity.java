@@ -47,8 +47,8 @@ class RepairRequestEntity {
     @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(name = "repair_request_photos", joinColumns = @JoinColumn(name = "request_id"))
     @OrderColumn(name = "photo_order")
-    @Column(name = "storage_key", nullable = false, length = 512)
-    private List<String> photoKeys = new ArrayList<>();
+    @Column(name = "media_id", nullable = false)
+    private List<UUID> mediaIds = new ArrayList<>();
 
     protected RepairRequestEntity() {
     }
@@ -60,7 +60,7 @@ class RepairRequestEntity {
         entity.specialty = request.specialty();
         entity.title = request.title();
         entity.description = request.description();
-        entity.photoKeys = new ArrayList<>(request.photoKeys());
+        entity.mediaIds = new ArrayList<>(request.mediaIds());
         entity.createdAt = request.createdAt();
         entity.apply(request);
         return entity;
@@ -74,7 +74,7 @@ class RepairRequestEntity {
     }
 
     RepairRequest toDomain() {
-        return new RepairRequest(id, ownerUserId, specialty, title, description, List.copyOf(photoKeys),
+        return new RepairRequest(id, ownerUserId, specialty, title, description, List.copyOf(mediaIds),
                 status, assignedFixerUserId, createdAt, updatedAt);
     }
 }

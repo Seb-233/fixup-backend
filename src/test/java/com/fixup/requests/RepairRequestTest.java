@@ -26,7 +26,7 @@ class RepairRequestTest {
 
     private RepairRequest open() {
         return RepairRequest.open(UUID.randomUUID(), OWNER, Specialty.PLUMBING, "Gotera en el baño",
-                "El agua cae desde el techo cuando el vecino abre la ducha.", List.of("photo/1.jpg"), NOW);
+                "El agua cae desde el techo cuando el vecino abre la ducha.", List.of(UUID.randomUUID()), NOW);
     }
 
     private CurrentActor actor(UUID userId, UserStatus status, Role... roles) {
@@ -66,11 +66,29 @@ class RepairRequestTest {
 
     @Test
     void aRequestDoesNotAcceptMorePhotosThanTheLimit() {
-        var tooMany = java.util.Collections.nCopies(RepairRequest.MAX_PHOTOS + 1, "photo/x.jpg");
+        var tooMany = java.util.stream.Stream.generate(UUID::randomUUID)
+                .limit(RepairRequest.MAX_PHOTOS + 1)
+                .toList();
         assertThatThrownBy(() -> RepairRequest.open(UUID.randomUUID(), OWNER, Specialty.PAINTING,
                 "Pintura", "Repintar la sala", tooMany, NOW))
                 .isInstanceOf(RepairRequestConflictException.class)
                 .hasMessageContaining("at most");
+    }
+
+    @Test
+    void aRequestRejectsDuplicateOrNullMediaIds() {
+        UUID mediaId = UUID.randomUUID();
+        var duplicates = List.of(mediaId, mediaId);
+        assertThatThrownBy(() -> RepairRequest.open(UUID.randomUUID(), OWNER, Specialty.PAINTING,
+                "Pintura", "Repintar la sala", duplicates, NOW))
+                .isInstanceOf(RepairRequestConflictException.class)
+                .hasMessageContaining("duplicates");
+
+        var withNull = java.util.Arrays.asList(UUID.randomUUID(), null);
+        assertThatThrownBy(() -> RepairRequest.open(UUID.randomUUID(), OWNER, Specialty.PAINTING,
+                "Pintura", "Repintar la sala", withNull, NOW))
+                .isInstanceOf(RepairRequestConflictException.class)
+                .hasMessageContaining("null");
     }
 
     @Test

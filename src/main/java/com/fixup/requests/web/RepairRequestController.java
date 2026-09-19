@@ -2,6 +2,8 @@ package com.fixup.requests.web;
 
 import com.fixup.identityaccess.api.CurrentActorProvider;
 import com.fixup.fixers.api.Specialty;
+import com.fixup.media.api.MediaAttachmentService;
+import com.fixup.media.api.SignedMediaView;
 import com.fixup.requests.api.RepairRequestStatus;
 import com.fixup.requests.application.CreateRepairRequest;
 import com.fixup.requests.application.GetRepairRequest;
@@ -21,6 +23,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import java.time.Instant;
+import java.util.HashSet;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
@@ -55,32 +58,42 @@ class RepairRequestController {
     private final ListOwnRepairRequests listOwn;
     private final ListOpenRepairRequests listOpen;
     private final GetRepairRequest getRequest;
+    private final MediaAttachmentService mediaAttachmentService;
 
     RepairRequestController(CurrentActorProvider actors, CreateRepairRequest createRequest,
-            ListOwnRepairRequests listOwn, ListOpenRepairRequests listOpen, GetRepairRequest getRequest) {
+            ListOwnRepairRequests listOwn, ListOpenRepairRequests listOpen, GetRepairRequest getRequest,
+            MediaAttachmentService mediaAttachmentService) {
         this.actors = actors;
         this.createRequest = createRequest;
         this.listOwn = listOwn;
         this.listOpen = listOpen;
         this.getRequest = getRequest;
+        this.mediaAttachmentService = mediaAttachmentService;
     }
 
     @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
     @Operation(summary = "Open a repair request",
-            description = "The body carries provisional photo storage keys. No raw image binary content crosses this API.")
+            description = "The body carries media asset IDs. No raw image binary content crosses this API.")
     @ApiResponse(responseCode = "201", description = "The request is open and visible to the fixers")
     @ResponseStatus(HttpStatus.CREATED)
     RequestDetailResponse open(@Valid @RequestBody OpenRequest body) {
-        return RequestDetailResponse.of(createRequest.execute(actors.currentActor(),
-                new NewRepairRequest(body.specialty(), body.title(), body.description(),
-                        body.photoKeys() == null ? List.of() : body.photoKeys())));
+        var mediaIds = body.mediaIds() == null ? List.<UUID>of() : body.mediaIds();
+        var summary = createRequest.execute(actors.currentActor(),
+                new NewRepairRequest(body.specialty(), body.title(), body.description(), mediaIds));
+        var photos = mediaAttachmentService.resolveReadUrls(summary.mediaIds());
+        return RequestDetailResponse.of(summary, photos);
     }
 
     @GetMapping("/me")
     @Operation(summary = "List the repair requests opened by the current user")
     @ApiResponse(responseCode = "200", description = "Requests owned by the current user, newest first")
     List<RequestDetailResponse> mine() {
-        return listOwn.execute(actors.currentActor()).stream().map(RequestDetailResponse::of).toList();
+        return listOwn.execute(actors.currentActor()).stream()
+                .map(request -> {
+                    var photos = mediaAttachmentService.resolveReadUrls(request.mediaIds());
+                    return RequestDetailResponse.of(request, photos);
+                })
+                .toList();
     }
 
     @GetMapping("/open")
@@ -95,15 +108,27 @@ class RepairRequestController {
     @Operation(summary = "Read one repair request",
             description = "The owner always reads it; a verified compatible fixer reads it while open, or afterwards "
                     + "only when the work was assigned to him.")
-    @ApiResponse(responseCode = "200", description = "The request with its description and photo keys")
+    @ApiResponse(responseCode = "200", description = "The request with its description and photos")
     RequestDetailResponse detail(@PathVariable UUID requestId) {
-        return RequestDetailResponse.of(getRequest.execute(actors.currentActor(), requestId));
+        var request = getRequest.execute(actors.currentActor(), requestId);
+        var photos = mediaAttachmentService.resolveReadUrls(request.mediaIds());
+        return RequestDetailResponse.of(request, photos);
     }
 
     @Schema(additionalProperties = Schema.AdditionalPropertiesValue.FALSE)
     record OpenRequest(@NotNull Specialty specialty, @NotBlank @Size(max = 150) String title,
             @NotBlank @Size(max = 2000) String description,
-            @Size(max = 6) List<@NotBlank @Size(max = 512) String> photoKeys) {
+            @Size(max = 6) List<@NotNull UUID> mediaIds) {
+        public OpenRequest {
+            if (mediaIds != null) {
+                if (mediaIds.contains(null)) {
+                    throw new IllegalArgumentException("mediaIds cannot contain null elements");
+                }
+                if (new HashSet<>(mediaIds).size() != mediaIds.size()) {
+                    throw new IllegalArgumentException("mediaIds cannot contain duplicates");
+                }
+            }
+        }
     }
 
     @Schema(requiredProperties = {"requestId", "specialty", "title", "createdAt"})
@@ -113,21 +138,32 @@ class RepairRequestController {
         }
     }
 
-    @Schema(requiredProperties = {"requestId", "specialty", "title", "description", "photoKeys",
+    @Schema(requiredProperties = {"requestId", "specialty", "title", "description", "photos",
         "status", "createdAt"})
     record RequestDetailResponse(UUID requestId, Specialty specialty, String title, String description,
-            @Schema(description = "Provisional, insecure photo storage keys while the media module is integrated. Will be replaced by evidence IDs.")
-            List<String> photoKeys, RepairRequestStatus status,
+            List<PhotoResponse> photos, RepairRequestStatus status,
             @Schema(types = {"string", "null"}) UUID assignedFixerUserId, Instant createdAt) {
 
-        static RequestDetailResponse of(com.fixup.requests.domain.RepairRequest request) {
+        static RequestDetailResponse of(com.fixup.requests.domain.RepairRequest request,
+                List<SignedMediaView> photos) {
+            var photoResponses = photos == null ? List.<PhotoResponse>of() : photos.stream()
+                    .map(p -> new PhotoResponse(p.mediaId(), p.readUrl(), p.readUrlExpiresAt()))
+                    .toList();
             return new RequestDetailResponse(request.id(), request.specialty(), request.title(), request.description(),
-                    request.photoKeys(), request.status(), request.assignedFixerUserId(), request.createdAt());
+                    photoResponses, request.status(), request.assignedFixerUserId(), request.createdAt());
         }
 
-        static RequestDetailResponse of(RepairRequestSummary summary) {
+        static RequestDetailResponse of(RepairRequestSummary summary,
+                List<SignedMediaView> photos) {
+            var photoResponses = photos == null ? List.<PhotoResponse>of() : photos.stream()
+                    .map(p -> new PhotoResponse(p.mediaId(), p.readUrl(), p.readUrlExpiresAt()))
+                    .toList();
             return new RequestDetailResponse(summary.id(), summary.specialty(), summary.title(), summary.description(),
-                    summary.photoKeys(), summary.status(), summary.assignedFixerUserId(), summary.createdAt());
+                    photoResponses, summary.status(), summary.assignedFixerUserId(), summary.createdAt());
         }
+    }
+
+    @Schema(requiredProperties = {"mediaId", "readUrl", "readUrlExpiresAt"})
+    record PhotoResponse(UUID mediaId, String readUrl, Instant readUrlExpiresAt) {
     }
 }

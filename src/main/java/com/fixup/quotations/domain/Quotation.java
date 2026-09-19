@@ -12,11 +12,13 @@ import java.util.UUID;
 public record Quotation(UUID id, UUID requestId, UUID fixerUserId, long amount, int estimatedDays,
         String message, QuotationStatus status, Instant createdAt, Instant updatedAt) {
 
+    public static final long MAX_AMOUNT = 9_007_199_254_740_991L;
     public static final int MAX_ESTIMATED_DAYS = 365;
 
     public Quotation {
-        if (amount <= 0) {
-            throw new QuotationConflictException("INVALID_AMOUNT", "The quoted amount must be positive");
+        if (amount <= 0 || amount > MAX_AMOUNT) {
+            throw new QuotationConflictException("INVALID_AMOUNT",
+                    "The quoted amount must be between 1 and " + MAX_AMOUNT);
         }
         if (estimatedDays < 1 || estimatedDays > MAX_ESTIMATED_DAYS) {
             throw new QuotationConflictException("INVALID_ESTIMATE",

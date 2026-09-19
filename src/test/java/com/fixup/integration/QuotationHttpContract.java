@@ -2,6 +2,7 @@ package com.fixup.integration;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fixup.quotations.api.QuotationAccepted;
+import com.fixup.quotations.domain.Quotation;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.Callable;
@@ -55,6 +56,7 @@ abstract class QuotationHttpContract {
         SecurityContextHolder.clearContext();
         events.clear();
         databaseCleaner.clean();
+        TestStorageConfiguration.instance().clear();
     }
 
     // ---------- helpers ----------
@@ -111,19 +113,35 @@ abstract class QuotationHttpContract {
     }
 
     UUID createRequest(String ownerSubject, String specialty, String title, String description) throws Exception {
+        return createRequestWithMedia(ownerSubject, specialty, title, description, List.of());
+    }
+
+    UUID createRequestWithMedia(String ownerSubject, String specialty, String title, String description,
+            List<UUID> mediaIds) throws Exception {
+        String mediaArray = mapper.writeValueAsString(mediaIds);
         String body = """
                 {
                     "specialty": "%s",
                     "title": "%s",
                     "description": "%s",
-                    "photoKeys": ["photos/sample.jpg"]
+                    "mediaIds": %s
                 }
-                """.formatted(specialty, title, description);
+                """.formatted(specialty, title, description, mediaArray);
         var result = mvc.perform(post("/requests").with(identity(ownerSubject))
                 .contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isCreated())
                 .andReturn();
         return UUID.fromString(mapper.readTree(result.getResponse().getContentAsString()).get("requestId").asText());
+    }
+
+    UUID uploadAndConfirmRepairRequestMedia(String ownerSubject, UUID ownerUserId) throws Exception {
+        UUID mediaId = UUID.randomUUID();
+        String objectKey = "requests/" + ownerUserId + "/" + mediaId + ".jpg";
+        TestStorageConfiguration.instance().put(objectKey, TestStorageConfiguration.JPEG_MAGIC, "image/jpeg");
+        jdbc.update("INSERT INTO media_assets (id, owner_user_id, purpose, object_key, content_type, size_bytes, status, upload_expires_at, confirmed_at, created_at) "
+                + "VALUES (?, ?, 'REPAIR_REQUEST', ?, 'image/jpeg', 100, 'READY', CURRENT_TIMESTAMP + INTERVAL '1' DAY, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
+                mediaId, ownerUserId, objectKey);
+        return mediaId;
     }
 
     UUID submitQuotation(String fixerSubject, UUID requestId, long amount, int days, String message) throws Exception {
@@ -207,7 +225,8 @@ abstract class QuotationHttpContract {
                 .andExpect(jsonPath("$.requestId").value(requestId.toString()))
                 .andExpect(jsonPath("$.specialty").value("PLUMBING"))
                 .andExpect(jsonPath("$.description").value("Fuga constante de agua en cocina"))
-                .andExpect(jsonPath("$.status").value("OPEN"));
+                .andExpect(jsonPath("$.status").value("OPEN"))
+                .andExpect(jsonPath("$.photos").isArray());
     }
 
     @Test
@@ -262,7 +281,10 @@ abstract class QuotationHttpContract {
                 // Verify private fields are strictly absent
                 .andExpect(jsonPath("$[0].ownerUserId").doesNotExist())
                 .andExpect(jsonPath("$[0].description").doesNotExist())
+                .andExpect(jsonPath("$[0].photos").doesNotExist())
                 .andExpect(jsonPath("$[0].photoKeys").doesNotExist())
+                .andExpect(jsonPath("$[0].storageKey").doesNotExist())
+                .andExpect(jsonPath("$[0].mediaIds").doesNotExist())
                 .andExpect(jsonPath("$[0].assignedFixerUserId").doesNotExist());
     }
 
@@ -656,5 +678,254 @@ abstract class QuotationHttpContract {
                 .contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("ALREADY_QUOTED"));
+    }
+
+    @Test
+    void requestPhotosReturnedWithSignedUrlsAndNoStorageKeyExposed() throws Exception {
+        String ownerSubject = "auth0|owner-photos-signed";
+        UUID ownerUserId = provisionOwner(ownerSubject);
+
+        UUID m1 = uploadAndConfirmRepairRequestMedia(ownerSubject, ownerUserId);
+        UUID m2 = uploadAndConfirmRepairRequestMedia(ownerSubject, ownerUserId);
+
+        UUID requestId = createRequestWithMedia(ownerSubject, "PLUMBING", "Tubo roto con fotos",
+                "Se adjuntan evidencias", List.of(m1, m2));
+
+        var result = mvc.perform(get("/requests/" + requestId).with(identity(ownerSubject)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.requestId").value(requestId.toString()))
+                .andExpect(jsonPath("$.photos", hasSize(2)))
+                .andExpect(jsonPath("$.photos[0].mediaId").value(m1.toString()))
+                .andExpect(jsonPath("$.photos[0].readUrl", startsWith("http://localhost:9000/read/")))
+                .andExpect(jsonPath("$.photos[0].readUrlExpiresAt").isNotEmpty())
+                .andExpect(jsonPath("$.photos[1].mediaId").value(m2.toString()))
+                // strictly no storageKey or objectKey exposed
+                .andExpect(jsonPath("$.storageKey").doesNotExist())
+                .andExpect(jsonPath("$.objectKey").doesNotExist())
+                .andExpect(jsonPath("$.bucket").doesNotExist())
+                .andExpect(jsonPath("$.photoKeys").doesNotExist())
+                .andExpect(jsonPath("$.photos[0].storageKey").doesNotExist())
+                .andExpect(jsonPath("$.photos[0].objectKey").doesNotExist())
+                .andReturn();
+
+        assertThat(result.getResponse().getContentAsString()).doesNotContain("storageKey", "objectKey", "photoKeys");
+    }
+
+    @Test
+    void requestCreationValidatesMediaOwnershipPurposeAndReady() throws Exception {
+        String ownerSubject = "auth0|owner-media-validations";
+        UUID ownerUserId = provisionOwner(ownerSubject);
+
+        String otherOwnerSubject = "auth0|other-owner-media";
+        UUID otherOwnerUserId = provisionOwner(otherOwnerSubject);
+        UUID alienMedia = uploadAndConfirmRepairRequestMedia(otherOwnerSubject, otherOwnerUserId);
+
+        // Alien media -> 404
+        String alienReq = """
+                {"specialty":"PLUMBING","title":"Tubo","description":"Desc","mediaIds":["%s"]}
+                """.formatted(alienMedia);
+        mvc.perform(post("/requests").with(identity(ownerSubject))
+                .contentType(MediaType.APPLICATION_JSON).content(alienReq))
+                .andExpect(status().isNotFound());
+
+        // Duplicate media in request -> 400
+        UUID myMedia = uploadAndConfirmRepairRequestMedia(ownerSubject, ownerUserId);
+        String dupReq = """
+                {"specialty":"PLUMBING","title":"Tubo","description":"Desc","mediaIds":["%s","%s"]}
+                """.formatted(myMedia, myMedia);
+        mvc.perform(post("/requests").with(identity(ownerSubject))
+                .contentType(MediaType.APPLICATION_JSON).content(dupReq))
+                .andExpect(status().isBadRequest());
+
+        // More than 6 mediaIds -> 400
+        var tooManyIds = java.util.stream.Stream.generate(UUID::randomUUID).limit(7).toList();
+        String tooManyReq = """
+                {"specialty":"PLUMBING","title":"Tubo","description":"Desc","mediaIds":%s}
+                """.formatted(mapper.writeValueAsString(tooManyIds));
+        mvc.perform(post("/requests").with(identity(ownerSubject))
+                .contentType(MediaType.APPLICATION_JSON).content(tooManyReq))
+                .andExpect(status().isBadRequest());
+
+        // Media with purpose FIXER_PORTFOLIO cannot be attached to repair request -> 400
+        UUID portfolioMedia = UUID.randomUUID();
+        String portKey = "portfolio/" + ownerUserId + "/" + portfolioMedia + ".jpg";
+        TestStorageConfiguration.instance().put(portKey, TestStorageConfiguration.JPEG_MAGIC, "image/jpeg");
+        jdbc.update("INSERT INTO media_assets (id, owner_user_id, purpose, object_key, content_type, size_bytes, status, upload_expires_at, confirmed_at, created_at) "
+                + "VALUES (?, ?, 'FIXER_PORTFOLIO', ?, 'image/jpeg', 100, 'READY', CURRENT_TIMESTAMP + INTERVAL '1' DAY, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
+                portfolioMedia, ownerUserId, portKey);
+        String portReq = """
+                {"specialty":"PLUMBING","title":"Tubo","description":"Desc","mediaIds":["%s"]}
+                """.formatted(portfolioMedia);
+        mvc.perform(post("/requests").with(identity(ownerSubject))
+                .contentType(MediaType.APPLICATION_JSON).content(portReq))
+                .andExpect(status().isBadRequest());
+
+        // Successfully attach myMedia
+        UUID req1 = createRequestWithMedia(ownerSubject, "PLUMBING", "Tubo", "Desc", List.of(myMedia));
+        assertThat(req1).isNotNull();
+
+        // Already ATTACHED media cannot be reused -> 409
+        String reuseReq = """
+                {"specialty":"PLUMBING","title":"Otro tubo","description":"Desc","mediaIds":["%s"]}
+                """.formatted(myMedia);
+        mvc.perform(post("/requests").with(identity(ownerSubject))
+                .contentType(MediaType.APPLICATION_JSON).content(reuseReq))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
+    void amountValidationAcceptsOneAndMaxAmountAndRejectsZeroNegativeAndOverflow() throws Exception {
+        String ownerSubject = "auth0|owner-amount-limits";
+        provisionOwner(ownerSubject);
+        UUID requestId = createRequest(ownerSubject, "PAINTING", "Pintar reja", "Pintura antioxidante");
+
+        String fixerSubject = "auth0|fixer-amount-limits";
+        provisionVerifiedFixer(fixerSubject, "PAINTING");
+
+        // 1 is valid
+        UUID q1 = submitQuotation(fixerSubject, requestId, 1L, 1, "Oferta mínima");
+        assertThat(q1).isNotNull();
+
+        // Second request for testing MAX_AMOUNT
+        UUID request2Id = createRequest(ownerSubject, "PAINTING", "Pintar muro", "Pintura látex");
+        UUID qMax = submitQuotation(fixerSubject, request2Id, Quotation.MAX_AMOUNT, 1, "Oferta máxima");
+        assertThat(qMax).isNotNull();
+
+        // 0 rejected -> 400
+        UUID request3Id = createRequest(ownerSubject, "PAINTING", "Pintar techo", "Pintura blanca");
+        String body0 = """
+                {"requestId":"%s","amount":0,"estimatedDays":1}
+                """.formatted(request3Id);
+        mvc.perform(post("/quotations").with(identity(fixerSubject))
+                .contentType(MediaType.APPLICATION_JSON).content(body0))
+                .andExpect(status().isBadRequest());
+
+        // Negative rejected -> 400
+        String bodyNeg = """
+                {"requestId":"%s","amount":-100,"estimatedDays":1}
+                """.formatted(request3Id);
+        mvc.perform(post("/quotations").with(identity(fixerSubject))
+                .contentType(MediaType.APPLICATION_JSON).content(bodyNeg))
+                .andExpect(status().isBadRequest());
+
+        // MAX_AMOUNT + 1 (9007199254740992) rejected -> 400
+        String bodyOverflow = """
+                {"requestId":"%s","amount":9007199254740992,"estimatedDays":1}
+                """.formatted(request3Id);
+        mvc.perform(post("/quotations").with(identity(fixerSubject))
+                .contentType(MediaType.APPLICATION_JSON).content(bodyOverflow))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void concurrentQuotationSubmissionAndAcceptanceLeavesConsistentState() throws Exception {
+        String ownerSubject = "auth0|owner-concurrent-sub-acc";
+        provisionOwner(ownerSubject);
+        UUID requestId = createRequest(ownerSubject, "PLUMBING", "Tubería rota", "Fuga en baño principal");
+
+        String fixerASubject = "auth0|fixer-concurrent-sub-acc-a";
+        provisionVerifiedFixer(fixerASubject, "PLUMBING");
+        UUID quotationAId = submitQuotation(fixerASubject, requestId, 200_000L, 2, "Oferta Fixer A");
+
+        String fixerBSubject = "auth0|fixer-concurrent-sub-acc-b";
+        provisionVerifiedFixer(fixerBSubject, "PLUMBING");
+
+        var ready = new CountDownLatch(2);
+        var start = new CountDownLatch(1);
+        var acceptStatus = new AtomicInteger(0);
+        var submitStatus = new AtomicInteger(0);
+
+        String quotationBBody = """
+                {
+                    "requestId": "%s",
+                    "amount": 250000,
+                    "estimatedDays": 3,
+                    "message": "Oferta concurrente Fixer B"
+                }
+                """.formatted(requestId);
+
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            var taskAccept = (Callable<Void>) () -> {
+                ready.countDown();
+                start.await(10, TimeUnit.SECONDS);
+                var result = mvc.perform(post("/quotations/" + quotationAId + "/accept").with(identity(ownerSubject)))
+                        .andReturn();
+                acceptStatus.set(result.getResponse().getStatus());
+                return null;
+            };
+
+            var taskSubmit = (Callable<Void>) () -> {
+                ready.countDown();
+                start.await(10, TimeUnit.SECONDS);
+                var result = mvc.perform(post("/quotations").with(identity(fixerBSubject))
+                        .contentType(MediaType.APPLICATION_JSON).content(quotationBBody))
+                        .andReturn();
+                submitStatus.set(result.getResponse().getStatus());
+                return null;
+            };
+
+            var futures = List.of(executor.submit(taskAccept), executor.submit(taskSubmit));
+            assertThat(ready.await(10, TimeUnit.SECONDS)).isTrue();
+            start.countDown();
+
+            for (var future : futures) {
+                future.get(15, TimeUnit.SECONDS);
+            }
+        }
+
+        assertThat(acceptStatus.get()).as("acceptStatus must not be 500").isNotEqualTo(500);
+        assertThat(submitStatus.get()).as("submitStatus must not be 500").isNotEqualTo(500);
+
+        assertThat(acceptStatus.get()).isEqualTo(200);
+        assertThat(submitStatus.get()).isIn(201, 409);
+
+        Integer acceptedCount = jdbc.queryForObject(
+                "SELECT count(*) FROM quotations WHERE request_id = ? AND status = 'ACCEPTED'", Integer.class, requestId);
+        Integer submittedCount = jdbc.queryForObject(
+                "SELECT count(*) FROM quotations WHERE request_id = ? AND status = 'SUBMITTED'", Integer.class, requestId);
+        Integer totalCount = jdbc.queryForObject(
+                "SELECT count(*) FROM quotations WHERE request_id = ?", Integer.class, requestId);
+        Integer rejectedCount = jdbc.queryForObject(
+                "SELECT count(*) FROM quotations WHERE request_id = ? AND status = 'REJECTED'", Integer.class, requestId);
+        String requestStatus = jdbc.queryForObject(
+                "SELECT status FROM repair_requests WHERE id = ?", String.class, requestId);
+
+        assertThat(acceptedCount).isEqualTo(1);
+        assertThat(submittedCount).isEqualTo(0);
+        assertThat(rejectedCount).isEqualTo(totalCount - 1);
+        assertThat(requestStatus).isEqualTo("ASSIGNED");
+    }
+
+    @Test
+    void fixerWithoutSpecialtiesReceivesNoOpenRequests() throws Exception {
+        String ownerSubject = "auth0|owner-spec-filter";
+        provisionOwner(ownerSubject);
+        UUID requestId = createRequest(ownerSubject, "ELECTRICAL", "Toma quemada", "Revisar cableado");
+
+        String fixerSubject = "auth0|fixer-no-specs";
+        provisionVerifiedFixer(fixerSubject); // VERIFIED, but 0 specialties
+
+        // Receives 0 requests
+        mvc.perform(get("/requests/open").with(identity(fixerSubject)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(0)));
+
+        // Configure compatible specialty via POST /fixers/me/specialties
+        mvc.perform(post("/fixers/me/specialties").with(identity(fixerSubject))
+                .contentType(MediaType.APPLICATION_JSON).content("{\"specialties\":[\"ELECTRICAL\"]}"))
+                .andExpect(status().isOk());
+
+        // Now receives the request
+        mvc.perform(get("/requests/open").with(identity(fixerSubject)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(1)))
+                .andExpect(jsonPath("$[0].requestId").value(requestId.toString()));
+
+        // Incompatible request
+        UUID plumbingReq = createRequest(ownerSubject, "PLUMBING", "Llave", "Fuga");
+        mvc.perform(get("/requests/open").with(identity(fixerSubject)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(1)))
+                .andExpect(jsonPath("$[0].requestId").value(requestId.toString()));
     }
 }

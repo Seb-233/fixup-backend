@@ -1,6 +1,7 @@
 package com.fixup.media.web;
 
 import com.fixup.identityaccess.api.CurrentActorProvider;
+import com.fixup.media.api.MediaPurpose;
 import com.fixup.media.application.ConfirmUpload;
 import com.fixup.media.application.RequestUploadTicket;
 import com.fixup.shared.errors.ErrorResponse;
@@ -62,7 +63,7 @@ class MediaUploadsController {
     @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
     @ResponseStatus(HttpStatus.CREATED)
     @Operation(summary = "Request a presigned upload URL",
-            description = "Creates a pending media asset ticket and issues a signed PUT URL. Requires a verified fixer.")
+            description = "Creates a pending media asset ticket and issues a signed PUT URL.")
     @ApiResponse(responseCode = "201", description = "Upload ticket created")
     UploadTicketDto requestUpload(@Valid @RequestBody UploadRequestDto request) {
         var response = requestUpload.execute(
@@ -78,7 +79,7 @@ class MediaUploadsController {
 
     @PostMapping("/{mediaId}/confirm")
     @Operation(summary = "Confirm an uploaded media object",
-            description = "Verifies the object existence, size and content signature against storage. Idempotent. Requires a verified fixer.")
+            description = "Verifies the object existence, size and content signature against storage. Idempotent.")
     @ApiResponse(responseCode = "200", description = "Media confirmed and ready")
     ConfirmResponseDto confirmUpload(@PathVariable UUID mediaId) {
         var response = confirmUpload.execute(actors.currentActor(), mediaId);
@@ -87,7 +88,7 @@ class MediaUploadsController {
 
     @Schema(additionalProperties = Schema.AdditionalPropertiesValue.FALSE)
     record UploadRequestDto(
-            @NotBlank String purpose,
+            @NotNull MediaPurpose purpose,
             @NotBlank String contentType,
             @NotNull @Positive Long sizeBytes) {
     }

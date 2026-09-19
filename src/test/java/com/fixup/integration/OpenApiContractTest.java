@@ -40,6 +40,7 @@ class OpenApiContractTest {
         assertThat(paths.fieldNames()).toIterable().containsExactlyInAnyOrder(
                 "/auth/bootstrap", "/auth/me", "/auth/select-role",
                 "/fixers/me/verification", "/fixers/me/verification/documents",
+                "/fixers/me/specialties",
                 "/fixers/{fixerUserId}/verification/approve", "/fixers/{fixerUserId}/verification/reject",
                 "/media/uploads", "/media/uploads/{mediaId}/confirm",
                 "/media/me/portfolio", "/media/me/portfolio/pieces",
@@ -60,6 +61,7 @@ class OpenApiContractTest {
                 {"/auth/select-role", "post", "200"},
                 {"/fixers/me/verification", "get", "200"},
                 {"/fixers/me/verification/documents", "post", "200"},
+                {"/fixers/me/specialties", "post", "200"},
                 {"/fixers/{fixerUserId}/verification/approve", "post", "204"},
                 {"/fixers/{fixerUserId}/verification/reject", "post", "204"},
                 {"/media/uploads", "post", "201"},
@@ -112,6 +114,8 @@ class OpenApiContractTest {
                 .contains("ID_CARD", "TRADE_CERTIFICATE");
         assertThat(contract.at("/components/schemas/VerificationResponse/properties/submittedAt/type").toString())
                 .contains("null");
+        assertThat(contract.at("/components/schemas/VerificationResponse/properties/specialties").toString())
+                .isNotEmpty();
         // No document content crosses this API: the request carries storage keys only.
         assertThat(contract.at("/components/schemas/DocumentRequest/properties").toString())
                 .contains("storageKey").doesNotContain("content", "file");
@@ -124,16 +128,26 @@ class OpenApiContractTest {
                 .contains("SUBMITTED", "ACCEPTED", "REJECTED");
         assertThat(contract.at("/components/schemas/RequestDetailResponse/properties/assignedFixerUserId/type")
                 .toString()).contains("null");
+        assertThat(contract.at("/components/schemas/RequestDetailResponse/properties/photos/type").asText())
+                .isEqualTo("array");
+        assertThat(contract.at("/components/schemas/PhotoResponse/properties").toString())
+                .contains("mediaId", "readUrl", "readUrlExpiresAt")
+                .doesNotContain("storageKey", "objectKey", "bucket");
+        assertThat(contract.at("/components/schemas/RequestDetailResponse/properties").toString())
+                .doesNotContain("storageKey", "photoKeys");
         assertThat(contract.at("/components/schemas/OpenRequestSummaryResponse/properties").toString())
                 .contains("requestId", "specialty", "title", "createdAt")
-                .doesNotContain("ownerUserId", "description", "photoKeys", "assignedFixerUserId");
-        // No photo content crosses this API either: the request carries storage keys only.
+                .doesNotContain("ownerUserId", "description", "photoKeys", "storageKey", "assignedFixerUserId");
+        // No photo content crosses this API: the request carries media IDs only.
         assertThat(contract.at("/components/schemas/OpenRequest/properties").toString())
-                .contains("photoKeys").doesNotContain("content", "file");
+                .contains("mediaIds")
+                .doesNotContain("photoKeys", "storageKey", "content", "file");
         // The author of a quotation comes from the validated token, never from the client body.
         assertThat(contract.at("/components/schemas/QuotationRequest/properties").toString())
                 .contains("requestId", "amount", "estimatedDays")
                 .doesNotContain("fixerUserId", "status");
+        assertThat(contract.at("/components/schemas/QuotationRequest/properties/amount/maximum").asLong())
+                .isEqualTo(9007199254740991L);
 
         // PieceRequest now references mediaId instead of raw storageKey or kind
         assertThat(contract.at("/components/schemas/PieceRequest/properties").toString())

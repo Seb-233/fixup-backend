@@ -33,7 +33,7 @@ public class SubmitQuotation {
         QuotationAccess.requireActiveFixer(actor);
         eligibility.requireVerified(actor);
         var fixerSpecialties = eligibility.specialtiesOf(actor);
-        var request = requests.require(draft.requestId());
+        var request = requests.lockForDecision(draft.requestId());
         if (!request.isOpen()) {
             throw new QuotationConflictException("REQUEST_NOT_OPEN",
                     "The repair request no longer admits quotations");

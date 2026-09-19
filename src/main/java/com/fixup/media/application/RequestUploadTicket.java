@@ -2,7 +2,10 @@ package com.fixup.media.application;
 
 import com.fixup.fixers.api.FixerEligibility;
 import com.fixup.identityaccess.api.CurrentActor;
+import com.fixup.identityaccess.api.Role;
+import com.fixup.identityaccess.api.UserStatus;
 import com.fixup.media.api.MediaException;
+import com.fixup.media.api.MediaPurpose;
 import com.fixup.media.api.MediaTooLargeException;
 import com.fixup.media.api.MediaTypeNotAllowedException;
 import com.fixup.media.domain.MediaAsset;
@@ -19,7 +22,6 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class RequestUploadTicket {
     private static final Duration UPLOAD_EXPIRATION = Duration.ofMinutes(15);
-    private static final String ALLOWED_PURPOSE = "FIXER_PORTFOLIO";
 
     private final MediaAssets mediaAssets;
     private final ObjectStorage objectStorage;
@@ -39,11 +41,20 @@ public class RequestUploadTicket {
 
     @Transactional
     public UploadTicketResponse execute(CurrentActor actor, NewUploadRequest request) {
-        eligibility.requireVerified(actor);
-
-        if (!ALLOWED_PURPOSE.equals(request.purpose())) {
-            throw new MediaException(400, "INVALID_PURPOSE", "Purpose must be FIXER_PORTFOLIO");
+        if (request.purpose() == null) {
+            throw new MediaException(400, "INVALID_PURPOSE", "Purpose must not be null");
         }
+
+        if (request.purpose() == MediaPurpose.FIXER_PORTFOLIO) {
+            eligibility.requireVerified(actor);
+        } else if (request.purpose() == MediaPurpose.REPAIR_REQUEST) {
+            if (actor.status() != UserStatus.ACTIVE || (!actor.hasRole(Role.OWNER) && !actor.hasRole(Role.TENANT) && !actor.hasRole(Role.REAL_ESTATE_MANAGER))) {
+                throw new MediaException(403, "ACCESS_DENIED", "You do not have permission to perform this action");
+            }
+        } else {
+            throw new MediaException(400, "INVALID_PURPOSE", "Unsupported media purpose");
+        }
+
         if (!MediaContentTypeValidator.isAllowed(request.contentType())) {
             throw new MediaTypeNotAllowedException("Only JPEG, PNG and WebP images are allowed");
         }
@@ -56,7 +67,8 @@ public class RequestUploadTicket {
 
         UUID mediaId = UUID.randomUUID();
         String extension = MediaContentTypeValidator.extensionFor(request.contentType());
-        String objectKey = "portfolio/" + actor.internalUserId() + "/" + mediaId + "." + extension;
+        String prefix = request.purpose() == MediaPurpose.FIXER_PORTFOLIO ? "portfolio" : "requests";
+        String objectKey = prefix + "/" + actor.internalUserId() + "/" + mediaId + "." + extension;
 
         var ticket = objectStorage.createUploadTicket(objectKey, request.contentType(), request.sizeBytes(), UPLOAD_EXPIRATION);
         Instant now = Instant.now();
@@ -80,7 +92,21 @@ public class RequestUploadTicket {
                 ticket.expiresAt());
     }
 
-    public record NewUploadRequest(String purpose, String contentType, long sizeBytes) {
+    public record NewUploadRequest(MediaPurpose purpose, String contentType, long sizeBytes) {
+        public NewUploadRequest(String purpose, String contentType, long sizeBytes) {
+            this(parsePurpose(purpose), contentType, sizeBytes);
+        }
+
+        private static MediaPurpose parsePurpose(String raw) {
+            if (raw == null) {
+                throw new MediaException(400, "INVALID_PURPOSE", "Purpose must not be null");
+            }
+            try {
+                return MediaPurpose.valueOf(raw.trim());
+            } catch (IllegalArgumentException e) {
+                throw new MediaException(400, "INVALID_PURPOSE", "Invalid purpose: " + raw);
+            }
+        }
     }
 
     public record UploadTicketResponse(

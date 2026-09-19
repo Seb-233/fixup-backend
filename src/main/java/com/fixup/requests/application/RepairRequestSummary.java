@@ -12,12 +12,12 @@ import java.util.UUID;
  * is, but no contact detail of either party is exposed here.
  */
 public record RepairRequestSummary(UUID id, UUID ownerUserId, Specialty specialty, String title,
-        String description, List<String> photoKeys, RepairRequestStatus status,
+        String description, List<UUID> mediaIds, RepairRequestStatus status,
         UUID assignedFixerUserId, Instant createdAt) {
 
     static RepairRequestSummary of(RepairRequest request) {
         return new RepairRequestSummary(request.id(), request.ownerUserId(), request.specialty(),
-                request.title(), request.description(), request.photoKeys(), request.status(),
+                request.title(), request.description(), request.mediaIds(), request.status(),
                 request.assignedFixerUserId(), request.createdAt());
     }
 }

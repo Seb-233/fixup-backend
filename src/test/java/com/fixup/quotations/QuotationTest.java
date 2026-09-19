@@ -56,12 +56,19 @@ class QuotationTest {
     }
 
     @Test
-    void theAmountMustBePositive() {
+    void theAmountMustBePositiveAndNotExceedMaxAmount() {
+        assertThatCode(() -> Quotation.submitted(UUID.randomUUID(), REQUEST, FIXER, 1L, 1, null, NOW))
+                .doesNotThrowAnyException();
+        assertThatCode(() -> Quotation.submitted(UUID.randomUUID(), REQUEST, FIXER, Quotation.MAX_AMOUNT, 1, null, NOW))
+                .doesNotThrowAnyException();
         assertThatThrownBy(() -> Quotation.submitted(UUID.randomUUID(), REQUEST, FIXER, 0L, 1, null, NOW))
                 .isInstanceOf(QuotationConflictException.class)
-                .hasMessageContaining("must be positive");
+                .hasMessageContaining("between 1 and");
         assertThatThrownBy(() -> Quotation.submitted(UUID.randomUUID(), REQUEST, FIXER, -1L, 1, null, NOW))
                 .isInstanceOf(QuotationConflictException.class);
+        assertThatThrownBy(() -> Quotation.submitted(UUID.randomUUID(), REQUEST, FIXER, Quotation.MAX_AMOUNT + 1, 1, null, NOW))
+                .isInstanceOf(QuotationConflictException.class)
+                .hasMessageContaining("between 1 and");
     }
 
     @Test

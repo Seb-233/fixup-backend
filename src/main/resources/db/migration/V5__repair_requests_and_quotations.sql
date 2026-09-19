@@ -2,6 +2,10 @@
 -- repair_requests y repair_request_photos pertenecen al módulo requests; quotations al módulo
 -- quotations. Ninguna asociación JPA expone la entidad de otro módulo.
 
+-- Extend media_assets purpose to allow REPAIR_REQUEST
+ALTER TABLE media_assets DROP CONSTRAINT ck_media_purpose;
+ALTER TABLE media_assets ADD CONSTRAINT ck_media_purpose CHECK (purpose IN ('FIXER_PORTFOLIO', 'REPAIR_REQUEST'));
+
 CREATE TABLE repair_requests (
     id UUID PRIMARY KEY,
     owner_user_id UUID NOT NULL REFERENCES users(id),
@@ -34,9 +38,9 @@ CREATE INDEX ix_repair_requests_owner ON repair_requests (owner_user_id, created
 CREATE TABLE repair_request_photos (
     request_id UUID NOT NULL REFERENCES repair_requests(id) ON DELETE CASCADE,
     photo_order INTEGER NOT NULL,
-    storage_key VARCHAR(512) NOT NULL,
+    media_id UUID NOT NULL REFERENCES media_assets(id),
     PRIMARY KEY (request_id, photo_order),
-    CONSTRAINT ck_request_photo_key CHECK (length(trim(storage_key)) > 0),
+    CONSTRAINT uq_repair_request_photos_media UNIQUE (media_id),
     CONSTRAINT ck_request_photo_order CHECK (photo_order >= 0 AND photo_order < 6)
 );
 
@@ -53,7 +57,7 @@ CREATE TABLE quotations (
     -- One offer per fixer per request: a second attempt is a conflict, not a duplicate row.
     CONSTRAINT uq_quotation_request_fixer UNIQUE (request_id, fixer_user_id),
     CONSTRAINT ck_quotation_status CHECK (status IN ('SUBMITTED', 'ACCEPTED', 'REJECTED')),
-    CONSTRAINT ck_quotation_amount CHECK (amount > 0),
+    CONSTRAINT ck_quotation_amount CHECK (amount > 0 AND amount <= 9007199254740991),
     CONSTRAINT ck_quotation_estimate CHECK (estimated_days BETWEEN 1 AND 365),
     CONSTRAINT ck_quotation_message CHECK (message IS NULL OR length(trim(message)) > 0)
 );
@@ -62,8 +66,6 @@ CREATE INDEX ix_quotations_request ON quotations (request_id, amount);
 CREATE INDEX ix_quotations_fixer ON quotations (fixer_user_id, created_at DESC);
 
 -- Especialidades persistidas para cada Fixer (módulo fixers).
--- Nota: se extiende esta migración provisionalmente en feature/fr-uc-18-quotations;
--- su renumeración definitiva se realizará tras integrar los PR #26 y #27.
 CREATE TABLE fixer_specialties (
     fixer_user_id UUID NOT NULL REFERENCES fixer_profiles(user_id) ON DELETE CASCADE,
     specialty VARCHAR(50) NOT NULL,
