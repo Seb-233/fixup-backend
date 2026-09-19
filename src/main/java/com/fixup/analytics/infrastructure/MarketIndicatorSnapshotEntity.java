@@ -48,19 +48,31 @@ class MarketIndicatorSnapshotEntity {
     }
 
     static MarketIndicatorSnapshotEntity from(MarketIndicators indicators) {
+        return from(indicators, Instant.now());
+    }
+
+    static MarketIndicatorSnapshotEntity from(MarketIndicators indicators, Instant now) {
         var entity = new MarketIndicatorSnapshotEntity();
         entity.zone = indicators.zone();
-        entity.apply(indicators);
+        entity.apply(indicators, now);
         return entity;
     }
 
     void apply(MarketIndicators indicators) {
+        apply(indicators, Instant.now());
+    }
+
+    void apply(MarketIndicators indicators, Instant now) {
         this.pricePerSquareMeter = indicators.pricePerSquareMeter();
         this.yearOverYearVariationPercent = indicators.yearOverYearVariationPercent();
         this.averageDaysOnMarket = indicators.averageDaysOnMarket();
         this.observedAt = indicators.observedAt();
-        this.cachedAt = Instant.now();
+        this.cachedAt = now;
         this.source = indicators.source();
+    }
+
+    Instant getObservedAt() {
+        return observedAt;
     }
 
     MarketIndicators toDomain() {

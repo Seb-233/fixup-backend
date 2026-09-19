@@ -9,10 +9,12 @@ import com.fixup.analytics.domain.MarketIndicatorsSource;
 import com.fixup.analytics.domain.MarketSourceUnavailableException;
 import com.fixup.analytics.domain.Zone;
 import com.fixup.identityaccess.api.CurrentActor;
+import com.fixup.identityaccess.api.UserStatus;
 import java.time.Instant;
 import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 
 /**
@@ -22,6 +24,7 @@ import org.springframework.stereotype.Service;
  * el 25-ago. El orden es deliberado:
  *
  * <ol>
+ *   <li>Si la cuenta del actor no está ACTIVE se rechaza con 403 ACCESS_DENIED.</li>
  *   <li>Si la caché está dentro de la ventana de frescura se responde con ella y no se contacta
  *       la fuente externa: menos dependencia de un tercero que puede caerse.</li>
  *   <li>Si no, se consulta la fuente, que ya viene envuelta en Timeout y Retry.</li>
@@ -54,9 +57,9 @@ public class GetMarketIndicators {
     }
 
     public MarketIndicatorsView execute(CurrentActor actor, String requestedZone) {
-        // Cualquier cuenta activa puede consultar indicadores: no hay restricción por rol, pero
-        // resolver el actor ya exige que la cuenta exista y esté ACTIVE en PostgreSQL.
-        java.util.Objects.requireNonNull(actor, "actor");
+        if (actor == null || actor.status() != UserStatus.ACTIVE) {
+            throw new AccessDeniedException("Active account required to view market indicators");
+        }
         var zone = Zone.normalize(requestedZone);
         var now = Instant.now();
         Optional<MarketIndicators> cached = snapshots.findByZone(zone);
@@ -67,8 +70,13 @@ public class GetMarketIndicators {
 
         try {
             var fresh = source.fetch(zone);
-            snapshots.save(fresh);
-            return MarketIndicatorsView.of(fresh, IndicatorFreshness.LIVE);
+            boolean accepted = snapshots.saveIfNewer(fresh);
+            if (accepted) {
+                return MarketIndicatorsView.of(fresh, IndicatorFreshness.LIVE);
+            }
+            return snapshots.findByZone(zone)
+                    .map(stored -> MarketIndicatorsView.of(stored, IndicatorFreshness.CACHED))
+                    .orElseGet(() -> MarketIndicatorsView.of(fresh, IndicatorFreshness.LIVE));
         } catch (MarketSourceUnavailableException unavailable) {
             // No se registra la causa con detalle del proveedor: solo el hecho y la zona.
             LOG.warn("Market source unavailable for zone {}; falling back to the last known value", zone);

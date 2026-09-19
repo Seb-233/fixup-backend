@@ -2,12 +2,14 @@ package com.fixup.integration;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fixup.analytics.api.IndicatorSource;
+import com.fixup.analytics.domain.MarketIndicatorSnapshots;
 import com.fixup.analytics.domain.MarketIndicators;
 import com.fixup.analytics.domain.MarketIndicatorsSource;
 import com.fixup.analytics.domain.MarketSourceUnavailableException;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -42,12 +44,23 @@ abstract class MarketIndicatorsHttpContract {
                 new AtomicReference<>(Instant.parse("2026-09-18T09:00:00Z"));
         static final AtomicReference<IndicatorSource> SOURCE =
                 new AtomicReference<>(IndicatorSource.EXTERNAL_PROVIDER);
+        static final AtomicReference<CyclicBarrier> BARRIER =
+                new AtomicReference<>(null);
+        static final AtomicReference<String> FAILURE_REASON =
+                new AtomicReference<>(null);
 
         @Override
         public MarketIndicators fetch(String zone) {
             CALLS.incrementAndGet();
+            if (BARRIER.get() != null) {
+                try {
+                    BARRIER.get().await(10, java.util.concurrent.TimeUnit.SECONDS);
+                } catch (Exception ignored) {
+                }
+            }
             if (DOWN.get()) {
-                throw new MarketSourceUnavailableException("synthetic outage");
+                String reason = FAILURE_REASON.get() != null ? FAILURE_REASON.get() : "synthetic outage";
+                throw new MarketSourceUnavailableException(reason);
             }
             return new MarketIndicators(zone, BigDecimal.valueOf(5_250_000), BigDecimal.valueOf(3.40),
                     52, OBSERVED_AT.get(), SOURCE.get());
@@ -66,6 +79,7 @@ abstract class MarketIndicatorsHttpContract {
     @Autowired MockMvc mvc;
     @Autowired JdbcTemplate jdbc;
     @Autowired ObjectMapper mapper;
+    @Autowired MarketIndicatorSnapshots snapshots;
 
     @BeforeEach
     void clearIsolatedTestDatabase() {
@@ -78,21 +92,23 @@ abstract class MarketIndicatorsHttpContract {
         ControllableSource.CALLS.set(0);
         ControllableSource.OBSERVED_AT.set(Instant.now().minus(Duration.ofMinutes(30)));
         ControllableSource.SOURCE.set(IndicatorSource.EXTERNAL_PROVIDER);
+        ControllableSource.BARRIER.set(null);
+        ControllableSource.FAILURE_REASON.set(null);
     }
 
-    private RequestPostProcessor identity(String subject) {
+    protected RequestPostProcessor identity(String subject) {
         return jwt().jwt(token -> token.subject(subject).claim("email", "reader@example.test")
                 .claim("name", "Synthetic reader"));
     }
 
-    private void bootstrap(String subject) throws Exception {
+    protected void bootstrap(String subject) throws Exception {
         mvc.perform(post("/auth/bootstrap").with(identity(subject))).andExpect(status().isCreated());
         mvc.perform(post("/auth/select-role").with(identity(subject))
                 .contentType(MediaType.APPLICATION_JSON).content("{\"role\":\"TENANT\"}"))
                 .andExpect(status().isOk());
     }
 
-    private org.springframework.test.web.servlet.ResultActions read(String subject, String zone)
+    protected org.springframework.test.web.servlet.ResultActions read(String subject, String zone)
             throws Exception {
         return mvc.perform(get("/analytics/zones/" + zone + "/market-indicators").with(identity(subject)));
     }
@@ -200,6 +216,35 @@ abstract class MarketIndicatorsHttpContract {
     }
 
     @Test
+    void invalidProviderPayloadWithPreviousCacheReturns200DegradedAndNever400() throws Exception {
+        bootstrap("auth0|market-reader");
+        var observed = Instant.now().minus(Duration.ofDays(2));
+        ControllableSource.OBSERVED_AT.set(observed);
+        read("auth0|market-reader", "CHAPINERO").andExpect(jsonPath("$.freshness").value("LIVE"));
+
+        // Simulate provider sending defective payload
+        ControllableSource.DOWN.set(true);
+        ControllableSource.FAILURE_REASON.set("The market source returned an invalid payload");
+
+        read("auth0|market-reader", "CHAPINERO")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.freshness").value("DEGRADED"))
+                .andExpect(jsonPath("$.degraded").value(true));
+    }
+
+    @Test
+    void invalidProviderPayloadWithoutPreviousCacheReturns503AndNever400() throws Exception {
+        bootstrap("auth0|market-reader");
+        ControllableSource.DOWN.set(true);
+        ControllableSource.FAILURE_REASON.set("The market source returned an invalid payload");
+
+        read("auth0|market-reader", "NUEVA-ZONA-SIN-DATOS")
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.code").value("INDICATORS_UNAVAILABLE"))
+                .andExpect(jsonPath("$.status").value(503));
+    }
+
+    @Test
     void theCachedRowKeepsTheObservationInstantAsItsFreshnessMark() throws Exception {
         bootstrap("auth0|market-reader");
         var observed = Instant.now().minus(Duration.ofHours(2));
@@ -212,6 +257,28 @@ abstract class MarketIndicatorsHttpContract {
         assertThat(columns).contains("observed_at", "cached_at");
         assertThat(jdbc.queryForObject("SELECT count(*) FROM market_indicator_snapshots WHERE zone = ?",
                 Integer.class, "USAQUEN")).isEqualTo(1);
+    }
+
+    @Test
+    void newerSnapshotCannotBeReplacedByOlderSnapshot() {
+        var zone = "TEST-MONOTONIC";
+        var t2 = Instant.now().minus(Duration.ofHours(1)).truncatedTo(java.time.temporal.ChronoUnit.MICROS);
+        var t1 = t2.minus(Duration.ofHours(6)).truncatedTo(java.time.temporal.ChronoUnit.MICROS);
+
+        var newer = new MarketIndicators(zone, BigDecimal.valueOf(6_000_000),
+                BigDecimal.valueOf(4.5), 30, t2, IndicatorSource.EXTERNAL_PROVIDER);
+        boolean accepted1 = snapshots.saveIfNewer(newer);
+        assertThat(accepted1).isTrue();
+
+        var older = new MarketIndicators(zone, BigDecimal.valueOf(4_000_000),
+                BigDecimal.valueOf(2.0), 60, t1, IndicatorSource.EXTERNAL_PROVIDER);
+        boolean accepted2 = snapshots.saveIfNewer(older);
+        assertThat(accepted2).isFalse();
+
+        var stored = snapshots.findByZone(zone).orElseThrow();
+        assertThat(stored.observedAt()).isEqualTo(t2);
+        assertThat(stored.pricePerSquareMeter()).isEqualByComparingTo(BigDecimal.valueOf(6_000_000));
+        assertThat(stored.averageDaysOnMarket()).isEqualTo(30);
     }
 
     @Test
@@ -230,7 +297,10 @@ abstract class MarketIndicatorsHttpContract {
         bootstrap("auth0|suspended-reader");
         jdbc.update("UPDATE users SET status = 'SUSPENDED' WHERE auth0_subject = ?", "auth0|suspended-reader");
 
-        read("auth0|suspended-reader", "CHAPINERO").andExpect(status().isForbidden());
+        read("auth0|suspended-reader", "CHAPINERO")
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+        assertThat(ControllableSource.CALLS).hasValue(0);
     }
 
     @Test

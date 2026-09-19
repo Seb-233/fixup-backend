@@ -21,6 +21,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
+import org.springframework.security.access.AccessDeniedException;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -52,8 +53,18 @@ class GetMarketIndicatorsTest {
         }
 
         @Override
-        public void save(MarketIndicators value) {
+        public boolean saveIfNewer(MarketIndicators value) {
+            var existing = rows.get(value.zone());
+            if (existing != null && value.observedAt().isBefore(existing.observedAt())) {
+                return false;
+            }
             rows.put(value.zone(), value);
+            return true;
+        }
+
+        @Override
+        public void save(MarketIndicators value) {
+            saveIfNewer(value);
         }
     }
 
@@ -69,6 +80,41 @@ class GetMarketIndicatorsTest {
 
     private GetMarketIndicators useCase(MarketIndicatorsSource source, MarketIndicatorSnapshots snapshots) {
         return new GetMarketIndicators(source, snapshots, new FreshnessWindow(Duration.ofHours(6)));
+    }
+
+    @Test
+    void aSuspendedActorIsForbiddenToReadIndicatorsAndSourceIsNotCalled() {
+        var suspendedActor = new CurrentActor(UUID.randomUUID(), "auth0|suspended",
+                Set.of(Role.TENANT), UserStatus.SUSPENDED);
+        var source = new FailingSource();
+        var snapshots = new InMemorySnapshots();
+
+        assertThatThrownBy(() -> useCase(source, snapshots).execute(suspendedActor, "CHAPINERO"))
+                .isInstanceOf(AccessDeniedException.class)
+                .hasMessageContaining("Active account required");
+        assertThat(source.calls).hasValue(0);
+    }
+
+    @Test
+    void aDisabledActorIsForbiddenToReadIndicatorsAndSourceIsNotCalled() {
+        var disabledActor = new CurrentActor(UUID.randomUUID(), "auth0|disabled",
+                Set.of(Role.TENANT), UserStatus.DISABLED);
+        var source = new FailingSource();
+        var snapshots = new InMemorySnapshots();
+
+        assertThatThrownBy(() -> useCase(source, snapshots).execute(disabledActor, "CHAPINERO"))
+                .isInstanceOf(AccessDeniedException.class);
+        assertThat(source.calls).hasValue(0);
+    }
+
+    @Test
+    void aNullActorThrowsAccessDenied() {
+        var source = new FailingSource();
+        var snapshots = new InMemorySnapshots();
+
+        assertThatThrownBy(() -> useCase(source, snapshots).execute(null, "CHAPINERO"))
+                .isInstanceOf(AccessDeniedException.class);
+        assertThat(source.calls).hasValue(0);
     }
 
     @Test
@@ -111,6 +157,19 @@ class GetMarketIndicatorsTest {
         assertThat(view.pricePerSquareMeter()).isEqualTo(stale.pricePerSquareMeter());
         // El dato degradado conserva la fecha real de observación: no se presenta como actual.
         assertThat(view.observedAt()).isEqualTo(stale.observedAt());
+    }
+
+    @Test
+    void ifConcurrentSaveRejectsOlderDataTheExistingCacheIsReturnedAsCached() {
+        var snapshots = new InMemorySnapshots();
+        var newer = indicators(Instant.now(), 6_000_000);
+        snapshots.save(newer);
+
+        var older = indicators(Instant.now().minus(Duration.ofHours(1)), 5_000_000);
+        var view = useCase(zone -> older, snapshots).execute(ACTOR, "CHAPINERO");
+
+        assertThat(view.pricePerSquareMeter()).isEqualTo(newer.pricePerSquareMeter());
+        assertThat(view.freshness()).isEqualTo(IndicatorFreshness.CACHED);
     }
 
     /** LIVE dice cómo se obtuvo el dato, source dice de quién: son cosas distintas y viajan ambas. */
