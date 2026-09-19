@@ -22,4 +22,11 @@ class FixerErrorHandler {
         return ResponseEntity.status(409).body(new ErrorResponse(409, exception.code(),
                 exception.getMessage(), request.getRequestURI()));
     }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    ResponseEntity<ErrorResponse> invalid(IllegalArgumentException exception, HttpServletRequest request) {
+        return ResponseEntity.status(400).body(new ErrorResponse(400, "INVALID_REQUEST",
+                exception.getMessage() != null ? exception.getMessage() : "The request is invalid",
+                request.getRequestURI()));
+    }
 }

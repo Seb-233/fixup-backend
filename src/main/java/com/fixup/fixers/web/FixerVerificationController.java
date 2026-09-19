@@ -24,6 +24,9 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import com.fixup.fixers.api.Specialty;
+import com.fixup.fixers.application.UpdateFixerSpecialties;
+import java.util.HashSet;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -53,13 +56,16 @@ class FixerVerificationController {
     private final GetFixerVerification getVerification;
     private final SubmitFixerVerification submitVerification;
     private final FixerReview review;
+    private final UpdateFixerSpecialties updateSpecialties;
 
     FixerVerificationController(CurrentActorProvider actors, GetFixerVerification getVerification,
-            SubmitFixerVerification submitVerification, FixerReview review) {
+            SubmitFixerVerification submitVerification, FixerReview review,
+            UpdateFixerSpecialties updateSpecialties) {
         this.actors = actors;
         this.getVerification = getVerification;
         this.submitVerification = submitVerification;
         this.review = review;
+        this.updateSpecialties = updateSpecialties;
     }
 
     @GetMapping("/me/verification")
@@ -69,12 +75,21 @@ class FixerVerificationController {
         return VerificationResponse.of(getVerification.execute(actors.currentActor()));
     }
 
+    @PostMapping("/me/specialties")
+    @Operation(summary = "Update the fixer's offered specialties",
+            description = "Configures the trades the fixer can attend. Requires active account and FIXER role.")
+    @ApiResponse(responseCode = "200", description = "Verification state including updated specialties")
+    VerificationResponse updateSpecialties(@Valid @RequestBody SpecialtiesRequest request) {
+        var actor = actors.currentActor();
+        updateSpecialties.execute(actor, request.specialties());
+        return VerificationResponse.of(getVerification.execute(actor));
+    }
+
     @PostMapping("/me/verification/documents")
     @Operation(summary = "File the verification documents and open the administrative review",
-            description = "The body carries storage keys only. Files are uploaded by the client against a "
-                    + "signed URL, so no document content crosses this API. Documents may be filed one at a "
-                    + "time; the review opens by itself once the mandatory set is complete. Resubmitting a "
-                    + "type replaces its key.")
+            description = "The body carries storage keys only. No document content crosses this API. Documents may be "
+                    + "filed one at a time; the review opens by itself once the mandatory set is complete. Resubmitting "
+                    + "a type replaces its key.")
     @ApiResponse(responseCode = "200", description = "Verification state after the submission")
     VerificationResponse submit(@Valid @RequestBody DocumentsRequest request) {
         var actor = actors.currentActor();
@@ -100,6 +115,21 @@ class FixerVerificationController {
     }
 
     @Schema(additionalProperties = Schema.AdditionalPropertiesValue.FALSE)
+    record SpecialtiesRequest(
+            @NotEmpty @Size(min = 1, max = 6) List<@NotNull Specialty> specialties) {
+        public SpecialtiesRequest {
+            if (specialties != null) {
+                if (specialties.contains(null)) {
+                    throw new IllegalArgumentException("Specialties cannot contain null elements");
+                }
+                if (new HashSet<>(specialties).size() != specialties.size()) {
+                    throw new IllegalArgumentException("Specialties cannot contain duplicates");
+                }
+            }
+        }
+    }
+
+    @Schema(additionalProperties = Schema.AdditionalPropertiesValue.FALSE)
     record DocumentsRequest(@NotEmpty @Size(max = 4) @Valid List<DocumentRequest> documents) {
     }
 
@@ -112,18 +142,19 @@ class FixerVerificationController {
     record RejectionRequest(@NotBlank @Size(max = 500) String reason) {
     }
 
-    @Schema(requiredProperties = {"status", "underReview", "submittedDocuments", "missingDocuments"})
+    @Schema(requiredProperties = {"status", "underReview", "submittedDocuments", "missingDocuments", "specialties"})
     record VerificationResponse(FixerVerificationStatus status, boolean underReview,
             @Schema(types = {"string", "null"}) Instant submittedAt,
             @Schema(types = {"string", "null"}) Instant decidedAt,
             @Schema(types = {"string", "null"}) String rejectionReason,
             Set<FixerVerificationDocumentType> submittedDocuments,
-            Set<FixerVerificationDocumentType> missingDocuments) {
+            Set<FixerVerificationDocumentType> missingDocuments,
+            Set<Specialty> specialties) {
 
         static VerificationResponse of(FixerVerificationSummary summary) {
             return new VerificationResponse(summary.status(), summary.underReview(), summary.submittedAt(),
                     summary.decidedAt(), summary.rejectionReason(), summary.submittedDocuments(),
-                    summary.missingDocuments());
+                    summary.missingDocuments(), summary.specialties());
         }
     }
 }

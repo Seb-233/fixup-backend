@@ -1,5 +1,6 @@
 package com.fixup.media.infrastructure;
 
+import com.fixup.media.api.MediaPurpose;
 import com.fixup.media.domain.MediaAsset;
 import com.fixup.media.domain.MediaAssetStatus;
 import jakarta.persistence.Column;
@@ -21,8 +22,9 @@ class MediaAssetEntity {
     @Column(name = "owner_user_id", nullable = false)
     private UUID ownerUserId;
 
+    @Enumerated(EnumType.STRING)
     @Column(name = "purpose", nullable = false, length = 50)
-    private String purpose;
+    private MediaPurpose purpose;
 
     @Column(name = "object_key", nullable = false, length = 512, unique = true)
     private String objectKey;

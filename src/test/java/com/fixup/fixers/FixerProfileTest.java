@@ -34,6 +34,14 @@ class FixerProfileTest {
         assertThat(profile.verificationStatus()).isEqualTo(FixerVerificationStatus.PENDING);
         assertThat(profile.submittedAt()).isNull();
         assertThat(profile.isUnderReview()).isFalse();
+        assertThat(profile.specialties()).isEmpty();
+    }
+
+    @Test
+    void profileCanUpdateSpecialties() {
+        var profile = FixerProfile.pending(FIXER, NOW);
+        var updated = profile.withSpecialties(Set.of(com.fixup.fixers.api.Specialty.PLUMBING, com.fixup.fixers.api.Specialty.ELECTRICAL), NOW);
+        assertThat(updated.specialties()).containsExactlyInAnyOrder(com.fixup.fixers.api.Specialty.PLUMBING, com.fixup.fixers.api.Specialty.ELECTRICAL);
     }
 
     @Test

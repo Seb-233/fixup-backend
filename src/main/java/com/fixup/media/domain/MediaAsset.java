@@ -1,6 +1,7 @@
 package com.fixup.media.domain;
 
 import com.fixup.media.api.MediaNotFoundException;
+import com.fixup.media.api.MediaPurpose;
 import java.time.Instant;
 import java.util.Objects;
 import java.util.UUID;
@@ -8,7 +9,7 @@ import java.util.UUID;
 public record MediaAsset(
         UUID id,
         UUID ownerUserId,
-        String purpose,
+        MediaPurpose purpose,
         String objectKey,
         String contentType,
         long sizeBytes,
@@ -34,7 +35,7 @@ public record MediaAsset(
     public static MediaAsset createPending(
             UUID id,
             UUID ownerUserId,
-            String purpose,
+            MediaPurpose purpose,
             String objectKey,
             String contentType,
             long sizeBytes,
@@ -43,6 +44,20 @@ public record MediaAsset(
     ) {
         return new MediaAsset(id, ownerUserId, purpose, objectKey, contentType, sizeBytes,
                 MediaAssetStatus.PENDING, uploadExpiresAt, null, now);
+    }
+
+    public static MediaAsset createPending(
+            UUID id,
+            UUID ownerUserId,
+            String purpose,
+            String objectKey,
+            String contentType,
+            long sizeBytes,
+            Instant uploadExpiresAt,
+            Instant now
+    ) {
+        return createPending(id, ownerUserId, MediaPurpose.valueOf(purpose), objectKey, contentType,
+                sizeBytes, uploadExpiresAt, now);
     }
 
     public void requireBelongsTo(UUID candidate) {

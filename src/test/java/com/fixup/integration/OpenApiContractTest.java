@@ -40,13 +40,17 @@ class OpenApiContractTest {
         assertThat(paths.fieldNames()).toIterable().containsExactlyInAnyOrder(
                 "/auth/bootstrap", "/auth/me", "/auth/select-role",
                 "/fixers/me/verification", "/fixers/me/verification/documents",
+                "/fixers/me/specialties",
                 "/fixers/{fixerUserId}/verification/approve", "/fixers/{fixerUserId}/verification/reject",
                 "/media/uploads", "/media/uploads/{mediaId}/confirm",
                 "/media/me/portfolio", "/media/me/portfolio/pieces",
                 "/media/me/portfolio/publish", "/media/me/portfolio/unpublish",
                 "/media/me/portfolio/pieces/{pieceId}", "/media/me/portfolio/pieces/{pieceId}/hide",
                 "/media/me/portfolio/pieces/{pieceId}/show", "/media/fixers/{fixerUserId}/portfolio",
-                "/analytics/zones/{zone}/market-indicators");
+                "/analytics/zones/{zone}/market-indicators",
+                "/requests", "/requests/me", "/requests/open", "/requests/{requestId}",
+                "/quotations", "/quotations/me", "/quotations/for-request/{requestId}",
+                "/quotations/{quotationId}/accept", "/quotations/{quotationId}/reject");
         assertThat(paths.fieldNames()).toIterable().doesNotContain(
                 "/media/me/portfolio/{pieceId}",
                 "/media/me/portfolio/{pieceId}/hide",
@@ -57,6 +61,7 @@ class OpenApiContractTest {
                 {"/auth/select-role", "post", "200"},
                 {"/fixers/me/verification", "get", "200"},
                 {"/fixers/me/verification/documents", "post", "200"},
+                {"/fixers/me/specialties", "post", "200"},
                 {"/fixers/{fixerUserId}/verification/approve", "post", "204"},
                 {"/fixers/{fixerUserId}/verification/reject", "post", "204"},
                 {"/media/uploads", "post", "201"},
@@ -67,7 +72,13 @@ class OpenApiContractTest {
                 {"/media/me/portfolio/pieces/{pieceId}", "delete", "204"},
                 {"/media/me/portfolio/pieces/{pieceId}/hide", "post", "200"},
                 {"/media/me/portfolio/pieces/{pieceId}/show", "post", "200"},
-                {"/media/fixers/{fixerUserId}/portfolio", "get", "200"}}) {
+                {"/media/fixers/{fixerUserId}/portfolio", "get", "200"},
+                {"/requests", "post", "201"}, {"/requests/me", "get", "200"},
+                {"/requests/open", "get", "200"}, {"/requests/{requestId}", "get", "200"},
+                {"/quotations", "post", "201"}, {"/quotations/me", "get", "200"},
+                {"/quotations/for-request/{requestId}", "get", "200"},
+                {"/quotations/{quotationId}/accept", "post", "200"},
+                {"/quotations/{quotationId}/reject", "post", "200"}}) {
             var operation = paths.get(endpoint[0]).get(endpoint[1]);
             assertThat(operation.get("security").toString()).contains("bearerAuth");
             for (String code : new String[]{endpoint[2], "400", "401", "403", "409"}) {
@@ -103,9 +114,41 @@ class OpenApiContractTest {
                 .contains("ID_CARD", "TRADE_CERTIFICATE");
         assertThat(contract.at("/components/schemas/VerificationResponse/properties/submittedAt/type").toString())
                 .contains("null");
+        assertThat(contract.at("/components/schemas/VerificationResponse/properties/specialties").toString())
+                .isNotEmpty();
         // No document content crosses this API: the request carries storage keys only.
         assertThat(contract.at("/components/schemas/DocumentRequest/properties").toString())
                 .contains("storageKey").doesNotContain("content", "file");
+        // FR-UC-18: closed taxonomy of trades and closed lifecycle of an offer.
+        assertThat(contract.at("/components/schemas/Specialty/enum").toString())
+                .contains("PLUMBING", "ELECTRICAL", "PAINTING", "CARPENTRY", "MASONRY", "GENERAL");
+        assertThat(contract.at("/components/schemas/RepairRequestStatus/enum").toString())
+                .contains("OPEN", "ASSIGNED");
+        assertThat(contract.at("/components/schemas/QuotationStatus/enum").toString())
+                .contains("SUBMITTED", "ACCEPTED", "REJECTED");
+        assertThat(contract.at("/components/schemas/RequestDetailResponse/properties/assignedFixerUserId/type")
+                .toString()).contains("null");
+        assertThat(contract.at("/components/schemas/RequestDetailResponse/properties/photos/type").asText())
+                .isEqualTo("array");
+        assertThat(contract.at("/components/schemas/PhotoResponse/properties").toString())
+                .contains("mediaId", "readUrl", "readUrlExpiresAt")
+                .doesNotContain("storageKey", "objectKey", "bucket");
+        assertThat(contract.at("/components/schemas/RequestDetailResponse/properties").toString())
+                .doesNotContain("storageKey", "photoKeys");
+        assertThat(contract.at("/components/schemas/OpenRequestSummaryResponse/properties").toString())
+                .contains("requestId", "specialty", "title", "createdAt")
+                .doesNotContain("ownerUserId", "description", "photoKeys", "storageKey", "assignedFixerUserId");
+        // No photo content crosses this API: the request carries media IDs only.
+        assertThat(contract.at("/components/schemas/OpenRequest/properties").toString())
+                .contains("mediaIds")
+                .doesNotContain("photoKeys", "storageKey", "content", "file");
+        // The author of a quotation comes from the validated token, never from the client body.
+        assertThat(contract.at("/components/schemas/QuotationRequest/properties").toString())
+                .contains("requestId", "amount", "estimatedDays")
+                .doesNotContain("fixerUserId", "status");
+        assertThat(contract.at("/components/schemas/QuotationRequest/properties/amount/maximum").asLong())
+                .isEqualTo(9007199254740991L);
+
         // PieceRequest now references mediaId instead of raw storageKey or kind
         assertThat(contract.at("/components/schemas/PieceRequest/properties").toString())
                 .contains("mediaId", "title")

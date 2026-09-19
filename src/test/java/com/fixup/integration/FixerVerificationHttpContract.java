@@ -49,18 +49,12 @@ abstract class FixerVerificationHttpContract {
     @Autowired ObjectMapper mapper;
     @Autowired FixerEligibility fixerEligibility;
     @Autowired FixerReview review;
+    @Autowired com.fixup.testsupport.IntegrationDatabaseCleaner databaseCleaner;
 
     @BeforeEach
     void clearIsolatedTestDatabase() {
         SecurityContextHolder.clearContext();
-        jdbc.update("DELETE FROM media_deletion_jobs");
-        jdbc.update("DELETE FROM portfolio_pieces");
-        jdbc.update("DELETE FROM fixer_portfolios");
-        jdbc.update("DELETE FROM media_assets");
-        jdbc.update("DELETE FROM fixer_verification_documents");
-        jdbc.update("DELETE FROM fixer_profiles");
-        jdbc.update("DELETE FROM user_roles");
-        jdbc.update("DELETE FROM users");
+        databaseCleaner.clean();
     }
 
     // ---------- helpers ----------
@@ -415,5 +409,72 @@ abstract class FixerVerificationHttpContract {
         mvc.perform(options("/fixers/me/verification").header("Origin", "https://untrusted.example.test")
                 .header("Access-Control-Request-Method", "GET"))
                 .andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+    }
+
+    @Test
+    void fixerSavesAndRetrievesSpecialties() throws Exception {
+        String subject = "auth0|fixer-specialties-crud";
+        provisionFixer(subject);
+
+        var updateBody = "{\"specialties\":[\"PLUMBING\",\"ELECTRICAL\"]}";
+        mvc.perform(post("/fixers/me/specialties").with(identity(subject))
+                .contentType(MediaType.APPLICATION_JSON).content(updateBody))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.specialties", containsInAnyOrder("PLUMBING", "ELECTRICAL")));
+
+        mvc.perform(get("/fixers/me/verification").with(identity(subject)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.specialties", containsInAnyOrder("PLUMBING", "ELECTRICAL")));
+    }
+
+    @Test
+    void suspendedFixerCannotUpdateSpecialties() throws Exception {
+        String subject = "auth0|fixer-suspended";
+        UUID fixerId = provisionFixer(subject);
+        jdbc.update("UPDATE users SET status = 'SUSPENDED' WHERE id = ?", fixerId);
+
+        var updateBody = "{\"specialties\":[\"PLUMBING\"]}";
+        mvc.perform(post("/fixers/me/specialties").with(identity(subject))
+                .contentType(MediaType.APPLICATION_JSON).content(updateBody))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+    }
+
+    @Test
+    void specialtiesRequestWithAdditionalFieldsIsRejected() throws Exception {
+        String subject = "auth0|fixer-extra-fields";
+        provisionFixer(subject);
+
+        var updateBody = "{\"specialties\":[\"PLUMBING\"],\"extraField\":\"malicious\"}";
+        mvc.perform(post("/fixers/me/specialties").with(identity(subject))
+                .contentType(MediaType.APPLICATION_JSON).content(updateBody))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void specialtiesRequestWithEmptyListIsRejected() throws Exception {
+        String subject = "auth0|fixer-empty-spec";
+        provisionFixer(subject);
+
+        var updateBody = "{\"specialties\":[]}";
+        mvc.perform(post("/fixers/me/specialties").with(identity(subject))
+                .contentType(MediaType.APPLICATION_JSON).content(updateBody))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void specialtiesRequestWithDuplicatesOrNullIsRejected() throws Exception {
+        String subject = "auth0|fixer-dup-spec";
+        provisionFixer(subject);
+
+        var dupBody = "{\"specialties\":[\"PLUMBING\",\"PLUMBING\"]}";
+        mvc.perform(post("/fixers/me/specialties").with(identity(subject))
+                .contentType(MediaType.APPLICATION_JSON).content(dupBody))
+                .andExpect(status().isBadRequest());
+
+        var nullBody = "{\"specialties\":[\"PLUMBING\",null]}";
+        mvc.perform(post("/fixers/me/specialties").with(identity(subject))
+                .contentType(MediaType.APPLICATION_JSON).content(nullBody))
+                .andExpect(status().isBadRequest());
     }
 }

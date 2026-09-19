@@ -54,17 +54,12 @@ abstract class IdentityHttpContract {
     @Autowired CurrentActorProvider actors;
     @Autowired AdministrativeRoles administrativeRoles;
     @Autowired FixerEligibility fixerEligibility;
+    @Autowired com.fixup.testsupport.IntegrationDatabaseCleaner databaseCleaner;
 
     @BeforeEach
     void clearIsolatedTestDatabase() {
         SecurityContextHolder.clearContext();
-        jdbc.update("DELETE FROM media_deletion_jobs");
-        jdbc.update("DELETE FROM portfolio_pieces");
-        jdbc.update("DELETE FROM fixer_portfolios");
-        jdbc.update("DELETE FROM media_assets");
-        jdbc.update("DELETE FROM fixer_profiles");
-        jdbc.update("DELETE FROM user_roles");
-        jdbc.update("DELETE FROM users");
+        databaseCleaner.clean();
     }
 
     RequestPostProcessor identity(String subject) {
