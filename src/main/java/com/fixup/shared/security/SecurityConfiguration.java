@@ -58,6 +58,7 @@ class SecurityConfiguration {
                             .requestMatchers("/actuator/health").permitAll();
                     requests.requestMatchers("/auth/**").authenticated()
                             .requestMatchers("/fixers/**").authenticated()
+                            .requestMatchers("/media/**").authenticated()
                             .anyRequest().denyAll();
                 })
                 .exceptionHandling(errors -> errors.authenticationEntryPoint(entryPoint)
@@ -74,7 +75,7 @@ class SecurityConfiguration {
         var cors = new CorsConfiguration();
         cors.setAllowedOrigins(Arrays.stream(configuredOrigins.split(","))
                 .map(String::trim).filter(origin -> !origin.isEmpty()).toList());
-        cors.setAllowedMethods(List.of("GET", "POST", "OPTIONS"));
+        cors.setAllowedMethods(List.of("GET", "POST", "DELETE", "OPTIONS"));
         cors.setAllowedHeaders(List.of("Authorization", "Content-Type", "Accept"));
         cors.setAllowCredentials(false);
         cors.setMaxAge(3600L);
