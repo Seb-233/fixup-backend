@@ -1,6 +1,7 @@
 package com.fixup.requests.infrastructure;
 
 import com.fixup.requests.api.RepairRequestStatus;
+import com.fixup.requests.api.RepairRequestUrgency;
 import com.fixup.fixers.api.Specialty;
 import com.fixup.requests.domain.RepairRequest;
 import jakarta.persistence.CollectionTable;
@@ -37,6 +38,11 @@ class RepairRequestEntity {
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 32)
     private RepairRequestStatus status;
+    @Enumerated(EnumType.STRING)
+    @Column(name = "urgency", nullable = false, length = 16)
+    private RepairRequestUrgency urgency;
+    @Column(name = "sla_deadline")
+    private Instant slaDeadline;
     @Column(name = "assigned_fixer_user_id")
     private UUID assignedFixerUserId;
     @Column(name = "created_at", nullable = false, updatable = false)
@@ -60,21 +66,24 @@ class RepairRequestEntity {
         entity.specialty = request.specialty();
         entity.title = request.title();
         entity.description = request.description();
+        entity.urgency = request.urgency();
+        entity.slaDeadline = request.slaDeadline();
         entity.mediaIds = new ArrayList<>(request.mediaIds());
         entity.createdAt = request.createdAt();
         entity.apply(request);
         return entity;
     }
 
-    /** Only the mutable part of the request travels back: ownership and photos never change. */
     void apply(RepairRequest request) {
         status = request.status();
+        urgency = request.urgency();
+        slaDeadline = request.slaDeadline();
         assignedFixerUserId = request.assignedFixerUserId();
         updatedAt = request.updatedAt();
     }
 
     RepairRequest toDomain() {
         return new RepairRequest(id, ownerUserId, specialty, title, description, List.copyOf(mediaIds),
-                status, assignedFixerUserId, createdAt, updatedAt);
+                status, urgency, slaDeadline, assignedFixerUserId, createdAt, updatedAt);
     }
 }

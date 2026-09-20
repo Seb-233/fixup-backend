@@ -1,21 +1,25 @@
 package com.fixup.contracts.application;
 
-import com.fixup.identityaccess.api.CurrentActor;
 import com.fixup.contracts.api.ContractAccessDeniedException;
 import com.fixup.contracts.api.ContractNotFoundException;
+import com.fixup.contracts.api.LeaseContractTerminated;
 import com.fixup.contracts.domain.Contracts;
+import com.fixup.identityaccess.api.CurrentActor;
 import jakarta.validation.constraints.Size;
 import java.time.Instant;
 import java.util.UUID;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class TerminateLeaseContract {
     private final Contracts contracts;
+    private final ApplicationEventPublisher events;
 
-    TerminateLeaseContract(Contracts contracts) {
+    TerminateLeaseContract(Contracts contracts, ApplicationEventPublisher events) {
         this.contracts = contracts;
+        this.events = events;
     }
 
     @Transactional
@@ -32,6 +36,8 @@ public class TerminateLeaseContract {
         var now = Instant.now();
         var terminated = c.terminateAsOwner(reason, now);
         contracts.update(terminated);
+        events.publishEvent(new LeaseContractTerminated(terminated.id(), terminated.ownerUserId(),
+                terminated.tenantUserId(), actor.internalUserId(), reason, now));
         return ContractSummary.of(terminated);
     }
 
@@ -47,6 +53,8 @@ public class TerminateLeaseContract {
         var now = Instant.now();
         var terminated = c.terminateAsTenant(reason, now);
         contracts.update(terminated);
+        events.publishEvent(new LeaseContractTerminated(terminated.id(), terminated.ownerUserId(),
+                terminated.tenantUserId(), actor.internalUserId(), reason, now));
         return ContractSummary.of(terminated);
     }
 }

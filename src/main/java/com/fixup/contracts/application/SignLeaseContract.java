@@ -1,21 +1,25 @@
 package com.fixup.contracts.application;
 
-import com.fixup.identityaccess.api.CurrentActor;
 import com.fixup.contracts.api.ContractAccessDeniedException;
 import com.fixup.contracts.api.ContractConflictException;
 import com.fixup.contracts.api.ContractNotFoundException;
+import com.fixup.contracts.api.LeaseContractSigned;
 import com.fixup.contracts.domain.Contracts;
+import com.fixup.identityaccess.api.CurrentActor;
 import java.time.Instant;
 import java.util.UUID;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class SignLeaseContract {
     private final Contracts contracts;
+    private final ApplicationEventPublisher events;
 
-    SignLeaseContract(Contracts contracts) {
+    SignLeaseContract(Contracts contracts, ApplicationEventPublisher events) {
         this.contracts = contracts;
+        this.events = events;
     }
 
     @Transactional
@@ -28,6 +32,8 @@ public class SignLeaseContract {
         var now = Instant.now();
         var signed = c.signAsTenant(actor.internalUserId(), now).activateIfStartDateReached(now);
         contracts.update(signed);
+        events.publishEvent(new LeaseContractSigned(signed.id(), signed.ownerUserId(),
+                signed.tenantUserId(), actor.internalUserId(), now));
         return ContractSummary.of(signed);
     }
 
@@ -43,6 +49,8 @@ public class SignLeaseContract {
         var now = Instant.now();
         var signed = c.signAsOwner(actor.internalUserId(), now).activateIfStartDateReached(now);
         contracts.update(signed);
+        events.publishEvent(new LeaseContractSigned(signed.id(), signed.ownerUserId(),
+                signed.tenantUserId(), actor.internalUserId(), now));
         return ContractSummary.of(signed);
     }
 

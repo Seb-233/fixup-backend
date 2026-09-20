@@ -3,6 +3,7 @@ package com.fixup.requests.infrastructure;
 import com.fixup.requests.api.RepairRequestStatus;
 import com.fixup.fixers.api.Specialty;
 import jakarta.persistence.LockModeType;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -26,4 +27,12 @@ interface RepairRequestJpaRepository extends JpaRepository<RepairRequestEntity, 
 
     List<RepairRequestEntity> findByStatusAndSpecialtyInOrderByCreatedAtDesc(RepairRequestStatus status,
             java.util.Collection<Specialty> specialties);
+
+    @Query("SELECT r FROM RepairRequestEntity r WHERE r.status IN "
+            + "(com.fixup.requests.api.RepairRequestStatus.OPEN, "
+            + "com.fixup.requests.api.RepairRequestStatus.ASSIGNED, "
+            + "com.fixup.requests.api.RepairRequestStatus.IN_PROGRESS, "
+            + "com.fixup.requests.api.RepairRequestStatus.ON_HOLD) "
+            + "AND r.slaDeadline IS NOT NULL AND r.slaDeadline <= :deadline ORDER BY r.slaDeadline ASC")
+    List<RepairRequestEntity> findActiveWithSlaDeadlineBefore(@Param("deadline") Instant deadline);
 }

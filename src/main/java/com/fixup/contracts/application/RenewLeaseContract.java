@@ -1,24 +1,28 @@
 package com.fixup.contracts.application;
 
-import com.fixup.identityaccess.api.CurrentActor;
 import com.fixup.contracts.api.ContractAccessDeniedException;
 import com.fixup.contracts.api.ContractNotFoundException;
+import com.fixup.contracts.api.LeaseContractRenewed;
 import com.fixup.contracts.api.PaymentFrequency;
 import com.fixup.contracts.domain.Contracts;
+import com.fixup.identityaccess.api.CurrentActor;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.UUID;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class RenewLeaseContract {
     private final Contracts contracts;
+    private final ApplicationEventPublisher events;
 
-    RenewLeaseContract(Contracts contracts) {
+    RenewLeaseContract(Contracts contracts, ApplicationEventPublisher events) {
         this.contracts = contracts;
+        this.events = events;
     }
 
     @Transactional
@@ -40,6 +44,8 @@ public class RenewLeaseContract {
                 data.newPaymentDayOfMonth() > 0 ? data.newPaymentDayOfMonth() : existing.paymentDayOfMonth(),
                 now);
         contracts.create(renewed);
+        events.publishEvent(new LeaseContractRenewed(renewed.id(), contractId,
+                renewed.ownerUserId(), renewed.tenantUserId(), now));
         return ContractSummary.of(renewed);
     }
 

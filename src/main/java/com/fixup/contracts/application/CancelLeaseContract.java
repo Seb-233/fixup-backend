@@ -1,21 +1,25 @@
 package com.fixup.contracts.application;
 
-import com.fixup.identityaccess.api.CurrentActor;
 import com.fixup.contracts.api.ContractAccessDeniedException;
 import com.fixup.contracts.api.ContractNotFoundException;
+import com.fixup.contracts.api.LeaseContractCancelled;
 import com.fixup.contracts.domain.Contracts;
+import com.fixup.identityaccess.api.CurrentActor;
 import jakarta.validation.constraints.Size;
 import java.time.Instant;
 import java.util.UUID;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class CancelLeaseContract {
     private final Contracts contracts;
+    private final ApplicationEventPublisher events;
 
-    CancelLeaseContract(Contracts contracts) {
+    CancelLeaseContract(Contracts contracts, ApplicationEventPublisher events) {
         this.contracts = contracts;
+        this.events = events;
     }
 
     @Transactional
@@ -34,6 +38,8 @@ public class CancelLeaseContract {
         var now = Instant.now();
         var cancelled = c.cancel(reason, now);
         contracts.update(cancelled);
+        events.publishEvent(new LeaseContractCancelled(cancelled.id(), cancelled.ownerUserId(),
+                cancelled.tenantUserId(), actor.internalUserId(), reason, now));
         return ContractSummary.of(cancelled);
     }
 }
