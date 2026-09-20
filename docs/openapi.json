@@ -3183,6 +3183,10 @@
           "releasedAt" : {
             "type" : [ "string", "null" ],
             "format" : "date-time"
+          },
+          "paidOutAt" : {
+            "type" : [ "string", "null" ],
+            "format" : "date-time"
           }
         },
         "required" : [ "commissionAmount", "commissionRateBasisPoints", "createdAt", "grossAmount", "id", "netAmount", "quotationId", "status" ]
