@@ -8,6 +8,6 @@ import org.springframework.test.context.ActiveProfiles;
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
-@Import(TestJwtConfiguration.class)
+@Import({TestJwtConfiguration.class, TestStorageConfiguration.class})
 class FixerVerificationContextTest extends FixerVerificationHttpContract {
 }

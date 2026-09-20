@@ -13,7 +13,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
-@Import(TestJwtConfiguration.class)
+@Import({TestJwtConfiguration.class, TestStorageConfiguration.class})
 @Testcontainers
 class PostgresFixerVerificationIT extends FixerVerificationHttpContract {
     @Container

@@ -12,6 +12,10 @@ spring:
     show-sql: false
   flyway:
     enabled: true
+    # {vendor} resolves to the connected JDBC vendor at runtime: PostgreSQL-only migrations (RLS
+    # policies, roles) live under migration-postgres/postgresql and Flyway simply finds nothing there
+    # when the active profile runs against H2, instead of failing to parse Postgres-only syntax.
+    locations: classpath:db/migration,classpath:db/migration-postgres/{vendor}
   jackson:
     deserialization:
       fail-on-unknown-properties: true

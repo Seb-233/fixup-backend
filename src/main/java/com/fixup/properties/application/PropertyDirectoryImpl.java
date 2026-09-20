@@ -24,7 +24,7 @@ class PropertyDirectoryImpl implements PropertyDirectory {
             .orElseThrow(() -> new PropertyNotFoundException(propertyId));
 
         if (!property.ownerUserId().equals(ownerUserId)) {
-            throw new PropertyAccessDeniedException("Property does not belong to the required owner");
+            throw new PropertyNotFoundException(propertyId);
         }
 
         return new PropertySnapshot(

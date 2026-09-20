@@ -92,6 +92,181 @@
         } ]
       }
     },
+    "/requests/{requestId}/messages" : {
+      "get" : {
+        "tags" : [ "chat-controller" ],
+        "summary" : "Read the chat thread for a repair request",
+        "description" : "Requires an active account that is either the owner of the request, its assigned fixer, or an active PLATFORM_ADMIN. Oldest message first.",
+        "operationId" : "list",
+        "parameters" : [ {
+          "name" : "requestId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "responses" : {
+          "400" : {
+            "description" : "Blank body, body too long, or unexpected client fields",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Inactive account or not a participant of this chat",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "The repair request does not exist or is not visible to the caller",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "The request has no assigned fixer yet",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "200" : {
+            "description" : "Messages in the order they were sent",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/MessageResponse"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      },
+      "post" : {
+        "tags" : [ "chat-controller" ],
+        "summary" : "Send a chat message",
+        "description" : "Requires an active account that is either the owner of the request or its assigned fixer, and the request must already have an assigned fixer.",
+        "operationId" : "send",
+        "parameters" : [ {
+          "name" : "requestId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/SendMessageRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "400" : {
+            "description" : "Blank body, body too long, or unexpected client fields",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Inactive account or not a participant of this chat",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "The repair request does not exist or is not visible to the caller",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "The request has no assigned fixer yet",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "201" : {
+            "description" : "The message was recorded",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
     "/quotations" : {
       "post" : {
         "tags" : [ "quotation-controller" ],
@@ -1335,7 +1510,7 @@
       "post" : {
         "tags" : [ "fixer-verification-controller" ],
         "summary" : "File the verification documents and open the administrative review",
-        "description" : "The body carries storage keys only. No document content crosses this API. Documents may be filed one at a time; the review opens by itself once the mandatory set is complete. Resubmitting a type replaces its key.",
+        "description" : "The body carries media IDs already uploaded and confirmed through POST /media/uploads with purpose FIXER_VERIFICATION. Documents may be filed one at a time; the review opens by itself once the mandatory set is complete. Resubmitting a type replaces its media.",
         "operationId" : "submit_1",
         "requestBody" : {
           "content" : {
@@ -2378,6 +2553,78 @@
         } ]
       }
     },
+    "/fixers/{fixerUserId}/verification" : {
+      "get" : {
+        "tags" : [ "fixer-verification-controller" ],
+        "summary" : "Read a fixer's registered identity, specialties and documents for review",
+        "description" : "Requires an active PLATFORM_ADMIN. Returns signed, time-limited read URLs for the submitted documents; never their storage keys.",
+        "operationId" : "reviewOf",
+        "parameters" : [ {
+          "name" : "fixerUserId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "responses" : {
+          "400" : {
+            "description" : "Invalid document type, missing field or unexpected client fields",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Inactive account, missing FIXER role or missing administrative privileges",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "The transition does not apply to the current verification state",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "200" : {
+            "description" : "Verification state and documents for the requested fixer",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ReviewResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
     "/fixers/me/verification" : {
       "get" : {
         "tags" : [ "fixer-verification-controller" ],
@@ -2761,6 +3008,50 @@
         },
         "required" : [ "createdAt", "description", "photos", "requestId", "specialty", "status", "title" ]
       },
+      "SendMessageRequest" : {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "body" : {
+            "type" : "string",
+            "maxLength" : 2000,
+            "minLength" : 0
+          }
+        },
+        "required" : [ "body" ]
+      },
+      "MessageResponse" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "requestId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "senderUserId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "body" : {
+            "type" : "string"
+          },
+          "sentAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "notificationStatus" : {
+            "$ref" : "#/components/schemas/NotificationStatus"
+          }
+        },
+        "required" : [ "body", "id", "notificationStatus", "requestId", "senderUserId", "sentAt" ]
+      },
+      "NotificationStatus" : {
+        "type" : "string",
+        "enum" : [ "SENT", "SKIPPED", "FAILED" ]
+      },
       "QuotationRequest" : {
         "type" : "object",
         "additionalProperties" : false,
@@ -2898,7 +3189,7 @@
       },
       "MediaPurpose" : {
         "type" : "string",
-        "enum" : [ "FIXER_PORTFOLIO", "REPAIR_REQUEST" ]
+        "enum" : [ "FIXER_PORTFOLIO", "REPAIR_REQUEST", "FIXER_VERIFICATION" ]
       },
       "UploadRequestDto" : {
         "type" : "object",
@@ -3089,18 +3380,20 @@
           "type" : {
             "$ref" : "#/components/schemas/FixerVerificationDocumentType"
           },
-          "storageKey" : {
+          "mediaId" : {
             "type" : "string",
-            "maxLength" : 512,
-            "minLength" : 0
+            "format" : "uuid"
           }
         },
-        "required" : [ "storageKey", "type" ]
+        "required" : [ "mediaId", "type" ]
       },
       "DocumentsRequest" : {
         "type" : "object",
         "additionalProperties" : false,
         "properties" : {
+          "consentVersion" : {
+            "type" : "string"
+          },
           "documents" : {
             "type" : "array",
             "items" : {
@@ -3363,6 +3656,71 @@
           }
         },
         "required" : [ "fixerUserId", "pieces", "status" ]
+      },
+      "ReviewDocumentResponse" : {
+        "type" : "object",
+        "properties" : {
+          "type" : {
+            "$ref" : "#/components/schemas/FixerVerificationDocumentType"
+          },
+          "mediaId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "readUrl" : {
+            "type" : "string"
+          },
+          "readUrlExpiresAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          }
+        },
+        "required" : [ "mediaId", "readUrl", "readUrlExpiresAt", "type" ]
+      },
+      "ReviewResponse" : {
+        "type" : "object",
+        "properties" : {
+          "fixerUserId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "status" : {
+            "type" : "string",
+            "enum" : [ "PENDING", "VERIFIED", "REJECTED", "SUSPENDED" ]
+          },
+          "underReview" : {
+            "type" : "boolean"
+          },
+          "submittedAt" : {
+            "type" : [ "string", "null" ],
+            "format" : "date-time"
+          },
+          "decidedAt" : {
+            "type" : [ "string", "null" ],
+            "format" : "date-time"
+          },
+          "decidedBy" : {
+            "type" : [ "string", "null" ],
+            "format" : "uuid"
+          },
+          "rejectionReason" : {
+            "type" : [ "string", "null" ]
+          },
+          "specialties" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/Specialty"
+            },
+            "uniqueItems" : true
+          },
+          "documents" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/ReviewDocumentResponse"
+            }
+          }
+        },
+        "required" : [ "documents", "fixerUserId", "specialties", "status", "underReview" ]
       },
       "UserResponse" : {
         "type" : "object",

@@ -26,6 +26,6 @@ final class PropertyAccess {
         if (actor.hasRole(Role.OWNER) && property.ownerUserId().equals(actor.internalUserId())) {
             return;
         }
-        throw new PropertyAccessDeniedException("Actor is not authorized to access this property");
+        throw new com.fixup.properties.api.PropertyNotFoundException(property.id());
     }
 }

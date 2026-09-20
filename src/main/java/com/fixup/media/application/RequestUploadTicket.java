@@ -51,6 +51,12 @@ public class RequestUploadTicket {
             if (actor.status() != UserStatus.ACTIVE || (!actor.hasRole(Role.OWNER) && !actor.hasRole(Role.TENANT) && !actor.hasRole(Role.REAL_ESTATE_MANAGER))) {
                 throw new MediaException(403, "ACCESS_DENIED", "You do not have permission to perform this action");
             }
+        } else if (request.purpose() == MediaPurpose.FIXER_VERIFICATION) {
+            // Not eligibility.requireVerified(): this is exactly how a fixer becomes verified in the
+            // first place, so it must work for a still-PENDING profile, not only an already-VERIFIED one.
+            if (actor.status() != UserStatus.ACTIVE || !actor.hasRole(Role.FIXER)) {
+                throw new MediaException(403, "ACCESS_DENIED", "You do not have permission to perform this action");
+            }
         } else {
             throw new MediaException(400, "INVALID_PURPOSE", "Unsupported media purpose");
         }
@@ -67,7 +73,11 @@ public class RequestUploadTicket {
 
         UUID mediaId = UUID.randomUUID();
         String extension = MediaContentTypeValidator.extensionFor(request.contentType());
-        String prefix = request.purpose() == MediaPurpose.FIXER_PORTFOLIO ? "portfolio" : "requests";
+        String prefix = switch (request.purpose()) {
+            case FIXER_PORTFOLIO -> "portfolio";
+            case FIXER_VERIFICATION -> "verification";
+            case REPAIR_REQUEST -> "requests";
+        };
         String objectKey = prefix + "/" + actor.internalUserId() + "/" + mediaId + "." + extension;
 
         var ticket = objectStorage.createUploadTicket(objectKey, request.contentType(), request.sizeBytes(), UPLOAD_EXPIRATION);

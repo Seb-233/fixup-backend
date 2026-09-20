@@ -138,7 +138,7 @@ abstract class PropertiesHttpContract {
 
         mvc.perform(get("/properties/" + propertyId)
                 .with(jwt().jwt(j -> j.subject("auth0|owner2").claim("roles", "OWNER"))))
-            .andExpect(status().isForbidden());
+            .andExpect(status().isNotFound());
     }
 }
 

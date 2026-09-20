@@ -80,14 +80,12 @@ abstract class MarketIndicatorsHttpContract {
     @Autowired JdbcTemplate jdbc;
     @Autowired ObjectMapper mapper;
     @Autowired MarketIndicatorSnapshots snapshots;
+    @Autowired com.fixup.testsupport.IntegrationDatabaseCleaner databaseCleaner;
 
     @BeforeEach
     void clearIsolatedTestDatabase() {
         SecurityContextHolder.clearContext();
-        jdbc.update("DELETE FROM market_indicator_snapshots");
-        jdbc.update("DELETE FROM fixer_profiles");
-        jdbc.update("DELETE FROM user_roles");
-        jdbc.update("DELETE FROM users");
+        databaseCleaner.clean();
         ControllableSource.DOWN.set(false);
         ControllableSource.CALLS.set(0);
         ControllableSource.OBSERVED_AT.set(Instant.now().minus(Duration.ofMinutes(30)));

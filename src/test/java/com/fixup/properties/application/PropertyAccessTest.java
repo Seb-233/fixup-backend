@@ -40,6 +40,6 @@ class PropertyAccessTest {
         assertDoesNotThrow(() -> PropertyAccess.requireCanRead(admin, property));
 
         var otherOwner = new CurrentActor(UUID.randomUUID(), "auth0|3", Set.of(Role.OWNER), UserStatus.ACTIVE);
-        assertThrows(PropertyAccessDeniedException.class, () -> PropertyAccess.requireCanRead(otherOwner, property));
+        assertThrows(com.fixup.properties.api.PropertyNotFoundException.class, () -> PropertyAccess.requireCanRead(otherOwner, property));
     }
 }

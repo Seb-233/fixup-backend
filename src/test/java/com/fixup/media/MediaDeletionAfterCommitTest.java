@@ -40,6 +40,7 @@ class MediaDeletionAfterCommitTest {
     @Autowired JdbcTemplate jdbc;
     @Autowired TransactionTemplate tx;
     @Autowired Clock clock;
+    @Autowired com.fixup.testsupport.IntegrationDatabaseCleaner databaseCleaner;
 
     private UUID ownerId;
     private final TestStorageConfiguration.InMemoryObjectStorage storage = TestStorageConfiguration.instance();
@@ -48,14 +49,7 @@ class MediaDeletionAfterCommitTest {
     @AfterEach
     void resetDatabase() {
         storage.clear();
-        jdbc.update("DELETE FROM media_deletion_jobs");
-        jdbc.update("DELETE FROM portfolio_pieces");
-        jdbc.update("DELETE FROM fixer_portfolios");
-        jdbc.update("DELETE FROM media_assets");
-        jdbc.update("DELETE FROM fixer_profiles");
-        jdbc.update("DELETE FROM user_roles");
-        jdbc.update("DELETE FROM properties");
-        jdbc.update("DELETE FROM users");
+        databaseCleaner.clean();
 
         ownerId = UUID.randomUUID();
         Instant now = Instant.now(clock);
@@ -113,4 +107,3 @@ class MediaDeletionAfterCommitTest {
         assertThat(mediaAssets.findById(assetId).orElseThrow().status()).isEqualTo(MediaAssetStatus.DELETION_PENDING);
     }
 }
-

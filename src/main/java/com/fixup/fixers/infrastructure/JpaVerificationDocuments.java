@@ -3,6 +3,7 @@ package com.fixup.fixers.infrastructure;
 import com.fixup.fixers.api.FixerVerificationDocumentType;
 import com.fixup.fixers.domain.VerificationDocument;
 import com.fixup.fixers.domain.VerificationDocuments;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -29,5 +30,10 @@ class JpaVerificationDocuments implements VerificationDocuments {
     public Set<FixerVerificationDocumentType> typesOf(UUID userId) {
         return repository.findByUserId(userId).stream().map(entity -> entity.id().documentType())
                 .collect(Collectors.toUnmodifiableSet());
+    }
+
+    @Override
+    public List<VerificationDocument> allOf(UUID userId) {
+        return repository.findByUserId(userId).stream().map(VerificationDocumentEntity::toDomain).toList();
     }
 }

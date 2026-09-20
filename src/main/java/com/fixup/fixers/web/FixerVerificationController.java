@@ -4,8 +4,10 @@ import com.fixup.fixers.api.FixerReview;
 import com.fixup.fixers.api.FixerVerificationDocumentType;
 import com.fixup.fixers.api.FixerVerificationStatus;
 import com.fixup.fixers.application.DocumentSubmission;
+import com.fixup.fixers.application.FixerVerificationReviewView;
 import com.fixup.fixers.application.FixerVerificationSummary;
 import com.fixup.fixers.application.GetFixerVerification;
+import com.fixup.fixers.application.GetFixerVerificationForReview;
 import com.fixup.fixers.application.SubmitFixerVerification;
 import com.fixup.identityaccess.api.CurrentActorProvider;
 import com.fixup.shared.errors.ErrorResponse;
@@ -54,15 +56,17 @@ import org.springframework.web.bind.annotation.RestController;
 class FixerVerificationController {
     private final CurrentActorProvider actors;
     private final GetFixerVerification getVerification;
+    private final GetFixerVerificationForReview getVerificationForReview;
     private final SubmitFixerVerification submitVerification;
     private final FixerReview review;
     private final UpdateFixerSpecialties updateSpecialties;
 
     FixerVerificationController(CurrentActorProvider actors, GetFixerVerification getVerification,
-            SubmitFixerVerification submitVerification, FixerReview review,
-            UpdateFixerSpecialties updateSpecialties) {
+            GetFixerVerificationForReview getVerificationForReview, SubmitFixerVerification submitVerification,
+            FixerReview review, UpdateFixerSpecialties updateSpecialties) {
         this.actors = actors;
         this.getVerification = getVerification;
+        this.getVerificationForReview = getVerificationForReview;
         this.submitVerification = submitVerification;
         this.review = review;
         this.updateSpecialties = updateSpecialties;
@@ -87,15 +91,24 @@ class FixerVerificationController {
 
     @PostMapping("/me/verification/documents")
     @Operation(summary = "File the verification documents and open the administrative review",
-            description = "The body carries storage keys only. No document content crosses this API. Documents may be "
-                    + "filed one at a time; the review opens by itself once the mandatory set is complete. Resubmitting "
-                    + "a type replaces its key.")
+            description = "The body carries media IDs already uploaded and confirmed through POST /media/uploads "
+                    + "with purpose FIXER_VERIFICATION. Documents may be filed one at a time; the review opens by "
+                    + "itself once the mandatory set is complete. Resubmitting a type replaces its media.")
     @ApiResponse(responseCode = "200", description = "Verification state after the submission")
     VerificationResponse submit(@Valid @RequestBody DocumentsRequest request) {
         var actor = actors.currentActor();
         submitVerification.execute(actor, request.documents().stream()
-                .map(document -> new DocumentSubmission(document.type(), document.storageKey())).toList());
+                .map(document -> new DocumentSubmission(document.type(), document.mediaId())).toList(), request.consentVersion());
         return VerificationResponse.of(getVerification.execute(actor));
+    }
+
+    @GetMapping("/{fixerUserId}/verification")
+    @Operation(summary = "Read a fixer's registered identity, specialties and documents for review",
+            description = "Requires an active PLATFORM_ADMIN. Returns signed, time-limited read URLs for the "
+                    + "submitted documents; never their storage keys.")
+    @ApiResponse(responseCode = "200", description = "Verification state and documents for the requested fixer")
+    ReviewResponse reviewOf(@PathVariable UUID fixerUserId) {
+        return ReviewResponse.of(getVerificationForReview.execute(actors.currentActor(), fixerUserId));
     }
 
     @PostMapping("/{fixerUserId}/verification/approve")
@@ -130,12 +143,11 @@ class FixerVerificationController {
     }
 
     @Schema(additionalProperties = Schema.AdditionalPropertiesValue.FALSE)
-    record DocumentsRequest(@NotEmpty @Size(max = 4) @Valid List<DocumentRequest> documents) {
+    record DocumentsRequest(String consentVersion, @NotEmpty @Size(max = 4) @Valid List<DocumentRequest> documents) {
     }
 
     @Schema(additionalProperties = Schema.AdditionalPropertiesValue.FALSE)
-    record DocumentRequest(@NotNull FixerVerificationDocumentType type,
-            @NotBlank @Size(max = 512) String storageKey) {
+    record DocumentRequest(@NotNull FixerVerificationDocumentType type, @NotNull UUID mediaId) {
     }
 
     @Schema(additionalProperties = Schema.AdditionalPropertiesValue.FALSE)
@@ -155,6 +167,30 @@ class FixerVerificationController {
             return new VerificationResponse(summary.status(), summary.underReview(), summary.submittedAt(),
                     summary.decidedAt(), summary.rejectionReason(), summary.submittedDocuments(),
                     summary.missingDocuments(), summary.specialties());
+        }
+    }
+
+    @Schema(requiredProperties = {"fixerUserId", "status", "underReview", "specialties", "documents"})
+    record ReviewResponse(UUID fixerUserId, FixerVerificationStatus status, boolean underReview,
+            @Schema(types = {"string", "null"}) Instant submittedAt,
+            @Schema(types = {"string", "null"}) Instant decidedAt,
+            @Schema(types = {"string", "null"}) UUID decidedBy,
+            @Schema(types = {"string", "null"}) String rejectionReason,
+            Set<Specialty> specialties, List<ReviewDocumentResponse> documents) {
+
+        static ReviewResponse of(FixerVerificationReviewView view) {
+            return new ReviewResponse(view.fixerUserId(), view.status(), view.underReview(), view.submittedAt(),
+                    view.decidedAt(), view.decidedBy(), view.rejectionReason(), view.specialties(),
+                    view.documents().stream().map(ReviewDocumentResponse::of).toList());
+        }
+    }
+
+    @Schema(requiredProperties = {"type", "mediaId", "readUrl", "readUrlExpiresAt"})
+    record ReviewDocumentResponse(FixerVerificationDocumentType type, UUID mediaId, String readUrl,
+            Instant readUrlExpiresAt) {
+        static ReviewDocumentResponse of(FixerVerificationReviewView.SubmittedDocumentView document) {
+            return new ReviewDocumentResponse(document.type(), document.mediaId(), document.readUrl(),
+                    document.readUrlExpiresAt());
         }
     }
 }

@@ -54,6 +54,10 @@ public class ConfirmUpload {
             if (actor.status() != UserStatus.ACTIVE || (!actor.hasRole(Role.OWNER) && !actor.hasRole(Role.TENANT) && !actor.hasRole(Role.REAL_ESTATE_MANAGER))) {
                 throw new MediaException(403, "ACCESS_DENIED", "You do not have permission to perform this action");
             }
+        } else if (asset.purpose() == MediaPurpose.FIXER_VERIFICATION) {
+            if (actor.status() != UserStatus.ACTIVE || !actor.hasRole(Role.FIXER)) {
+                throw new MediaException(403, "ACCESS_DENIED", "You do not have permission to perform this action");
+            }
         }
 
         if (asset.status() == MediaAssetStatus.DELETED) {

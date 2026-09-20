@@ -21,6 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 class DefaultMediaAttachmentService implements MediaAttachmentService {
     private static final Duration READ_EXPIRATION = Duration.ofMinutes(15);
     private static final int MAX_PHOTOS = 6;
+    private static final int MAX_VERIFICATION_DOCUMENTS = 4;
 
     private final MediaAssets mediaAssets;
     private final ObjectStorage objectStorage;
@@ -33,11 +34,21 @@ class DefaultMediaAttachmentService implements MediaAttachmentService {
     @Override
     @Transactional
     public void attachRepairRequestPhotos(UUID ownerUserId, List<UUID> mediaIds) {
+        attach(ownerUserId, mediaIds, MediaPurpose.REPAIR_REQUEST, MAX_PHOTOS);
+    }
+
+    @Override
+    @Transactional
+    public void attachFixerVerificationDocuments(UUID ownerUserId, List<UUID> mediaIds) {
+        attach(ownerUserId, mediaIds, MediaPurpose.FIXER_VERIFICATION, MAX_VERIFICATION_DOCUMENTS);
+    }
+
+    private void attach(UUID ownerUserId, List<UUID> mediaIds, MediaPurpose expectedPurpose, int maxCount) {
         if (mediaIds == null || mediaIds.isEmpty()) {
             return;
         }
-        if (mediaIds.size() > MAX_PHOTOS) {
-            throw new IllegalArgumentException("Cannot attach more than " + MAX_PHOTOS + " photos");
+        if (mediaIds.size() > maxCount) {
+            throw new IllegalArgumentException("Cannot attach more than " + maxCount + " media assets");
         }
         if (mediaIds.contains(null)) {
             throw new IllegalArgumentException("mediaIds cannot contain null elements");
@@ -53,8 +64,8 @@ class DefaultMediaAttachmentService implements MediaAttachmentService {
             if (!asset.ownerUserId().equals(ownerUserId)) {
                 throw new MediaNotFoundException("There is no such media for this user");
             }
-            if (asset.purpose() != MediaPurpose.REPAIR_REQUEST) {
-                throw new MediaException(400, "INVALID_PURPOSE", "Media purpose must be REPAIR_REQUEST");
+            if (asset.purpose() != expectedPurpose) {
+                throw new MediaException(400, "INVALID_PURPOSE", "Media purpose must be " + expectedPurpose);
             }
             if (asset.status() == MediaAssetStatus.ATTACHED) {
                 throw new MediaAlreadyAttachedException("Media is already attached");

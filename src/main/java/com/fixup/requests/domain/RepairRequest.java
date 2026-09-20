@@ -95,6 +95,6 @@ public record RepairRequest(UUID id, UUID ownerUserId, Specialty specialty, Stri
     }
 
     public RepairRequestSnapshot snapshot() {
-        return new RepairRequestSnapshot(id, ownerUserId, specialty, status);
+        return new RepairRequestSnapshot(id, ownerUserId, specialty, status, assignedFixerUserId);
     }
 }
