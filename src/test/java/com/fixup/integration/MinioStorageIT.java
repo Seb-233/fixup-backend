@@ -66,20 +66,14 @@ class MinioStorageIT {
     @Autowired MockMvc mvc;
     @Autowired JdbcTemplate jdbc;
     @Autowired ObjectMapper mapper;
+    @Autowired com.fixup.testsupport.IntegrationDatabaseCleaner databaseCleaner;
 
     private final HttpClient http = HttpClient.newHttpClient();
 
     @BeforeEach
     void cleanDb() {
         SecurityContextHolder.clearContext();
-        jdbc.update("DELETE FROM media_deletion_jobs");
-        jdbc.update("DELETE FROM portfolio_pieces");
-        jdbc.update("DELETE FROM fixer_portfolios");
-        jdbc.update("DELETE FROM fixer_verification_documents");
-        jdbc.update("DELETE FROM media_assets");
-        jdbc.update("DELETE FROM fixer_profiles");
-        jdbc.update("DELETE FROM user_roles");
-        jdbc.update("DELETE FROM users");
+        databaseCleaner.clean();
     }
 
     private RequestPostProcessor identity(String subject) {

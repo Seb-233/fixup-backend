@@ -92,6 +92,7 @@ class MediaDeletionWorkerTest {
     @Autowired MediaAssets mediaAssets;
     @Autowired JdbcTemplate jdbc;
     @Autowired TransactionTemplate tx;
+    @Autowired com.fixup.testsupport.IntegrationDatabaseCleaner databaseCleaner;
 
     private UUID ownerId;
     private final TestStorageConfiguration.InMemoryObjectStorage storage = TestStorageConfiguration.instance();
@@ -99,14 +100,7 @@ class MediaDeletionWorkerTest {
     @BeforeEach
     void setUp() {
         storage.clear();
-        jdbc.update("DELETE FROM media_deletion_jobs");
-        jdbc.update("DELETE FROM portfolio_pieces");
-        jdbc.update("DELETE FROM fixer_portfolios");
-        jdbc.update("DELETE FROM fixer_verification_documents");
-        jdbc.update("DELETE FROM media_assets");
-        jdbc.update("DELETE FROM fixer_profiles");
-        jdbc.update("DELETE FROM user_roles");
-        jdbc.update("DELETE FROM users");
+        databaseCleaner.clean();
 
         ownerId = UUID.randomUUID();
         jdbc.update("INSERT INTO users (id, auth0_subject, email, display_name, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -116,14 +110,7 @@ class MediaDeletionWorkerTest {
     @AfterEach
     void tearDown() {
         storage.clear();
-        jdbc.update("DELETE FROM media_deletion_jobs");
-        jdbc.update("DELETE FROM portfolio_pieces");
-        jdbc.update("DELETE FROM fixer_portfolios");
-        jdbc.update("DELETE FROM fixer_verification_documents");
-        jdbc.update("DELETE FROM media_assets");
-        jdbc.update("DELETE FROM fixer_profiles");
-        jdbc.update("DELETE FROM user_roles");
-        jdbc.update("DELETE FROM users");
+        databaseCleaner.clean();
     }
 
     private MediaAsset createAsset(MediaAssetStatus status, String objectKey) {
