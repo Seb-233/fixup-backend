@@ -13,7 +13,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 class FixerErrorHandler {
     @ExceptionHandler(FixerNotEligibleException.class)
     ResponseEntity<ErrorResponse> forbidden(HttpServletRequest request) {
-        SecurityAuditLog.accessBlocked("ACCESS_DENIED", request.getMethod(), request.getRequestURI());
+        SecurityAuditLog.accessBlocked("DENIED_OR_NOT_VISIBLE", request.getMethod(), request.getRequestURI());
         return ResponseEntity.status(403).body(new ErrorResponse(403, "ACCESS_DENIED",
                 "You do not have permission to perform this action", request.getRequestURI()));
     }

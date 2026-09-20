@@ -2,7 +2,7 @@ package com.fixup.messaging.application;
 
 import com.fixup.identityaccess.api.CurrentActor;
 import com.fixup.messaging.api.ChatConflictException;
-import com.fixup.messaging.api.NotificationStatus;
+import com.fixup.notifications.api.NotificationStatus;
 import com.fixup.messaging.domain.ChatMessage;
 import com.fixup.messaging.domain.ChatMessages;
 import com.fixup.notifications.api.PushNotificationGateway;
@@ -20,6 +20,10 @@ import org.springframework.transaction.annotation.Transactional;
  * people that assignment names. The push notification to the other participant is best-effort: it
  * is attempted before the message is persisted so the final, real outcome is what gets stored, but
  * a failing or unavailable provider never stops the message itself from sending.
+ *
+ * <p>The gateway returns an explicit {@link NotificationStatus} -- no exception-as-control-flow:
+ * {@code SENT} for real delivery, {@code SKIPPED} when no provider is configured, {@code FAILED}
+ * when a configured provider reports an error.
  */
 @Service
 public class SendChatMessage {
@@ -43,7 +47,7 @@ public class SendChatMessage {
         // KNOWN LIMITATION / EXTENSION POINT: isAssigned() matches the ASSIGNED status exactly. It
         // is complete today because ASSIGNED is the only non-OPEN status, but if a future terminal
         // status is added (e.g. COMPLETED), sending stops the moment a request leaves ASSIGNED --
-        // mirroring chat_messages_insert's WITH CHECK in V10__chat_messages_rls.sql, which must be
+        // mirroring chat_messages_insert's WITH CHECK in V12__chat_messages_rls.sql, which must be
         // revisited together with this check. Reading history is unaffected either way: it is never
         // gated on status. Whether a completed job's chat should stay writable for wrap-up messages
         // is a product decision nobody has made yet -- don't assume either answer when that status
@@ -66,10 +70,16 @@ public class SendChatMessage {
 
     private NotificationStatus attemptNotification(UUID recipientId, String body) {
         try {
-            pushGateway.send(new PushNotification(recipientId, "New message", preview(body)));
-            return NotificationStatus.SENT;
+            // Gateway returns the outcome explicitly; SKIPPED means no provider is configured (Noop),
+            // FAILED means a real provider was attempted and could not deliver.
+            NotificationStatus status = pushGateway.send(new PushNotification(recipientId, "New message", preview(body)));
+            if (status == NotificationStatus.FAILED) {
+                LOG.warn("Push notification failed for recipient {}", recipientId);
+            }
+            return status;
         } catch (RuntimeException e) {
-            LOG.warn("Push notification failed for recipient {}: {}", recipientId, e.getMessage());
+            // Unexpected infrastructure failure outside the provider contract.
+            LOG.warn("Push notification threw unexpectedly for recipient {}: {}", recipientId, e.getMessage());
             return NotificationStatus.FAILED;
         }
     }

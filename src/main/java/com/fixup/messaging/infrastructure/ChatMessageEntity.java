@@ -1,6 +1,6 @@
 package com.fixup.messaging.infrastructure;
 
-import com.fixup.messaging.api.NotificationStatus;
+import com.fixup.notifications.api.NotificationStatus;
 import com.fixup.messaging.domain.ChatMessage;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;

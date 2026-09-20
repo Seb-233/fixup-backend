@@ -1,4 +1,4 @@
-CREATE TABLE properties (
+﻿CREATE TABLE properties (
     id UUID PRIMARY KEY,
     owner_user_id UUID NOT NULL,
     name VARCHAR(255) NOT NULL,

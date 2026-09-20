@@ -1,6 +1,6 @@
--- FR-UC-20: trabajos e ingresos del técnico.
--- jobs pertenece al módulo jobs; fixer_earnings y payouts al módulo payments.
--- Ninguna asociación JPA expone la entidad de otro módulo.
+﻿-- FR-UC-20: trabajos e ingresos del t├®cnico.
+-- jobs pertenece al m├│dulo jobs; fixer_earnings y payouts al m├│dulo payments.
+-- Ninguna asociaci├│n JPA expone la entidad de otro m├│dulo.
 
 CREATE TABLE jobs (
     id UUID PRIMARY KEY,
@@ -12,7 +12,7 @@ CREATE TABLE jobs (
     created_at TIMESTAMP WITH TIME ZONE NOT NULL,
     completed_at TIMESTAMP WITH TIME ZONE,
     updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
-    -- Una cotización aceptada abre un solo trabajo, aunque el evento llegue repetido.
+    -- Una cotizaci├│n aceptada abre un solo trabajo, aunque el evento llegue repetido.
     CONSTRAINT uq_job_quotation UNIQUE (quotation_id),
     CONSTRAINT ck_job_status CHECK (status IN ('ASSIGNED', 'COMPLETED')),
     CONSTRAINT ck_job_completion CHECK (
@@ -31,7 +31,7 @@ CREATE TABLE fixer_earnings (
     gross_amount BIGINT NOT NULL,
     commission_amount BIGINT NOT NULL,
     net_amount BIGINT NOT NULL,
-    -- La tarifa se copia al crear el ingreso: cambiarla mañana no reescribe lo ya liquidado.
+    -- La tarifa se copia al crear el ingreso: cambiarla ma├▒ana no reescribe lo ya liquidado.
     commission_rate_bps INTEGER NOT NULL,
     status VARCHAR(32) NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE NOT NULL,
@@ -40,7 +40,7 @@ CREATE TABLE fixer_earnings (
     updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
     CONSTRAINT uq_earning_quotation UNIQUE (quotation_id),
     CONSTRAINT ck_earning_status CHECK (status IN ('HELD', 'AVAILABLE', 'PAID_OUT')),
-    -- La base garantiza que la plata cuadra, no solo el código.
+    -- La base garantiza que la plata cuadra, no solo el c├│digo.
     CONSTRAINT ck_earning_amounts CHECK (
         gross_amount > 0 AND commission_amount >= 0 AND net_amount >= 0
         AND commission_amount + net_amount = gross_amount

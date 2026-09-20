@@ -1,6 +1,6 @@
 package com.fixup.messaging.domain;
 
-import com.fixup.messaging.api.NotificationStatus;
+import com.fixup.notifications.api.NotificationStatus;
 import java.time.Instant;
 import java.util.Objects;
 import java.util.UUID;

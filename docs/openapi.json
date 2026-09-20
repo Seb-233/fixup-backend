@@ -3050,7 +3050,7 @@
       },
       "NotificationStatus" : {
         "type" : "string",
-        "enum" : [ "SENT", "FAILED" ]
+        "enum" : [ "SENT", "SKIPPED", "FAILED" ]
       },
       "QuotationRequest" : {
         "type" : "object",
@@ -3398,6 +3398,11 @@
             },
             "maxItems" : 4,
             "minItems" : 0
+          },
+          "consentVersion" : {
+            "type" : "string",
+            "maxLength" : 16,
+            "minLength" : 0
           }
         },
         "required" : [ "documents" ]

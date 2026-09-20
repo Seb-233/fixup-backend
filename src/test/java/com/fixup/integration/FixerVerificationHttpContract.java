@@ -111,7 +111,7 @@ abstract class FixerVerificationHttpContract {
             UUID mediaId = uploadVerificationDocument(subject);
             entries.add("{\"type\":\"" + type + "\",\"mediaId\":\"" + mediaId + "\"}");
         }
-        return "{\"documents\":[" + String.join(",", entries) + "]}";
+        return "{\"consentVersion\":\"v1\",\"documents\":[" + String.join(",", entries) + "]}";
     }
 
     private org.springframework.test.web.servlet.ResultActions submit(String subject, String body) throws Exception {
@@ -355,7 +355,7 @@ abstract class FixerVerificationHttpContract {
         UUID fixer = provisionFixer("auth0|to-reject");
         provisionAdmin("auth0|reviewer");
         UUID idCard = uploadVerificationDocument("auth0|to-reject");
-        submit("auth0|to-reject", "{\"documents\":[{\"type\":\"ID_CARD\",\"mediaId\":\"" + idCard
+        submit("auth0|to-reject", "{\"consentVersion\":\"v1\",\"documents\":[{\"type\":\"ID_CARD\",\"mediaId\":\"" + idCard
                 + "\"},{\"type\":\"TRADE_CERTIFICATE\",\"mediaId\":\"" + uploadVerificationDocument("auth0|to-reject")
                 + "\"}]}").andExpect(status().isOk());
         mvc.perform(post("/fixers/" + fixer + "/verification/reject").with(identity("auth0|reviewer"))
@@ -369,7 +369,7 @@ abstract class FixerVerificationHttpContract {
 
         // Resubmitting the same, already-filed ID_CARD media is a no-op re-validation-wise; the set
         // is still complete from before, so the review opens again straight away.
-        submit("auth0|to-reject", "{\"documents\":[{\"type\":\"ID_CARD\",\"mediaId\":\"" + idCard + "\"}]}")
+        submit("auth0|to-reject", "{\"consentVersion\":\"v1\",\"documents\":[{\"type\":\"ID_CARD\",\"mediaId\":\"" + idCard + "\"}]}")
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("PENDING"))
                 .andExpect(jsonPath("$.underReview").value(true))

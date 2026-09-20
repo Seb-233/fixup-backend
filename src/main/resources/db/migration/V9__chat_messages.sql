@@ -15,7 +15,7 @@ CREATE TABLE chat_messages (
     sent_at TIMESTAMP WITH TIME ZONE NOT NULL,
     notification_status VARCHAR(32) NOT NULL,
     CONSTRAINT ck_chat_message_body CHECK (length(trim(body)) > 0),
-    CONSTRAINT ck_chat_message_notification_status CHECK (notification_status IN ('SENT', 'FAILED'))
+    CONSTRAINT ck_chat_message_notification_status CHECK (notification_status IN ('SENT', 'SKIPPED', 'FAILED'))
 );
 
 CREATE INDEX ix_chat_messages_request ON chat_messages (request_id, sent_at);

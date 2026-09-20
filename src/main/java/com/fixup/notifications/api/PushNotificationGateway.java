@@ -1,17 +1,32 @@
 package com.fixup.notifications.api;
 
+
 import java.util.UUID;
 
 /**
- * Extension point for real push delivery (FCM or otherwise). Callers must always treat a failure
- * here as best-effort and never let it block the operation that triggered the notification: see
- * NoopPushNotificationGateway for the placeholder wired today, and messaging.application.
- * SendChatMessage for how a caller is expected to isolate a failure from the rest of its work.
+ * Extension point for real push delivery (FCM or otherwise). Returns an explicit
+ * {@link NotificationStatus} instead of relying on exceptions as control flow:
+ *
+ * <ul>
+ *   <li>{@code SENT}: provider confirmed the notification was queued for delivery.
+ *   <li>{@code SKIPPED}: no provider is configured; notification intentionally omitted.
+ *   <li>{@code FAILED}: a configured provider was attempted but could not deliver.
+ * </ul>
+ *
+ * Callers must always treat delivery as best-effort and never let the outcome block the operation
+ * that triggered the notification.
  */
 public interface PushNotificationGateway {
 
-    /** @throws PushNotificationException if delivery could not even be attempted or was refused. */
-    void send(PushNotification notification);
+    /**
+     * Attempts to deliver a push notification.
+     *
+     * @return the outcome; never {@code null}.
+     * @throws RuntimeException only for unexpected infrastructure failures outside the provider
+     *     contract (e.g. misconfigured dependency injection). Normal delivery failures must be
+     *     returned as {@link NotificationStatus#FAILED}, not thrown.
+     */
+    NotificationStatus send(PushNotification notification);
 
     record PushNotification(UUID recipientUserId, String title, String body) {
     }

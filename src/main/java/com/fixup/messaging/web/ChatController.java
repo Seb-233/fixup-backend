@@ -1,7 +1,7 @@
 package com.fixup.messaging.web;
 
 import com.fixup.identityaccess.api.CurrentActorProvider;
-import com.fixup.messaging.api.NotificationStatus;
+import com.fixup.notifications.api.NotificationStatus;
 import com.fixup.messaging.application.ChatMessageSummary;
 import com.fixup.messaging.application.ListChatMessages;
 import com.fixup.messaging.application.NewChatMessage;

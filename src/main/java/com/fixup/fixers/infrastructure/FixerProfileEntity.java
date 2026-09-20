@@ -40,6 +40,10 @@ class FixerProfileEntity {
     private UUID decidedBy;
     @Column(name = "rejection_reason", length = 500)
     private String rejectionReason;
+    @Column(name = "consent_accepted_at")
+    private Instant consentAcceptedAt;
+    @Column(name = "consent_version", length = 16)
+    private String consentVersion;
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
     @Column(name = "updated_at", nullable = false)
@@ -63,11 +67,13 @@ class FixerProfileEntity {
         decidedAt = profile.decidedAt();
         decidedBy = profile.decidedBy();
         rejectionReason = profile.rejectionReason();
+        consentAcceptedAt = profile.consentAcceptedAt();
+        consentVersion = profile.consentVersion();
         updatedAt = profile.updatedAt();
     }
 
     FixerProfile toDomain() {
-        return new FixerProfile(userId, verificationStatus, Set.copyOf(specialties), submittedAt, decidedAt, decidedBy, rejectionReason,
-                createdAt, updatedAt);
+        return new FixerProfile(userId, verificationStatus, Set.copyOf(specialties), submittedAt, decidedAt, decidedBy,
+                rejectionReason, consentAcceptedAt, consentVersion, createdAt, updatedAt);
     }
 }

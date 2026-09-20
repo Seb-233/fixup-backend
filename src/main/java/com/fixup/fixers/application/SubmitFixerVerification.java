@@ -19,13 +19,19 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * FR-UC-23: el técnico archiva sus documentos. Puede subirlos por partes; la revisión
+ * FR-UC-23: el tecnico archiva sus documentos. Puede subirlos por partes; la revision
  * administrativa se abre sola en cuanto el conjunto obligatorio queda completo.
  *
+ * <p>Consent gate: the fixer must have given explicit consent to personal-data processing before
+ * the review can be opened. If consent is supplied in the same request, it is recorded first
+ * (idempotent -- historical records are never overwritten). If consent was already on file from a
+ * previous call, it is ignored silently. If consent is absent and has never been recorded, the
+ * review gate stays closed and a CONSENT_REQUIRED conflict is returned.
+ *
  * <p>Sanity checking: cada mediaId debe ser un media asset propio, con purpose FIXER_VERIFICATION y
- * ya en estado READY (lo que a su vez ya exigió un content-type permitido y una firma de bytes
- * coherente en ConfirmUpload). Un mediaId inventado, ajeno o todavía no confirmado hace fallar todo
- * el envío con un error claro; nunca abre la revisión con un documento que nadie validó.
+ * ya en estado READY (lo que a su vez ya exigio un content-type permitido y una firma de bytes
+ * coherente en ConfirmUpload). Un mediaId inventado, ajeno o todavia no confirmado hace fallar todo
+ * el envio con un error claro; nunca abre la revision con un documento que nadie valido.
  */
 @Service
 public class SubmitFixerVerification {
@@ -39,8 +45,15 @@ public class SubmitFixerVerification {
         this.media = media;
     }
 
+    /**
+     * @param submissions   the documents to file.
+     * @param consentVersion the version string of the data-processing terms the fixer is accepting
+     *                       now (e.g. "v1.0"). {@code null} or blank means the fixer is not (re-)
+     *                       accepting consent in this call; consent must already be on file or the
+     *                       submission will fail if the document set would trigger review opening.
+     */
     @Transactional
-    public void execute(CurrentActor actor, List<DocumentSubmission> submissions) {
+    public void execute(CurrentActor actor, List<DocumentSubmission> submissions, String consentVersion) {
         FixerAccess.requireActiveFixer(actor);
         var profile = profiles.findByUserId(actor.internalUserId()).orElseThrow(FixerNotEligibleException::new);
         if (profile.verificationStatus() == FixerVerificationStatus.VERIFIED) {
@@ -50,6 +63,13 @@ public class SubmitFixerVerification {
         if (profile.verificationStatus() == FixerVerificationStatus.SUSPENDED) {
             throw new FixerVerificationConflictException("PROFILE_SUSPENDED",
                     "A suspended fixer profile cannot be submitted for review");
+        }
+
+        // Record consent first (idempotent). Only writes when no prior consent exists.
+        var now = Instant.now();
+        if (consentVersion != null && !consentVersion.isBlank()) {
+            profile = profile.recordConsent(consentVersion, now);
+            profiles.update(profile);
         }
 
         // Resubmitting the exact same media for a type it is already filed under must stay a no-op:
@@ -66,13 +86,19 @@ public class SubmitFixerVerification {
             media.attachDocuments(actor.internalUserId(), newMediaIds);
         }
 
-        var now = Instant.now();
         for (var submission : submissions) {
             documents.save(new VerificationDocument(actor.internalUserId(), submission.type(),
                     submission.mediaId(), now));
         }
+
+        var updatedProfile = profiles.findByUserId(actor.internalUserId()).orElseThrow(FixerNotEligibleException::new);
         if (VerificationPolicy.isComplete(documents.typesOf(actor.internalUserId()))) {
-            profiles.update(profile.submitForReview(now));
+            if (!updatedProfile.hasConsent()) {
+                throw new FixerVerificationConflictException("CONSENT_REQUIRED",
+                        "Data-processing consent is required before opening the administrative review. "
+                                + "Supply consentVersion in the request body.");
+            }
+            profiles.update(updatedProfile.submitForReview(now));
         }
     }
 }

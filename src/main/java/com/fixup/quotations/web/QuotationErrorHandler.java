@@ -14,7 +14,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 class QuotationErrorHandler {
     @ExceptionHandler(QuotationAccessDeniedException.class)
     ResponseEntity<ErrorResponse> forbidden(HttpServletRequest request) {
-        SecurityAuditLog.accessBlocked("ACCESS_DENIED", request.getMethod(), request.getRequestURI());
+        SecurityAuditLog.accessBlocked("DENIED_OR_NOT_VISIBLE", request.getMethod(), request.getRequestURI());
         return ResponseEntity.status(403).body(new ErrorResponse(403, "ACCESS_DENIED",
                 "You do not have permission to perform this action", request.getRequestURI()));
     }
@@ -23,7 +23,7 @@ class QuotationErrorHandler {
     ResponseEntity<ErrorResponse> notFound(HttpServletRequest request) {
         // FR-UC-25: Row-Level Security means this also fires when the quotation exists but belongs to
         // someone else's request, since it never shows up in that caller's SELECT in the first place.
-        SecurityAuditLog.accessBlocked("NOT_FOUND_OR_NOT_VISIBLE", request.getMethod(), request.getRequestURI());
+        SecurityAuditLog.accessBlocked("DENIED_OR_NOT_VISIBLE", request.getMethod(), request.getRequestURI());
         return ResponseEntity.status(404).body(new ErrorResponse(404, "QUOTATION_NOT_FOUND",
                 "The quotation does not exist", request.getRequestURI()));
     }

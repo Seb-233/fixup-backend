@@ -1,6 +1,6 @@
 package com.fixup.messaging.application;
 
-import com.fixup.messaging.api.NotificationStatus;
+import com.fixup.notifications.api.NotificationStatus;
 import com.fixup.messaging.domain.ChatMessage;
 import java.time.Instant;
 import java.util.UUID;
