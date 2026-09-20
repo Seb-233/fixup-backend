@@ -339,6 +339,152 @@
         } ]
       }
     },
+    "/payments/me/payouts" : {
+      "get" : {
+        "tags" : [ "payment-controller" ],
+        "summary" : "List the transfer requests of the current fixer",
+        "operationId" : "payouts",
+        "responses" : {
+          "400" : {
+            "description" : "Unexpected client fields",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Inactive account or missing FIXER role",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "The account has no payment record",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "There is no available balance to transfer",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "200" : {
+            "description" : "Transfer requests, newest first",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/PayoutResponse"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      },
+      "post" : {
+        "tags" : [ "payment-controller" ],
+        "summary" : "Request the transfer of the available balance",
+        "description" : "Academic scope: the request is recorded, no banking API is called. Reading the balance and consuming it happen in the same transaction.",
+        "operationId" : "payout",
+        "responses" : {
+          "400" : {
+            "description" : "Unexpected client fields",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Inactive account or missing FIXER role",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "The account has no payment record",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "There is no available balance to transfer",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "201" : {
+            "description" : "The transfer request was recorded",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PayoutResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
     "/media/uploads" : {
       "post" : {
         "tags" : [ "media-uploads-controller" ],
@@ -925,6 +1071,88 @@
               "application/json" : {
                 "schema" : {
                   "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/jobs/{jobId}/complete" : {
+      "post" : {
+        "tags" : [ "job-controller" ],
+        "summary" : "Close a finished job",
+        "description" : "Releases from escrow the amount the owner committed when accepting the quotation. Only the assigned fixer can close his own job.",
+        "operationId" : "complete",
+        "parameters" : [ {
+          "name" : "jobId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "responses" : {
+          "400" : {
+            "description" : "Invalid identifier or unexpected client fields",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Inactive account, unverified fixer or job assigned to someone else",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "The job does not exist",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "The transition does not apply to the current state of the job",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "200" : {
+            "description" : "The job is completed and the earning released",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/JobResponse"
                 }
               }
             }
@@ -1769,6 +1997,79 @@
         } ]
       }
     },
+    "/payments/me/earnings" : {
+      "get" : {
+        "tags" : [ "payment-controller" ],
+        "summary" : "Read the current fixer's balance, commissions and history",
+        "description" : "Amounts are whole Colombian pesos. The available balance is what can be transferred today; the held balance belongs to jobs that are not closed yet.",
+        "operationId" : "earnings",
+        "responses" : {
+          "400" : {
+            "description" : "Unexpected client fields",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Inactive account or missing FIXER role",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "The account has no payment record",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "There is no available balance to transfer",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "200" : {
+            "description" : "Balance and history of the current fixer",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/EarningsResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
     "/media/me/portfolio" : {
       "get" : {
         "tags" : [ "portfolio-controller" ],
@@ -1915,6 +2216,81 @@
                   "type" : "array",
                   "items" : {
                     "$ref" : "#/components/schemas/PieceResponse"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/jobs/me" : {
+      "get" : {
+        "tags" : [ "job-controller" ],
+        "summary" : "List the jobs assigned to the current fixer",
+        "operationId" : "mine_2",
+        "responses" : {
+          "400" : {
+            "description" : "Invalid identifier or unexpected client fields",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Inactive account, unverified fixer or job assigned to someone else",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "The job does not exist",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "The transition does not apply to the current state of the job",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "200" : {
+            "description" : "Jobs of the current fixer, newest first",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/JobResponse"
                   }
                 }
               }
@@ -2377,6 +2753,35 @@
         "type" : "string",
         "enum" : [ "SUBMITTED", "ACCEPTED", "REJECTED" ]
       },
+      "PayoutResponse" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "amount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "earningCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "status" : {
+            "$ref" : "#/components/schemas/PayoutStatus"
+          },
+          "requestedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          }
+        },
+        "required" : [ "amount", "earningCount", "id", "requestedAt", "status" ]
+      },
+      "PayoutStatus" : {
+        "type" : "string",
+        "enum" : [ "REQUESTED" ]
+      },
       "MediaPurpose" : {
         "type" : "string",
         "enum" : [ "FIXER_PORTFOLIO", "REPAIR_REQUEST" ]
@@ -2513,6 +2918,43 @@
           }
         },
         "required" : [ "id", "mediaId", "position", "readUrl", "readUrlExpiresAt", "title", "visibility" ]
+      },
+      "JobResponse" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "requestId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "quotationId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "ownerUserId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "status" : {
+            "$ref" : "#/components/schemas/JobStatus"
+          },
+          "createdAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "completedAt" : {
+            "type" : [ "string", "null" ],
+            "format" : "date-time"
+          }
+        },
+        "required" : [ "createdAt", "id", "ownerUserId", "quotationId", "requestId", "status" ]
+      },
+      "JobStatus" : {
+        "type" : "string",
+        "enum" : [ "ASSIGNED", "COMPLETED" ]
       },
       "RejectionRequest" : {
         "type" : "object",
@@ -2703,6 +3145,87 @@
           }
         },
         "required" : [ "createdAt", "requestId", "specialty", "title" ]
+      },
+      "EarningResponse" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "quotationId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "grossAmount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "commissionAmount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "netAmount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "commissionRateBasisPoints" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "status" : {
+            "$ref" : "#/components/schemas/EarningStatus"
+          },
+          "createdAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "releasedAt" : {
+            "type" : [ "string", "null" ],
+            "format" : "date-time"
+          },
+          "paidOutAt" : {
+            "type" : [ "string", "null" ],
+            "format" : "date-time"
+          }
+        },
+        "required" : [ "commissionAmount", "commissionRateBasisPoints", "createdAt", "grossAmount", "id", "netAmount", "quotationId", "status" ]
+      },
+      "EarningStatus" : {
+        "type" : "string",
+        "enum" : [ "HELD", "AVAILABLE", "PAID_OUT" ]
+      },
+      "EarningsResponse" : {
+        "type" : "object",
+        "properties" : {
+          "availableBalance" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "heldBalance" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "paidOutTotal" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "totalCommission" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "grossTotal" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "history" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/EarningResponse"
+            }
+          }
+        },
+        "required" : [ "availableBalance", "grossTotal", "heldBalance", "history", "paidOutTotal", "totalCommission" ]
       },
       "OwnPortfolioResponse" : {
         "type" : "object",
