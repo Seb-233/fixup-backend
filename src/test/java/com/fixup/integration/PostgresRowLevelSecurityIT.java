@@ -110,11 +110,12 @@ class PostgresRowLevelSecurityIT {
     // Fixtures are written directly with SQL, under the unrestricted connection: this is data setup,
     // not the thing under test. RLS itself is only exercised through actingAs() below.
     private UUID createRequest(UUID ownerId, String specialty, String title) {
+        UUID propertyId = createProperty(ownerId, title + " Property");
         UUID id = UUID.randomUUID();
-        jdbc.update("INSERT INTO repair_requests (id, owner_user_id, specialty, title, description, status, "
-                        + "created_at, updated_at) VALUES (?, ?, ?, ?, 'fixture description', 'OPEN', "
+        jdbc.update("INSERT INTO repair_requests (id, property_id, owner_user_id, specialty, title, description, status, "
+                        + "created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'fixture description', 'OPEN', "
                         + "CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
-                id, ownerId, specialty, title);
+                id, propertyId, ownerId, specialty, title);
         return id;
     }
 
@@ -356,11 +357,12 @@ class PostgresRowLevelSecurityIT {
     // ---------- FR-UC-24: chat messages ----------
 
     private UUID createAssignedRequest(UUID ownerId, UUID fixerId, String specialty, String title) {
+        UUID propertyId = createProperty(ownerId, title + " Property");
         UUID id = UUID.randomUUID();
-        jdbc.update("INSERT INTO repair_requests (id, owner_user_id, specialty, title, description, status, "
-                        + "assigned_fixer_user_id, created_at, updated_at) VALUES (?, ?, ?, ?, "
+        jdbc.update("INSERT INTO repair_requests (id, property_id, owner_user_id, specialty, title, description, status, "
+                        + "assigned_fixer_user_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, "
                         + "'fixture description', 'ASSIGNED', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
-                id, ownerId, specialty, title, fixerId);
+                id, propertyId, ownerId, specialty, title, fixerId);
         return id;
     }
 
@@ -424,7 +426,7 @@ class PostgresRowLevelSecurityIT {
         UUID owner = provisionWithRole("auth0|rls-chat-owner-admin", "OWNER");
         UUID fixer = provisionVerifiedFixer("auth0|rls-chat-fixer-admin", "MASONRY");
         UUID request = createAssignedRequest(owner, fixer, "MASONRY", "Chat admin");
-        UUID message = createChatMessage(request, fixer, "Hola dueño");
+        UUID message = createChatMessage(request, fixer, "Hola dueÃ±o");
 
         assertThat(visibleChatMessageIds(admin, "PLATFORM_ADMIN")).contains(message);
     }

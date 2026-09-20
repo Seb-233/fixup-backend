@@ -13,10 +13,10 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * FR-UC-18: la solicitud que el Fixer evalúa antes de cotizar. Las fotografías se guardan como
+ * FR-UC-18: la solicitud que el Fixer evalÃºa antes de cotizar. Las fotografÃ­as se guardan como
  * storage keys; el contenido nunca cruza la API.
  */
-public record RepairRequest(UUID id, UUID ownerUserId, Specialty specialty, String title,
+public record RepairRequest(UUID id, UUID propertyId, UUID ownerUserId, Specialty specialty, String title,
         String description, List<UUID> mediaIds, RepairRequestStatus status,
         UUID assignedFixerUserId, Instant createdAt, Instant updatedAt) {
 
@@ -44,9 +44,13 @@ public record RepairRequest(UUID id, UUID ownerUserId, Specialty specialty, Stri
         }
     }
 
-    public static RepairRequest open(UUID id, UUID ownerUserId, Specialty specialty, String title,
+    public static RepairRequest open(UUID id, UUID propertyId, UUID ownerUserId, Specialty specialty, String title,
             String description, List<UUID> mediaIds, Instant now) {
-        return new RepairRequest(id, ownerUserId, specialty, title, description, mediaIds,
+        if (propertyId == null) {
+            throw new RepairRequestConflictException("INVALID_PROPERTY",
+                    "A propertyId is required to open a new repair request");
+        }
+        return new RepairRequest(id, propertyId, ownerUserId, specialty, title, description, mediaIds,
                 RepairRequestStatus.OPEN, null, now, now);
     }
 
@@ -60,7 +64,7 @@ public record RepairRequest(UUID id, UUID ownerUserId, Specialty specialty, Stri
             throw new RepairRequestConflictException("SELF_ASSIGNMENT",
                     "The owner of the request cannot be assigned as its fixer");
         }
-        return new RepairRequest(id, ownerUserId, specialty, title, description, mediaIds,
+        return new RepairRequest(id, propertyId, ownerUserId, specialty, title, description, mediaIds,
                 RepairRequestStatus.ASSIGNED, fixerUserId, createdAt, now);
     }
 
@@ -69,9 +73,9 @@ public record RepairRequest(UUID id, UUID ownerUserId, Specialty specialty, Stri
     }
 
     /**
-     * FR-UC-25: la autorización se resuelve sobre el registro, no sobre la pantalla. El dueño
-     * siempre lo ve; un Fixer ve la solicitud mientras está en oferta, porque necesita la
-     * descripción y las fotos para cotizar, y después solo si el trabajo quedó asignado a él.
+     * FR-UC-25: la autorizaciÃ³n se resuelve sobre el registro, no sobre la pantalla. El dueÃ±o
+     * siempre lo ve; un Fixer ve la solicitud mientras estÃ¡ en oferta, porque necesita la
+     * descripciÃ³n y las fotos para cotizar, y despuÃ©s solo si el trabajo quedÃ³ asignado a Ã©l.
      * Un identificador adivinado no alcanza para leer la solicitud de otro.
      */
     public void requireVisibleTo(CurrentActor actor) {

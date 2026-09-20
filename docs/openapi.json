@@ -2904,8 +2904,9 @@
         "type" : "object",
         "additionalProperties" : false,
         "properties" : {
-          "specialty" : {
-            "$ref" : "#/components/schemas/Specialty"
+          "propertyId" : {
+            "type" : "string",
+            "format" : "uuid"
           },
           "title" : {
             "type" : "string",
@@ -2927,11 +2928,7 @@
             "minItems" : 0
           }
         },
-        "required" : [ "description", "specialty", "title" ]
-      },
-      "Specialty" : {
-        "type" : "string",
-        "enum" : [ "PLUMBING", "ELECTRICAL", "PAINTING", "CARPENTRY", "MASONRY", "GENERAL" ]
+        "required" : [ "description", "propertyId", "title" ]
       },
       "ErrorResponse" : {
         "type" : "object",
@@ -2979,6 +2976,10 @@
             "type" : "string",
             "format" : "uuid"
           },
+          "propertyId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
           "specialty" : {
             "$ref" : "#/components/schemas/Specialty"
           },
@@ -3007,6 +3008,10 @@
           }
         },
         "required" : [ "createdAt", "description", "photos", "requestId", "specialty", "status", "title" ]
+      },
+      "Specialty" : {
+        "type" : "string",
+        "enum" : [ "PLUMBING", "ELECTRICAL", "PAINTING", "CARPENTRY", "MASONRY", "GENERAL" ]
       },
       "SendMessageRequest" : {
         "type" : "object",

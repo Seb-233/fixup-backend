@@ -19,13 +19,31 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /** FR-UC-18: ciclo de vida y visibilidad de la solicitud, sin contexto de Spring. */
 class RepairRequestTest {
+
+    @Test
+    void legacyRowWithNullPropertyIdCanBeRehydrated() {
+        // Constructing directly via canonical constructor simulates reading a legacy row
+        var legacy = new RepairRequest(UUID.randomUUID(), null, OWNER, Specialty.PLUMBING, "Legacy title",
+                "Legacy desc", List.of(), com.fixup.requests.api.RepairRequestStatus.OPEN, null, NOW, NOW);
+        assertThat(legacy.propertyId()).isNull();
+        assertThatCode(() -> legacy.requireOwnedBy(OWNER)).doesNotThrowAnyException();
+    }
+
+    @Test
+    void openingNewRequestWithNullPropertyIdIsRejected() {
+        // Factory open() enforces new data integrity
+        assertThatThrownBy(() -> RepairRequest.open(UUID.randomUUID(), null, OWNER, Specialty.PLUMBING, 
+                "New title", "New desc", List.of(), NOW))
+                .isInstanceOf(RepairRequestConflictException.class)
+                .hasMessageContaining("propertyId");
+    }
     private static final UUID OWNER = UUID.randomUUID();
     private static final UUID FIXER = UUID.randomUUID();
     private static final UUID STRANGER = UUID.randomUUID();
     private static final Instant NOW = Instant.parse("2026-09-18T15:00:00Z");
 
     private RepairRequest open() {
-        return RepairRequest.open(UUID.randomUUID(), OWNER, Specialty.PLUMBING, "Gotera en el baño",
+        return RepairRequest.open(UUID.randomUUID(), UUID.randomUUID(), OWNER, Specialty.PLUMBING, "Gotera en el baÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â±o",
                 "El agua cae desde el techo cuando el vecino abre la ducha.", List.of(UUID.randomUUID()), NOW);
     }
 
@@ -69,7 +87,7 @@ class RepairRequestTest {
         var tooMany = java.util.stream.Stream.generate(UUID::randomUUID)
                 .limit(RepairRequest.MAX_PHOTOS + 1)
                 .toList();
-        assertThatThrownBy(() -> RepairRequest.open(UUID.randomUUID(), OWNER, Specialty.PAINTING,
+        assertThatThrownBy(() -> RepairRequest.open(UUID.randomUUID(), UUID.randomUUID(), OWNER, Specialty.PAINTING,
                 "Pintura", "Repintar la sala", tooMany, NOW))
                 .isInstanceOf(RepairRequestConflictException.class)
                 .hasMessageContaining("at most");
@@ -79,13 +97,13 @@ class RepairRequestTest {
     void aRequestRejectsDuplicateOrNullMediaIds() {
         UUID mediaId = UUID.randomUUID();
         var duplicates = List.of(mediaId, mediaId);
-        assertThatThrownBy(() -> RepairRequest.open(UUID.randomUUID(), OWNER, Specialty.PAINTING,
+        assertThatThrownBy(() -> RepairRequest.open(UUID.randomUUID(), UUID.randomUUID(), OWNER, Specialty.PAINTING,
                 "Pintura", "Repintar la sala", duplicates, NOW))
                 .isInstanceOf(RepairRequestConflictException.class)
                 .hasMessageContaining("duplicates");
 
         var withNull = java.util.Arrays.asList(UUID.randomUUID(), null);
-        assertThatThrownBy(() -> RepairRequest.open(UUID.randomUUID(), OWNER, Specialty.PAINTING,
+        assertThatThrownBy(() -> RepairRequest.open(UUID.randomUUID(), UUID.randomUUID(), OWNER, Specialty.PAINTING,
                 "Pintura", "Repintar la sala", withNull, NOW))
                 .isInstanceOf(RepairRequestConflictException.class)
                 .hasMessageContaining("null");

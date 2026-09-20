@@ -15,6 +15,13 @@ final class RequestAccess {
     }
 
     /** Whoever holds a property relationship may open a request against it. */
+    static void requireActiveOwner(CurrentActor actor) {
+        requireActive(actor);
+        if (!actor.hasRole(Role.OWNER)) {
+            throw new RepairRequestAccessDeniedException();
+        }
+    }
+
     static void requireActiveRequester(CurrentActor actor) {
         requireActive(actor);
         if (REQUESTERS.stream().noneMatch(actor::hasRole)) {
