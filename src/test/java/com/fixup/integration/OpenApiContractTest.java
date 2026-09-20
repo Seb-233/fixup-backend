@@ -51,7 +51,9 @@ class OpenApiContractTest {
                 "/requests", "/requests/me", "/requests/open", "/requests/{requestId}",
                 "/requests/{requestId}/messages",
                 "/quotations", "/quotations/me", "/quotations/for-request/{requestId}",
-                "/quotations/{quotationId}/accept", "/quotations/{quotationId}/reject");
+                "/quotations/{quotationId}/accept", "/quotations/{quotationId}/reject",
+                "/jobs/me", "/jobs/{jobId}/complete",
+                "/payments/me/earnings", "/payments/me/payouts");
         assertThat(paths.fieldNames()).toIterable().doesNotContain(
                 "/media/me/portfolio/{pieceId}",
                 "/media/me/portfolio/{pieceId}/hide",
@@ -82,7 +84,11 @@ class OpenApiContractTest {
                 {"/quotations", "post", "201"}, {"/quotations/me", "get", "200"},
                 {"/quotations/for-request/{requestId}", "get", "200"},
                 {"/quotations/{quotationId}/accept", "post", "200"},
-                {"/quotations/{quotationId}/reject", "post", "200"}}) {
+                {"/quotations/{quotationId}/reject", "post", "200"},
+                {"/jobs/me", "get", "200"}, {"/jobs/{jobId}/complete", "post", "200"},
+                {"/payments/me/earnings", "get", "200"},
+                {"/payments/me/payouts", "post", "201"},
+                {"/payments/me/payouts", "get", "200"}}) {
             var operation = paths.get(endpoint[0]).get(endpoint[1]);
             assertThat(operation.get("security").toString()).contains("bearerAuth");
             for (String code : new String[]{endpoint[2], "400", "401", "403", "409"}) {
@@ -178,6 +184,22 @@ class OpenApiContractTest {
                 .contains("EXTERNAL_PROVIDER", "DEVELOPMENT_SYNTHETIC");
         assertThat(contract.at("/components/schemas/IndicatorsResponse/required").toString())
                 .contains("freshness", "degraded", "observedAt", "source", "synthetic");
+        // FR-UC-20: escrow lifecycle and the commission exposed as a number, not as a difference.
+        assertThat(contract.at("/components/schemas/JobStatus/enum").toString())
+                .contains("ASSIGNED", "COMPLETED");
+        assertThat(contract.at("/components/schemas/EarningStatus/enum").toString())
+                .contains("HELD", "AVAILABLE", "PAID_OUT");
+        assertThat(contract.at("/components/schemas/EarningsResponse/properties").toString())
+                .contains("availableBalance", "heldBalance", "totalCommission");
+        assertThat(contract.at("/components/schemas/EarningResponse/properties").toString())
+                .contains("grossAmount", "commissionAmount", "netAmount", "commissionRateBasisPoints");
+        // El historial expone los tres momentos del escrow, no solo dos.
+        assertThat(contract.at("/components/schemas/EarningResponse/properties/releasedAt/type")
+                .toString()).contains("null");
+        assertThat(contract.at("/components/schemas/EarningResponse/properties/paidOutAt/type")
+                .toString()).contains("null");
+        // A payout is requested for the whole available balance: the client never names an amount.
+        assertThat(paths.get("/payments/me/payouts").get("post").has("requestBody")).isFalse();
         Files.createDirectories(Path.of("target"));
         Files.createDirectories(Path.of("docs"));
         String json = mapper.writerWithDefaultPrettyPrinter().writeValueAsString(contract) + System.lineSeparator();

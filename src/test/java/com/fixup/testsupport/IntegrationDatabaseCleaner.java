@@ -33,6 +33,9 @@ public class IntegrationDatabaseCleaner {
         DatabaseActorContext.clear();
         transactionTemplate.executeWithoutResult(status -> {
             jdbc.update("DELETE FROM chat_messages");
+            jdbc.update("DELETE FROM payouts");
+            jdbc.update("DELETE FROM fixer_earnings");
+            jdbc.update("DELETE FROM jobs");
             jdbc.update("DELETE FROM quotations");
             jdbc.update("DELETE FROM repair_request_photos");
             jdbc.update("DELETE FROM repair_requests");
