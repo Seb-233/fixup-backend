@@ -16,6 +16,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import jakarta.servlet.http.HttpServletRequest;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -72,7 +73,12 @@ class PaymentController {
                     + "Reading the balance and consuming it happen in the same transaction.")
     @ApiResponse(responseCode = "201", description = "The transfer request was recorded")
     @ResponseStatus(HttpStatus.CREATED)
-    PayoutResponse payout() {
+    PayoutResponse payout(HttpServletRequest request) {
+        // Esta operación no lleva cuerpo. Aceptar uno en silencio sería peor que rechazarlo: un
+        // cliente podría mandar {"amount": ...} y creer que fue atendido cuando nunca se leyó.
+        if (request.getContentLengthLong() > 0) {
+            throw new UnexpectedPayloadException();
+        }
         return PayoutResponse.of(requestPayout.execute(actors.currentActor()));
     }
 
@@ -99,12 +105,13 @@ class PaymentController {
         "commissionRateBasisPoints", "status", "createdAt"})
     record EarningResponse(UUID id, UUID quotationId, long grossAmount, long commissionAmount,
             long netAmount, int commissionRateBasisPoints, EarningStatus status, Instant createdAt,
-            @Schema(types = {"string", "null"}) Instant releasedAt) {
+            @Schema(types = {"string", "null"}) Instant releasedAt,
+            @Schema(types = {"string", "null"}) Instant paidOutAt) {
 
         static EarningResponse of(EarningLine line) {
             return new EarningResponse(line.id(), line.quotationId(), line.grossAmount(),
                     line.commissionAmount(), line.netAmount(), line.commissionRateBasisPoints(),
-                    line.status(), line.createdAt(), line.releasedAt());
+                    line.status(), line.createdAt(), line.releasedAt(), line.paidOutAt());
         }
     }
 

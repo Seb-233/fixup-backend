@@ -43,7 +43,11 @@ y solicitud de transferencia.
   solicitudes simultáneas no pueden llevarse el mismo dinero. No se registran transferencias
   de saldo cero.
 - **El cliente nunca dice cuánto transferir.** Se transfiere el saldo disponible completo, que el
-  backend calcula. Un monto en el cuerpo sería un monto que el cliente podría inflar.
+  backend calcula. La operación además **rechaza con 400 cualquier cuerpo**: aceptarlo en silencio
+  dejaría a quien llama creyendo que decidió un monto que nunca se leyó.
+- **El historial muestra los tres momentos del escrow.** Retenido, liberado y transferido, cada
+  uno con su fecha. Guardar `paidOutAt` y no exponerlo obligaba al técnico a deducir cuándo le
+  transfirieron.
 - **Sin ciclos entre módulos.** `payments` depende de `jobs.api` y `quotations.api`; `jobs`
   depende de `quotations.api` y `fixers.api`. Nadie depende de `payments`.
 - **Cerrar un trabajo exige Fixer verificado**, invocando `FixerEligibility` como pide

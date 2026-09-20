@@ -186,6 +186,11 @@ class OpenApiContractTest {
                 .contains("availableBalance", "heldBalance", "totalCommission");
         assertThat(contract.at("/components/schemas/EarningResponse/properties").toString())
                 .contains("grossAmount", "commissionAmount", "netAmount", "commissionRateBasisPoints");
+        // El historial expone los tres momentos del escrow, no solo dos.
+        assertThat(contract.at("/components/schemas/EarningResponse/properties/releasedAt/type")
+                .toString()).contains("null");
+        assertThat(contract.at("/components/schemas/EarningResponse/properties/paidOutAt/type")
+                .toString()).contains("null");
         // A payout is requested for the whole available balance: the client never names an amount.
         assertThat(paths.get("/payments/me/payouts").get("post").has("requestBody")).isFalse();
         Files.createDirectories(Path.of("target"));

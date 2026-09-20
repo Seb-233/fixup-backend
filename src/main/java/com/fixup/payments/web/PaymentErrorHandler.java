@@ -16,6 +16,13 @@ class PaymentErrorHandler {
                 "You do not have permission to perform this action", request.getRequestURI()));
     }
 
+    @ExceptionHandler(UnexpectedPayloadException.class)
+    ResponseEntity<ErrorResponse> badRequest(UnexpectedPayloadException exception,
+            HttpServletRequest request) {
+        return ResponseEntity.badRequest().body(new ErrorResponse(400, "INVALID_REQUEST",
+                exception.getMessage(), request.getRequestURI()));
+    }
+
     @ExceptionHandler(PaymentConflictException.class)
     ResponseEntity<ErrorResponse> conflict(PaymentConflictException exception,
             HttpServletRequest request) {

@@ -191,6 +191,7 @@ abstract class EarningsHttpContract {
                 .andExpect(jsonPath("$.paidOutTotal").value(0))
                 .andExpect(jsonPath("$.history[0].status").value("AVAILABLE"))
                 .andExpect(jsonPath("$.history[0].releasedAt").isNotEmpty())
+                .andExpect(jsonPath("$.history[0].paidOutAt").doesNotExist())
                 // Liberar no vuelve a tarifar: los montos son los mismos de la retención.
                 .andExpect(jsonPath("$.history[0].netAmount").value(NET))
                 .andExpect(jsonPath("$.history[0].commissionAmount").value(COMMISSION));
@@ -205,7 +206,9 @@ abstract class EarningsHttpContract {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.availableBalance").value(0))
                 .andExpect(jsonPath("$.paidOutTotal").value(NET))
-                .andExpect(jsonPath("$.history[0].status").value("PAID_OUT"));
+                .andExpect(jsonPath("$.history[0].status").value("PAID_OUT"))
+                // El historial dice cuándo se transfirió, no solo que se transfirió.
+                .andExpect(jsonPath("$.history[0].paidOutAt").isNotEmpty());
 
         mvc.perform(get("/payments/me/payouts").with(identity(fixer)))
                 .andExpect(status().isOk())
@@ -228,9 +231,15 @@ abstract class EarningsHttpContract {
         mvc.perform(post("/jobs/" + jobId + "/complete").with(identity(fixer)))
                 .andExpect(status().isOk());
 
-        // Un monto inflado en el cuerpo no puede cambiar lo que se transfiere: el backend lo calcula.
+        // Un monto en el cuerpo se rechaza de frente. Aceptarlo en silencio y transferir otra
+        // cifra dejaría a quien llama creyendo que decidió algo que nunca se leyó.
         mvc.perform(post("/payments/me/payouts").with(identity(fixer))
                 .contentType(MediaType.APPLICATION_JSON).content("{\"amount\": 999999999}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
+
+        // Y el saldo sigue intacto: el rechazo no consumió nada.
+        mvc.perform(post("/payments/me/payouts").with(identity(fixer)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.amount").value(NET));
     }
