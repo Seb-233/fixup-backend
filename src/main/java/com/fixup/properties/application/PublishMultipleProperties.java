@@ -32,9 +32,11 @@ public class PublishMultipleProperties {
         var status = initialStatus == null ? PropertyStatus.DRAFT : initialStatus;
         var createdSummaries = new ArrayList<PropertySummary>(batch.size());
         var publishedIds = new ArrayList<UUID>();
+        var distinctManagerIds = new java.util.HashSet<UUID>();
         for (var data : batch) {
             var id = UUID.randomUUID();
-            var managerId = data.managerUserId() != null ? data.managerUserId() : null;
+            var managerId = data.managerUserId();
+            if (managerId != null) distinctManagerIds.add(managerId);
             var property = Property.create(id, actor.internalUserId(), managerId,
                     data.type(), data.title(), data.description(),
                     data.addressStreet(), data.addressNumber(), data.addressFloor(), data.addressApartment(),
@@ -55,8 +57,11 @@ public class PublishMultipleProperties {
             createdSummaries.add(PropertySummary.of(property));
         }
         if (!publishedIds.isEmpty()) {
+            UUID batchManagerUserId = distinctManagerIds.size() == 1
+                    ? distinctManagerIds.iterator().next() : null;
             events.publishEvent(new com.fixup.properties.api.PropertyBatchPublished(
-                    List.copyOf(publishedIds), actor.internalUserId(), null, publishedIds.size(), now));
+                    List.copyOf(publishedIds), actor.internalUserId(),
+                    batchManagerUserId, publishedIds.size(), now));
         }
         return new BatchResult(createdSummaries, publishedIds.size());
     }

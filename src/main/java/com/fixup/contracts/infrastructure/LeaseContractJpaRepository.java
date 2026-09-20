@@ -17,12 +17,12 @@ interface LeaseContractJpaRepository extends JpaRepository<LeaseContractEntity, 
     @Query("SELECT c FROM LeaseContractEntity c WHERE c.id = :id")
     Optional<LeaseContractEntity> findByIdForUpdate(@Param("id") UUID id);
 
-    @Query("SELECT c FROM LeaseContractEntity c WHERE "
+    @Query("SELECT c FROM LeaseContractEntity c WHERE ("
             + "(:role = 'OWNER' AND c.ownerUserId = :userId) "
             + "OR (:role = 'TENANT' AND c.tenantUserId = :userId) "
             + "OR (:role = 'MANAGER' AND c.realEstateManagerUserId = :userId) "
             + "OR (:role = 'ANY' AND (c.ownerUserId = :userId OR c.tenantUserId = :userId "
-            + "    OR c.realEstateManagerUserId = :userId)) "
+            + "    OR c.realEstateManagerUserId = :userId))) "
             + "AND (:status IS NULL OR c.status = :status) "
             + "AND (:propertyId IS NULL OR c.propertyId = :propertyId) "
             + "AND (:startFrom IS NULL OR c.startDate >= :startFrom) "

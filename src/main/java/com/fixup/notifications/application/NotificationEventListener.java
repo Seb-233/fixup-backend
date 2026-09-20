@@ -258,7 +258,14 @@ public class NotificationEventListener {
     @Async
     public void onContractSigned(LeaseContractSigned event) {
         List<PublishNotification.BatchItem> batch = new ArrayList<>(2);
-        var who = event.signedBy().equals(event.ownerUserId()) ? "El propietario" : "El inquilino";
+        String who;
+        if (event.signedBy().equals(event.ownerUserId())) {
+            who = "El propietario";
+        } else if (event.signedBy().equals(event.tenantUserId())) {
+            who = "El inquilino";
+        } else {
+            who = "El administrador";
+        }
         batch.add(new PublishNotification.BatchItem(event.ownerUserId(),
                 NotificationType.CONTRACT_SIGNED,
                 "El contrato recibió una firma",

@@ -169,7 +169,7 @@ public record LeaseContract(
                 createdAt, now);
     }
 
-    public LeaseContract cancel(String reason, Instant now) {
+    public LeaseContract cancel(String reason, UUID cancelledByUserId, Instant now) {
         if (isFinal()) {
             throw new ContractConflictException("ALREADY_FINAL",
                     "Contract is already in a final state: " + status);
@@ -180,7 +180,7 @@ public record LeaseContract(
                 ownerSigned, tenantSigned, tenantSignedAt, ownerSignedAt,
                 signedByOwnerUserId, signedByTenantUserId,
                 terminationReason, terminatedAt, terminatedByUserId, terminatedFromStatus,
-                reason, now, tenantUserId, // cancelledByUserId will be validated by caller
+                reason, now, cancelledByUserId,
                 renewalStartDate, renewalEndDate, originalContractId,
                 createdAt, now);
     }
@@ -252,7 +252,7 @@ public record LeaseContract(
     }
 
     public ContractSnapshot snapshot() {
-        return new ContractSnapshot(id, propertyId, ownerUserId, tenantUserId, status,
-                monthlyRent, startDate, endDate, createdAt);
+        return new ContractSnapshot(id, propertyId, ownerUserId, tenantUserId, realEstateManagerUserId,
+                status, monthlyRent, startDate, endDate, createdAt);
     }
 }

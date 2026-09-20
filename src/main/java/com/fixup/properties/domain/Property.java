@@ -166,7 +166,7 @@ public record Property(
                 surfaceM2, coveredSurfaceM2, bedrooms, bathrooms, coveredParkingSpots,
                 hasBalcony, hasTerrace, hasGarden, hasElevator, hasPool, hasSecurity,
                 petsAllowed, furnished, amenities, monthlyRentSuggestion, monthlyCondoFee,
-                mediaIds, createdAt, now, now, null, deletedAt);
+                mediaIds, createdAt, now, publishedAt, null, deletedAt);
     }
 
     public Property delete(Instant now) {

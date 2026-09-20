@@ -9,6 +9,7 @@ public record ContractSnapshot(
         UUID propertyId,
         UUID ownerUserId,
         UUID tenantUserId,
+        UUID realEstateManagerUserId,
         ContractStatus status,
         long monthlyRent,
         LocalDate startDate,
@@ -16,7 +17,8 @@ public record ContractSnapshot(
         Instant createdAt) {
 
     public void requireVisibleBy(UUID userId) {
-        if (!ownerUserId.equals(userId) && !tenantUserId.equals(userId)) {
+        if (!ownerUserId.equals(userId) && !tenantUserId.equals(userId)
+                && !(realEstateManagerUserId != null && realEstateManagerUserId.equals(userId))) {
             throw new ContractAccessDeniedException();
         }
     }

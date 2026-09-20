@@ -36,7 +36,7 @@ public class CancelLeaseContract {
             throw new ContractAccessDeniedException();
         }
         var now = Instant.now();
-        var cancelled = c.cancel(reason, now);
+        var cancelled = c.cancel(reason, actor.internalUserId(), now);
         contracts.update(cancelled);
         events.publishEvent(new LeaseContractCancelled(cancelled.id(), cancelled.ownerUserId(),
                 cancelled.tenantUserId(), actor.internalUserId(), reason, now));
