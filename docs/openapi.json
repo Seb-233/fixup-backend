@@ -339,6 +339,34 @@
         } ]
       }
     },
+    "/properties" : {
+      "post" : {
+        "tags" : [ "property-controller" ],
+        "operationId" : "create",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/NewProperty"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "201" : {
+            "description" : "Created",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PropertySummary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/payments/me/payouts" : {
       "get" : {
         "tags" : [ "payment-controller" ],
@@ -1997,6 +2025,54 @@
         } ]
       }
     },
+    "/properties/{propertyId}" : {
+      "get" : {
+        "tags" : [ "property-controller" ],
+        "operationId" : "get",
+        "parameters" : [ {
+          "name" : "propertyId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PropertySummary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/properties/me" : {
+      "get" : {
+        "tags" : [ "property-controller" ],
+        "operationId" : "listOwn",
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/PropertySummary"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/payments/me/earnings" : {
       "get" : {
         "tags" : [ "payment-controller" ],
@@ -2752,6 +2828,44 @@
       "QuotationStatus" : {
         "type" : "string",
         "enum" : [ "SUBMITTED", "ACCEPTED", "REJECTED" ]
+      },
+      "NewProperty" : {
+        "type" : "object",
+        "properties" : {
+          "name" : {
+            "type" : "string"
+          },
+          "address" : {
+            "type" : "string"
+          },
+          "city" : {
+            "type" : "string"
+          },
+          "areaM2" : {
+            "type" : "number"
+          }
+        }
+      },
+      "PropertySummary" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "name" : {
+            "type" : "string"
+          },
+          "address" : {
+            "type" : "string"
+          },
+          "city" : {
+            "type" : "string"
+          },
+          "areaM2" : {
+            "type" : "number"
+          }
+        }
       },
       "PayoutResponse" : {
         "type" : "object",

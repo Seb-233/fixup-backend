@@ -54,6 +54,7 @@ class MediaDeletionAfterCommitTest {
         jdbc.update("DELETE FROM media_assets");
         jdbc.update("DELETE FROM fixer_profiles");
         jdbc.update("DELETE FROM user_roles");
+        jdbc.update("DELETE FROM properties");
         jdbc.update("DELETE FROM users");
 
         ownerId = UUID.randomUUID();
@@ -112,3 +113,4 @@ class MediaDeletionAfterCommitTest {
         assertThat(mediaAssets.findById(assetId).orElseThrow().status()).isEqualTo(MediaAssetStatus.DELETION_PENDING);
     }
 }
+

@@ -64,6 +64,7 @@ class SecurityConfiguration {
                             .requestMatchers("/quotations/**").authenticated()
                             .requestMatchers("/jobs/**").authenticated()
                             .requestMatchers("/payments/**").authenticated()
+                            .requestMatchers("/properties/**").authenticated()
                             .anyRequest().denyAll();
                 })
                 .exceptionHandling(errors -> errors.authenticationEntryPoint(entryPoint)
@@ -89,3 +90,4 @@ class SecurityConfiguration {
         return source;
     }
 }
+
