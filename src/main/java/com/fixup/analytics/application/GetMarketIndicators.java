@@ -1,0 +1,89 @@
+package com.fixup.analytics.application;
+
+import com.fixup.analytics.api.IndicatorFreshness;
+import com.fixup.analytics.api.MarketIndicatorsUnavailableException;
+import com.fixup.analytics.domain.FreshnessWindow;
+import com.fixup.analytics.domain.MarketIndicatorSnapshots;
+import com.fixup.analytics.domain.MarketIndicators;
+import com.fixup.analytics.domain.MarketIndicatorsSource;
+import com.fixup.analytics.domain.MarketSourceUnavailableException;
+import com.fixup.analytics.domain.Zone;
+import com.fixup.identityaccess.api.CurrentActor;
+import com.fixup.identityaccess.api.UserStatus;
+import java.time.Instant;
+import java.util.Optional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.stereotype.Service;
+
+/**
+ * FR-UC-15: consulta de indicadores del mercado inmobiliario por zona.
+ *
+ * <p>Aplica la táctica de disponibilidad "Graceful degradation (degradación elegante)" acordada
+ * el 25-ago. El orden es deliberado:
+ *
+ * <ol>
+ *   <li>Si la cuenta del actor no está ACTIVE se rechaza con 403 ACCESS_DENIED.</li>
+ *   <li>Si la caché está dentro de la ventana de frescura se responde con ella y no se contacta
+ *       la fuente externa: menos dependencia de un tercero que puede caerse.</li>
+ *   <li>Si no, se consulta la fuente, que ya viene envuelta en Timeout y Retry.</li>
+ *   <li>Si la fuente falla y existe un último valor conocido, se responde ese valor marcado como
+ *       DEGRADED. El servicio sigue disponible con capacidad reducida, que es exactamente lo que
+ *       define la degradación elegante.</li>
+ *   <li>Si la fuente falla y no hay nada guardado no se inventa un dato: se informa la
+ *       indisponibilidad.</li>
+ * </ol>
+ *
+ * <p>Este método no abre una transacción. La llamada externa, con sus reintentos y sus esperas,
+ * puede tardar segundos: sostener una transacción de PostgreSQL mientras tanto retiene una
+ * conexión del pool y mantiene abierta una transacción que no está haciendo trabajo de base de
+ * datos. La lectura y la escritura de la caché se hacen en transacciones cortas e independientes,
+ * declaradas en el adaptador de persistencia, y la llamada HTTP queda fuera de todas ellas.
+ */
+@Service
+public class GetMarketIndicators {
+    private static final Logger LOG = LoggerFactory.getLogger(GetMarketIndicators.class);
+
+    private final MarketIndicatorsSource source;
+    private final MarketIndicatorSnapshots snapshots;
+    private final FreshnessWindow freshnessWindow;
+
+    GetMarketIndicators(MarketIndicatorsSource source, MarketIndicatorSnapshots snapshots,
+            FreshnessWindow freshnessWindow) {
+        this.source = source;
+        this.snapshots = snapshots;
+        this.freshnessWindow = freshnessWindow;
+    }
+
+    public MarketIndicatorsView execute(CurrentActor actor, String requestedZone) {
+        if (actor == null || actor.status() != UserStatus.ACTIVE) {
+            throw new AccessDeniedException("Active account required to view market indicators");
+        }
+        var zone = Zone.normalize(requestedZone);
+        var now = Instant.now();
+        Optional<MarketIndicators> cached = snapshots.findByZone(zone);
+
+        if (cached.isPresent() && freshnessWindow.isFresh(cached.get().observedAt(), now)) {
+            return MarketIndicatorsView.of(cached.get(), IndicatorFreshness.CACHED);
+        }
+
+        try {
+            var fresh = source.fetch(zone);
+            boolean accepted = snapshots.saveIfNewer(fresh);
+            if (accepted) {
+                return MarketIndicatorsView.of(fresh, IndicatorFreshness.LIVE);
+            }
+            var winner = snapshots.findByZone(zone).orElse(fresh);
+            IndicatorFreshness freshness = freshnessWindow.isFresh(winner.observedAt(), now)
+                    ? IndicatorFreshness.CACHED
+                    : IndicatorFreshness.DEGRADED;
+            return MarketIndicatorsView.of(winner, freshness);
+        } catch (MarketSourceUnavailableException unavailable) {
+            // No se registra la causa con detalle del proveedor: solo el hecho y la zona.
+            LOG.warn("Market source unavailable for zone {}; falling back to the last known value", zone);
+            return cached.map(value -> MarketIndicatorsView.of(value, IndicatorFreshness.DEGRADED))
+                    .orElseThrow(() -> new MarketIndicatorsUnavailableException(zone));
+        }
+    }
+}
