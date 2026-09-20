@@ -84,9 +84,13 @@ class PostgresRowLevelSecurityIT {
 
     private UUID provisionWithRole(String subject, String role) throws Exception {
         UUID id = provision(subject);
-        mvc.perform(post("/auth/select-role").with(identity(subject))
-                .contentType(MediaType.APPLICATION_JSON).content("{\"role\":\"" + role + "\"}"))
-                .andExpect(status().isOk());
+        if ("REAL_ESTATE_MANAGER".equals(role) || "PLATFORM_ADMIN".equals(role)) {
+            jdbc.update("INSERT INTO user_roles(user_id, role) VALUES (?, ?)", id, role);
+        } else {
+            mvc.perform(post("/auth/select-role").with(identity(subject))
+                    .contentType(MediaType.APPLICATION_JSON).content("{\"role\":\"" + role + "\"}"))
+                    .andExpect(status().isOk());
+        }
         return id;
     }
 
@@ -455,6 +459,9 @@ class PostgresRowLevelSecurityIT {
 
         UUID tenant = provisionWithRole("auth0|rls-prop-tenant", "TENANT");
         assertThat(visiblePropertyIds(tenant, "TENANT")).isEmpty();
+
+        UUID manager = provisionWithRole("auth0|rls-prop-manager", "REAL_ESTATE_MANAGER");
+        assertThat(visiblePropertyIds(manager, "REAL_ESTATE_MANAGER")).isEmpty();
 
         UUID admin = provisionAdmin("auth0|rls-prop-admin");
         assertThat(visiblePropertyIds(admin, "PLATFORM_ADMIN")).contains(propA, propB);
