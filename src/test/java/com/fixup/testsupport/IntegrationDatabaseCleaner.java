@@ -48,6 +48,7 @@ public class IntegrationDatabaseCleaner {
             jdbc.update("DELETE FROM fixer_specialties");
             jdbc.update("DELETE FROM fixer_profiles");
             jdbc.update("DELETE FROM user_roles");
+            jdbc.update("DELETE FROM properties");
             jdbc.update("DELETE FROM users");
         });
     }

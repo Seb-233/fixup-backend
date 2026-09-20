@@ -53,7 +53,7 @@ class OpenApiContractTest {
                 "/quotations", "/quotations/me", "/quotations/for-request/{requestId}",
                 "/quotations/{quotationId}/accept", "/quotations/{quotationId}/reject",
                 "/jobs/me", "/jobs/{jobId}/complete",
-                "/payments/me/earnings", "/payments/me/payouts");
+                "/payments/me/earnings", "/payments/me/payouts", "/properties", "/properties/{propertyId}", "/properties/me");
         assertThat(paths.fieldNames()).toIterable().doesNotContain(
                 "/media/me/portfolio/{pieceId}",
                 "/media/me/portfolio/{pieceId}/hide",
@@ -207,3 +207,5 @@ class OpenApiContractTest {
         Files.writeString(Path.of("docs", "openapi.json"), json);
     }
 }
+
+
