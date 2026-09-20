@@ -26,6 +26,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -422,5 +423,66 @@ class PostgresRowLevelSecurityIT {
         UUID message = createChatMessage(request, fixer, "Hola dueño");
 
         assertThat(visibleChatMessageIds(admin, "PLATFORM_ADMIN")).contains(message);
+    }
+
+    // ---------- FR-UC-25: properties ----------
+
+    private UUID createProperty(UUID ownerId, String name) {
+        UUID id = UUID.randomUUID();
+        jdbc.update("INSERT INTO properties (id, owner_user_id, name, address, city, area_m2, created_at, updated_at) "
+                + "VALUES (?, ?, ?, 'Addr', 'City', 10, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
+                id, ownerId, name);
+        return id;
+    }
+
+    private List<UUID> visiblePropertyIds(UUID userId, String role) {
+        return actingAs(userId, role, connection -> queryUuids(connection, "SELECT id FROM properties"));
+    }
+
+    @Test
+    void ownersSeeOnlyTheirOwnProperties() throws Exception {
+        UUID ownerA = provisionWithRole("auth0|rls-prop-owner-a", "OWNER");
+        UUID ownerB = provisionWithRole("auth0|rls-prop-owner-b", "OWNER");
+
+        UUID propA = createProperty(ownerA, "Prop A");
+        UUID propB = createProperty(ownerB, "Prop B");
+
+        assertThat(visiblePropertyIds(ownerA, "OWNER")).containsExactly(propA);
+        assertThat(visiblePropertyIds(ownerB, "OWNER")).containsExactly(propB);
+
+        UUID fixer = provisionVerifiedFixer("auth0|rls-prop-fixer", "PLUMBING");
+        assertThat(visiblePropertyIds(fixer, "FIXER")).isEmpty();
+
+        UUID tenant = provisionWithRole("auth0|rls-prop-tenant", "TENANT");
+        assertThat(visiblePropertyIds(tenant, "TENANT")).isEmpty();
+
+        UUID admin = provisionAdmin("auth0|rls-prop-admin");
+        assertThat(visiblePropertyIds(admin, "PLATFORM_ADMIN")).contains(propA, propB);
+    }
+
+    @Test
+    void ownerCannotInsertPropertyForAnotherOwner() throws Exception {
+        UUID ownerA = provisionWithRole("auth0|rls-prop-owner-a-insert", "OWNER");
+        UUID ownerB = provisionWithRole("auth0|rls-prop-owner-b-insert", "OWNER");
+
+        assertThatCode(() -> actingAs(ownerA, "OWNER", connection -> {
+            try (var statement = connection.prepareStatement(
+                    "INSERT INTO properties (id, owner_user_id, name, address, city, area_m2, created_at, updated_at) "
+                            + "VALUES (?, ?, 'My Prop', 'Addr', 'City', 10, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)")) {
+                statement.setObject(1, UUID.randomUUID());
+                statement.setObject(2, ownerA);
+                return statement.executeUpdate();
+            }
+        })).doesNotThrowAnyException();
+
+        assertThatThrownBy(() -> actingAs(ownerA, "OWNER", connection -> {
+            try (var statement = connection.prepareStatement(
+                    "INSERT INTO properties (id, owner_user_id, name, address, city, area_m2, created_at, updated_at) "
+                            + "VALUES (?, ?, 'Alien Prop', 'Addr', 'City', 10, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)")) {
+                statement.setObject(1, UUID.randomUUID());
+                statement.setObject(2, ownerB);
+                return statement.executeUpdate();
+            }
+        })).hasMessageContaining("row-level security policy");
     }
 }
