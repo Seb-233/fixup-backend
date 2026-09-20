@@ -2,6 +2,7 @@ package com.fixup.payments;
 
 import com.fixup.payments.api.EarningStatus;
 import com.fixup.payments.api.PaymentConflictException;
+import com.fixup.payments.api.PayoutStatus;
 import com.fixup.payments.domain.CommissionPolicy;
 import com.fixup.payments.domain.FixerEarning;
 import com.fixup.payments.domain.Payout;
@@ -12,7 +13,7 @@ import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-/** FR-UC-20: aritmética de la comisión y ciclo del escrow, sin contexto de Spring. */
+/** FR-UC-20: aritmÃ©tica de la comisiÃ³n y ciclo del escrow, sin contexto de Spring. */
 class FixerEarningTest {
     private static final UUID QUOTATION = UUID.randomUUID();
     private static final UUID FIXER = UUID.randomUUID();
@@ -31,7 +32,7 @@ class FixerEarningTest {
 
     @Test
     void anIndivisibleRemainderStaysWithTheFixerAndNotWithThePlatform() {
-        // 10% de 999 son 99,9: la división entera trunca y el peso suelto queda del lado del técnico.
+        // 10% de 999 son 99,9: la divisiÃ³n entera trunca y el peso suelto queda del lado del tÃ©cnico.
         assertThat(CommissionPolicy.commissionFor(999L)).isEqualTo(99L);
         assertThat(CommissionPolicy.netFor(999L)).isEqualTo(900L);
         assertThat(CommissionPolicy.commissionFor(999L) + CommissionPolicy.netFor(999L))
@@ -114,5 +115,18 @@ class FixerEarningTest {
         assertThat(payout.amount()).isEqualTo(810_000L);
         assertThat(payout.earningCount()).isEqualTo(2);
         assertThat(payout.requestedAt()).isEqualTo(NOW);
+    }
+
+    @Test
+    void aPayoutKeepsStatusRequested() {
+        var payout = Payout.requested(UUID.randomUUID(), FIXER, 810_000L, 2, NOW);
+        assertThat(payout.status()).isEqualTo(PayoutStatus.REQUESTED);
+    }
+
+    @Test
+    void aConsumedEarningKeepsPaidOutStatus() {
+        var paidOut = held(450_000L).release(NOW).payOut(NOW);
+        assertThat(paidOut.status()).isEqualTo(EarningStatus.PAID_OUT);
+        assertThat(paidOut.paidOutAt()).isEqualTo(NOW);
     }
 }
