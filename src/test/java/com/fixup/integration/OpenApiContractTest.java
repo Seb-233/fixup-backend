@@ -49,6 +49,7 @@ class OpenApiContractTest {
                 "/media/me/portfolio/pieces/{pieceId}/show", "/media/fixers/{fixerUserId}/portfolio",
                 "/analytics/zones/{zone}/market-indicators",
                 "/requests", "/requests/me", "/requests/open", "/requests/{requestId}",
+                "/requests/{requestId}/messages",
                 "/quotations", "/quotations/me", "/quotations/for-request/{requestId}",
                 "/quotations/{quotationId}/accept", "/quotations/{quotationId}/reject");
         assertThat(paths.fieldNames()).toIterable().doesNotContain(
@@ -76,6 +77,8 @@ class OpenApiContractTest {
                 {"/media/fixers/{fixerUserId}/portfolio", "get", "200"},
                 {"/requests", "post", "201"}, {"/requests/me", "get", "200"},
                 {"/requests/open", "get", "200"}, {"/requests/{requestId}", "get", "200"},
+                {"/requests/{requestId}/messages", "post", "201"},
+                {"/requests/{requestId}/messages", "get", "200"},
                 {"/quotations", "post", "201"}, {"/quotations/me", "get", "200"},
                 {"/quotations/for-request/{requestId}", "get", "200"},
                 {"/quotations/{quotationId}/accept", "post", "200"},

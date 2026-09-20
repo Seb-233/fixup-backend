@@ -92,6 +92,181 @@
         } ]
       }
     },
+    "/requests/{requestId}/messages" : {
+      "get" : {
+        "tags" : [ "chat-controller" ],
+        "summary" : "Read the chat thread for a repair request",
+        "description" : "Requires an active account that is either the owner of the request, its assigned fixer, or an active PLATFORM_ADMIN. Oldest message first.",
+        "operationId" : "list",
+        "parameters" : [ {
+          "name" : "requestId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "responses" : {
+          "400" : {
+            "description" : "Blank body, body too long, or unexpected client fields",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Inactive account or not a participant of this chat",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "The repair request does not exist or is not visible to the caller",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "The request has no assigned fixer yet",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "200" : {
+            "description" : "Messages in the order they were sent",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/MessageResponse"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      },
+      "post" : {
+        "tags" : [ "chat-controller" ],
+        "summary" : "Send a chat message",
+        "description" : "Requires an active account that is either the owner of the request or its assigned fixer, and the request must already have an assigned fixer.",
+        "operationId" : "send",
+        "parameters" : [ {
+          "name" : "requestId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/SendMessageRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "400" : {
+            "description" : "Blank body, body too long, or unexpected client fields",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Inactive account or not a participant of this chat",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "The repair request does not exist or is not visible to the caller",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "The request has no assigned fixer yet",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "201" : {
+            "description" : "The message was recorded",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
     "/quotations" : {
       "post" : {
         "tags" : [ "quotation-controller" ],
@@ -2380,6 +2555,50 @@
           }
         },
         "required" : [ "createdAt", "description", "photos", "requestId", "specialty", "status", "title" ]
+      },
+      "SendMessageRequest" : {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "body" : {
+            "type" : "string",
+            "maxLength" : 2000,
+            "minLength" : 0
+          }
+        },
+        "required" : [ "body" ]
+      },
+      "MessageResponse" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "requestId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "senderUserId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "body" : {
+            "type" : "string"
+          },
+          "sentAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "notificationStatus" : {
+            "$ref" : "#/components/schemas/NotificationStatus"
+          }
+        },
+        "required" : [ "body", "id", "notificationStatus", "requestId", "senderUserId", "sentAt" ]
+      },
+      "NotificationStatus" : {
+        "type" : "string",
+        "enum" : [ "SENT", "FAILED" ]
       },
       "QuotationRequest" : {
         "type" : "object",

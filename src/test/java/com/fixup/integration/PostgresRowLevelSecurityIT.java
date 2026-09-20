@@ -347,4 +347,80 @@ class PostgresRowLevelSecurityIT {
         assertThat(visibleVerificationDocumentMediaIds(admin, "PLATFORM_ADMIN"))
                 .contains(documentA, documentB);
     }
+
+    // ---------- FR-UC-24: chat messages ----------
+
+    private UUID createAssignedRequest(UUID ownerId, UUID fixerId, String specialty, String title) {
+        UUID id = UUID.randomUUID();
+        jdbc.update("INSERT INTO repair_requests (id, owner_user_id, specialty, title, description, status, "
+                        + "assigned_fixer_user_id, created_at, updated_at) VALUES (?, ?, ?, ?, "
+                        + "'fixture description', 'ASSIGNED', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
+                id, ownerId, specialty, title, fixerId);
+        return id;
+    }
+
+    private UUID createChatMessage(UUID requestId, UUID senderId, String body) {
+        UUID id = UUID.randomUUID();
+        jdbc.update("INSERT INTO chat_messages (id, request_id, sender_user_id, body, sent_at, "
+                        + "notification_status) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, 'SENT')",
+                id, requestId, senderId, body);
+        return id;
+    }
+
+    private List<UUID> visibleChatMessageIds(UUID userId, String role) {
+        return actingAs(userId, role, connection -> queryUuids(connection, "SELECT id FROM chat_messages"));
+    }
+
+    @Test
+    void participantsSeeTheirOwnChatButNotAnotherRequestsChat() throws Exception {
+        UUID ownerA = provisionWithRole("auth0|rls-chat-owner-a", "OWNER");
+        UUID fixerA = provisionVerifiedFixer("auth0|rls-chat-fixer-a", "PLUMBING");
+        UUID ownerB = provisionWithRole("auth0|rls-chat-owner-b", "OWNER");
+        UUID fixerB = provisionVerifiedFixer("auth0|rls-chat-fixer-b", "PLUMBING");
+
+        UUID requestA = createAssignedRequest(ownerA, fixerA, "PLUMBING", "Chat A");
+        UUID requestB = createAssignedRequest(ownerB, fixerB, "PLUMBING", "Chat B");
+        UUID messageA = createChatMessage(requestA, ownerA, "Hola fixer A");
+        UUID messageB = createChatMessage(requestB, ownerB, "Hola fixer B");
+
+        assertThat(visibleChatMessageIds(ownerA, "OWNER")).containsExactly(messageA);
+        assertThat(visibleChatMessageIds(fixerA, "FIXER")).containsExactly(messageA);
+        assertThat(visibleChatMessageIds(ownerB, "OWNER")).containsExactly(messageB);
+        assertThat(visibleChatMessageIds(fixerB, "FIXER")).containsExactly(messageB);
+    }
+
+    @Test
+    void unrelatedFixerCannotSeeOrInsertIntoAnotherChat() throws Exception {
+        UUID owner = provisionWithRole("auth0|rls-chat-owner-x", "OWNER");
+        UUID assignedFixer = provisionVerifiedFixer("auth0|rls-chat-fixer-x", "ELECTRICAL");
+        UUID otherFixer = provisionVerifiedFixer("auth0|rls-chat-fixer-y", "ELECTRICAL");
+        UUID request = createAssignedRequest(owner, assignedFixer, "ELECTRICAL", "Chat X");
+        UUID message = createChatMessage(request, owner, "Privado");
+
+        assertThat(visibleChatMessageIds(otherFixer, "FIXER")).doesNotContain(message);
+
+        // Unlike UPDATE, a rejected INSERT cannot silently affect zero rows: PostgreSQL raises a hard
+        // policy violation, exactly like the FR-UC-25/23 WITH CHECK failures already exercised.
+        assertThatThrownBy(() -> actingAs(otherFixer, "FIXER", connection -> {
+            try (var statement = connection.prepareStatement(
+                    "INSERT INTO chat_messages (id, request_id, sender_user_id, body, sent_at, "
+                            + "notification_status) VALUES (?, ?, ?, 'intento ajeno', CURRENT_TIMESTAMP, 'SENT')")) {
+                statement.setObject(1, UUID.randomUUID());
+                statement.setObject(2, request);
+                statement.setObject(3, otherFixer);
+                return statement.executeUpdate();
+            }
+        })).hasMessageContaining("row-level security policy");
+    }
+
+    @Test
+    void platformAdminCanSeeAnyChatForModeration() throws Exception {
+        UUID admin = provisionAdmin("auth0|rls-chat-admin");
+        UUID owner = provisionWithRole("auth0|rls-chat-owner-admin", "OWNER");
+        UUID fixer = provisionVerifiedFixer("auth0|rls-chat-fixer-admin", "MASONRY");
+        UUID request = createAssignedRequest(owner, fixer, "MASONRY", "Chat admin");
+        UUID message = createChatMessage(request, fixer, "Hola dueño");
+
+        assertThat(visibleChatMessageIds(admin, "PLATFORM_ADMIN")).contains(message);
+    }
 }

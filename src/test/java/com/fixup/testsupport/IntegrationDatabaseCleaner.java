@@ -32,6 +32,7 @@ public class IntegrationDatabaseCleaner {
         // fixup_app because of some earlier, unrelated test's leftover actor.
         DatabaseActorContext.clear();
         transactionTemplate.executeWithoutResult(status -> {
+            jdbc.update("DELETE FROM chat_messages");
             jdbc.update("DELETE FROM quotations");
             jdbc.update("DELETE FROM repair_request_photos");
             jdbc.update("DELETE FROM repair_requests");
