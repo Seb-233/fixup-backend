@@ -3391,6 +3391,9 @@
         "type" : "object",
         "additionalProperties" : false,
         "properties" : {
+          "consentVersion" : {
+            "type" : "string"
+          },
           "documents" : {
             "type" : "array",
             "items" : {
@@ -3398,11 +3401,6 @@
             },
             "maxItems" : 4,
             "minItems" : 0
-          },
-          "consentVersion" : {
-            "type" : "string",
-            "maxLength" : 16,
-            "minLength" : 0
           }
         },
         "required" : [ "documents" ]

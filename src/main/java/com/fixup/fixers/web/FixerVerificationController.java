@@ -98,7 +98,7 @@ class FixerVerificationController {
     VerificationResponse submit(@Valid @RequestBody DocumentsRequest request) {
         var actor = actors.currentActor();
         submitVerification.execute(actor, request.documents().stream()
-                .map(document -> new DocumentSubmission(document.type(), document.mediaId())).toList());
+                .map(document -> new DocumentSubmission(document.type(), document.mediaId())).toList(), request.consentVersion());
         return VerificationResponse.of(getVerification.execute(actor));
     }
 
@@ -143,7 +143,7 @@ class FixerVerificationController {
     }
 
     @Schema(additionalProperties = Schema.AdditionalPropertiesValue.FALSE)
-    record DocumentsRequest(@NotEmpty @Size(max = 4) @Valid List<DocumentRequest> documents) {
+    record DocumentsRequest(String consentVersion, @NotEmpty @Size(max = 4) @Valid List<DocumentRequest> documents) {
     }
 
     @Schema(additionalProperties = Schema.AdditionalPropertiesValue.FALSE)

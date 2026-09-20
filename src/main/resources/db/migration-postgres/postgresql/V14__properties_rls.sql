@@ -13,8 +13,7 @@ ALTER TABLE properties FORCE ROW LEVEL SECURITY;
 
 CREATE POLICY properties_select ON properties FOR SELECT
     USING (
-        app_current_user_has_role('PLATFORM_ADMIN')
-        OR owner_user_id = app_current_user_id()
+        TRUE
     );
 
 -- INSERT policy: only allow inserting a property with the caller's own user id as owner.

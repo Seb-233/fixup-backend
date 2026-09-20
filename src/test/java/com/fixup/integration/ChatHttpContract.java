@@ -35,10 +35,11 @@ abstract class ChatHttpContract {
         static final AtomicBoolean DOWN = new AtomicBoolean(false);
 
         @Override
-        public void send(PushNotification notification) {
+        public com.fixup.notifications.api.NotificationStatus send(PushNotification notification) {
             if (DOWN.get()) {
                 throw new PushNotificationException("Simulated FCM outage");
             }
+            return com.fixup.notifications.api.NotificationStatus.SENT;
         }
     }
 
