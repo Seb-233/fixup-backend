@@ -24,6 +24,14 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
  * database) is left on the original connection unchanged: RLS is a barrier for user-driven requests,
  * not for trusted internal processes. Against any non-PostgreSQL database (the H2 profile used by
  * fast HTTP-contract tests) this is a no-op, since neither the role nor the session variables exist.
+ *
+ * <p>DatabaseActorContext is only ever populated by CurrentActorProvider.currentActor(), and only
+ * ever cleared by the MVC interceptor once a real HTTP request completes -- so it stays correctly
+ * scoped to "one request" for every actual code path in this application. Directly invoking a
+ * @PreAuthorize-guarded use case outside of any HTTP request (as one identityaccess/fixers test does,
+ * on purpose, to prove method security holds even then) is the one exception: nothing ever clears the
+ * context afterwards, so tests that do this are responsible for clearing it themselves in a finally
+ * block, the same way they already reset SecurityContextHolder.
  */
 class RlsSessionTransactionManager extends JpaTransactionManager {
     private static final String ACTIVATE_ACTOR_SQL =

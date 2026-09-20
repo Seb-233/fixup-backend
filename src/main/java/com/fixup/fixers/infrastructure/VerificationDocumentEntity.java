@@ -6,14 +6,15 @@ import jakarta.persistence.EmbeddedId;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Table;
 import java.time.Instant;
+import java.util.UUID;
 
 @Entity
 @Table(name = "fixer_verification_documents")
 class VerificationDocumentEntity {
     @EmbeddedId
     private VerificationDocumentId id;
-    @Column(name = "storage_key", nullable = false, length = 512)
-    private String storageKey;
+    @Column(name = "media_id", nullable = false)
+    private UUID mediaId;
     @Column(name = "submitted_at", nullable = false)
     private Instant submittedAt;
 
@@ -23,7 +24,7 @@ class VerificationDocumentEntity {
     static VerificationDocumentEntity from(VerificationDocument document) {
         var entity = new VerificationDocumentEntity();
         entity.id = new VerificationDocumentId(document.userId(), document.type());
-        entity.storageKey = document.storageKey();
+        entity.mediaId = document.mediaId();
         entity.submittedAt = document.submittedAt();
         return entity;
     }
@@ -33,7 +34,11 @@ class VerificationDocumentEntity {
     }
 
     void replaceWith(VerificationDocument document) {
-        storageKey = document.storageKey();
+        mediaId = document.mediaId();
         submittedAt = document.submittedAt();
+    }
+
+    VerificationDocument toDomain() {
+        return new VerificationDocument(id.userId(), id.documentType(), mediaId, submittedAt);
     }
 }

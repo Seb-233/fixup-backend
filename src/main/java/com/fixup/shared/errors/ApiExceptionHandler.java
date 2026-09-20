@@ -22,6 +22,9 @@ class ApiExceptionHandler {
 
     @ExceptionHandler(AccessDeniedException.class)
     ResponseEntity<ErrorResponse> forbidden(HttpServletRequest request) {
+        // Covers @PreAuthorize denials (e.g. a non-admin calling the fixer verification review
+        // endpoints), which never reach a module-specific error handler.
+        SecurityAuditLog.accessBlocked("ACCESS_DENIED", request.getMethod(), request.getRequestURI());
         return ResponseEntity.status(403).body(new ErrorResponse(403, "ACCESS_DENIED",
                 "You do not have permission to perform this action", request.getRequestURI()));
     }

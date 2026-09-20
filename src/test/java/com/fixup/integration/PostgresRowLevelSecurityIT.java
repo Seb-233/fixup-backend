@@ -122,6 +122,22 @@ class PostgresRowLevelSecurityIT {
         return id;
     }
 
+    // FR-UC-23: a fixer's identity verification document, fixture-inserted the same way the others
+    // are -- a real media_assets row (media_id is a real FK now, not a free-text storage key) plus
+    // the fixer_verification_documents row that files it under a document type.
+    private UUID createVerificationDocument(UUID fixerUserId, String documentType) {
+        UUID mediaId = UUID.randomUUID();
+        jdbc.update("INSERT INTO media_assets (id, owner_user_id, purpose, object_key, content_type, size_bytes, "
+                        + "status, upload_expires_at, confirmed_at, created_at) VALUES (?, ?, 'FIXER_VERIFICATION', "
+                        + "?, 'image/jpeg', 100, 'READY', CURRENT_TIMESTAMP + INTERVAL '1' DAY, CURRENT_TIMESTAMP, "
+                        + "CURRENT_TIMESTAMP)",
+                mediaId, fixerUserId, "verification/" + fixerUserId + "/" + mediaId + ".jpg");
+        jdbc.update("INSERT INTO fixer_verification_documents (user_id, document_type, media_id, submitted_at) "
+                        + "VALUES (?, ?, ?, CURRENT_TIMESTAMP)",
+                fixerUserId, documentType, mediaId);
+        return mediaId;
+    }
+
     private String requestTitle(UUID requestId) {
         return jdbc.queryForObject("SELECT title FROM repair_requests WHERE id = ?", String.class, requestId);
     }
@@ -174,6 +190,11 @@ class PostgresRowLevelSecurityIT {
 
     private List<UUID> visibleQuotationIds(UUID userId, String role) {
         return actingAs(userId, role, connection -> queryUuids(connection, "SELECT id FROM quotations"));
+    }
+
+    private List<UUID> visibleVerificationDocumentMediaIds(UUID userId, String role) {
+        return actingAs(userId, role,
+                connection -> queryUuids(connection, "SELECT media_id FROM fixer_verification_documents"));
     }
 
     private int attemptUpdateRequestTitle(UUID userId, String role, UUID requestId, String newTitle) {
@@ -298,5 +319,32 @@ class PostgresRowLevelSecurityIT {
 
         // A plain authenticated account with no role at all: not owner, not fixer, not admin.
         assertThat(visibleRequestIds(stranger, "")).doesNotContain(request);
+    }
+
+    // ---------- FR-UC-23: identity verification documents ----------
+
+    @Test
+    void fixerCannotSeeAnotherFixersVerificationDocuments() throws Exception {
+        UUID fixerA = provisionWithRole("auth0|rls-vdoc-fixer-a", "FIXER");
+        UUID fixerB = provisionWithRole("auth0|rls-vdoc-fixer-b", "FIXER");
+        UUID documentA = createVerificationDocument(fixerA, "ID_CARD");
+        UUID documentB = createVerificationDocument(fixerB, "ID_CARD");
+
+        assertThat(visibleVerificationDocumentMediaIds(fixerA, "FIXER"))
+                .containsExactly(documentA);
+        assertThat(visibleVerificationDocumentMediaIds(fixerB, "FIXER"))
+                .containsExactly(documentB);
+    }
+
+    @Test
+    void platformAdminSeesAnyFixersVerificationDocuments() throws Exception {
+        UUID admin = provisionAdmin("auth0|rls-vdoc-admin");
+        UUID fixerA = provisionWithRole("auth0|rls-vdoc-fixer-admin-a", "FIXER");
+        UUID fixerB = provisionWithRole("auth0|rls-vdoc-fixer-admin-b", "FIXER");
+        UUID documentA = createVerificationDocument(fixerA, "ID_CARD");
+        UUID documentB = createVerificationDocument(fixerB, "TRADE_CERTIFICATE");
+
+        assertThat(visibleVerificationDocumentMediaIds(admin, "PLATFORM_ADMIN"))
+                .contains(documentA, documentB);
     }
 }

@@ -330,6 +330,9 @@ abstract class IdentityHttpContract {
                     .isInstanceOf(AccessDeniedException.class);
         } finally {
             SecurityContextHolder.clearContext();
+            // actors.currentActor() above resolved a real CurrentActor outside of any HTTP request,
+            // which left it set on this thread: nothing else would ever clear it.
+            com.fixup.shared.security.DatabaseActorContext.clear();
         }
     }
 

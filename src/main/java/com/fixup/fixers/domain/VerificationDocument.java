@@ -6,17 +6,15 @@ import java.util.Objects;
 import java.util.UUID;
 
 /**
- * The backend stores only the object key. No document content crosses the API.
+ * References a media asset already validated by the media module (owned by this fixer, purpose
+ * FIXER_VERIFICATION, status READY): no document content or storage key crosses this API.
  */
-public record VerificationDocument(UUID userId, FixerVerificationDocumentType type, String storageKey,
+public record VerificationDocument(UUID userId, FixerVerificationDocumentType type, UUID mediaId,
         Instant submittedAt) {
     public VerificationDocument {
         Objects.requireNonNull(userId);
         Objects.requireNonNull(type);
+        Objects.requireNonNull(mediaId);
         Objects.requireNonNull(submittedAt);
-        if (storageKey == null || storageKey.isBlank()) {
-            throw new IllegalArgumentException("A verification document requires a storage key");
-        }
-        storageKey = storageKey.trim();
     }
 }

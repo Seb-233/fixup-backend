@@ -75,6 +75,7 @@ class MinioStorageIT {
         jdbc.update("DELETE FROM media_deletion_jobs");
         jdbc.update("DELETE FROM portfolio_pieces");
         jdbc.update("DELETE FROM fixer_portfolios");
+        jdbc.update("DELETE FROM fixer_verification_documents");
         jdbc.update("DELETE FROM media_assets");
         jdbc.update("DELETE FROM fixer_profiles");
         jdbc.update("DELETE FROM user_roles");

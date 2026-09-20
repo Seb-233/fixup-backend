@@ -8,5 +8,6 @@ import io.swagger.v3.oas.annotations.media.Schema;
 @Schema(enumAsRef = true)
 public enum MediaPurpose {
     FIXER_PORTFOLIO,
-    REPAIR_REQUEST
+    REPAIR_REQUEST,
+    FIXER_VERIFICATION
 }

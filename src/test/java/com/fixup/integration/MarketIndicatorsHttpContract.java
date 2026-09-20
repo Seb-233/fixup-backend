@@ -85,6 +85,8 @@ abstract class MarketIndicatorsHttpContract {
     void clearIsolatedTestDatabase() {
         SecurityContextHolder.clearContext();
         jdbc.update("DELETE FROM market_indicator_snapshots");
+        jdbc.update("DELETE FROM fixer_verification_documents");
+        jdbc.update("DELETE FROM media_assets");
         jdbc.update("DELETE FROM fixer_profiles");
         jdbc.update("DELETE FROM user_roles");
         jdbc.update("DELETE FROM users");

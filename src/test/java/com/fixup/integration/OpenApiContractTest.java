@@ -40,7 +40,7 @@ class OpenApiContractTest {
         assertThat(paths.fieldNames()).toIterable().containsExactlyInAnyOrder(
                 "/auth/bootstrap", "/auth/me", "/auth/select-role",
                 "/fixers/me/verification", "/fixers/me/verification/documents",
-                "/fixers/me/specialties",
+                "/fixers/me/specialties", "/fixers/{fixerUserId}/verification",
                 "/fixers/{fixerUserId}/verification/approve", "/fixers/{fixerUserId}/verification/reject",
                 "/media/uploads", "/media/uploads/{mediaId}/confirm",
                 "/media/me/portfolio", "/media/me/portfolio/pieces",
@@ -62,6 +62,7 @@ class OpenApiContractTest {
                 {"/fixers/me/verification", "get", "200"},
                 {"/fixers/me/verification/documents", "post", "200"},
                 {"/fixers/me/specialties", "post", "200"},
+                {"/fixers/{fixerUserId}/verification", "get", "200"},
                 {"/fixers/{fixerUserId}/verification/approve", "post", "204"},
                 {"/fixers/{fixerUserId}/verification/reject", "post", "204"},
                 {"/media/uploads", "post", "201"},
@@ -116,9 +117,12 @@ class OpenApiContractTest {
                 .contains("null");
         assertThat(contract.at("/components/schemas/VerificationResponse/properties/specialties").toString())
                 .isNotEmpty();
-        // No document content crosses this API: the request carries storage keys only.
+        // No document content crosses this API: the request carries an already-uploaded media ID.
         assertThat(contract.at("/components/schemas/DocumentRequest/properties").toString())
-                .contains("storageKey").doesNotContain("content", "file");
+                .contains("mediaId").doesNotContain("storageKey", "content", "file");
+        // Documents surface to the admin only as signed read URLs, never raw storage keys.
+        assertThat(contract.at("/components/schemas/ReviewDocumentResponse/properties").toString())
+                .contains("mediaId", "readUrl", "readUrlExpiresAt").doesNotContain("storageKey");
         // FR-UC-18: closed taxonomy of trades and closed lifecycle of an offer.
         assertThat(contract.at("/components/schemas/Specialty/enum").toString())
                 .contains("PLUMBING", "ELECTRICAL", "PAINTING", "CARPENTRY", "MASONRY", "GENERAL");
