@@ -12,7 +12,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * FR-UC-18 / FR-UC-16: el Fixer configura sus especialidades para recibir solicitudes compatibles.
+ * FR-UC-18 / FR-UC-23: el Fixer configura sus especialidades para recibir solicitudes compatibles.
  */
 @Service
 public class UpdateFixerSpecialties {

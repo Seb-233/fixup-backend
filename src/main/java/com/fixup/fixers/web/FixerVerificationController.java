@@ -39,7 +39,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
-/** FR-UC-16: registro y validación del Fixer. Controllers stay thin and never touch JPA. */
+/** FR-UC-23: registro y validación del Fixer. Controllers stay thin and never touch JPA. */
 @RestController
 @RequestMapping(value = "/fixers", produces = MediaType.APPLICATION_JSON_VALUE)
 @SecurityRequirement(name = "bearerAuth")

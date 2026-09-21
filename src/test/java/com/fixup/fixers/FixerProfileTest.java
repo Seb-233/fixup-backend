@@ -18,7 +18,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-/** FR-UC-16: máquina de estados de la verificación del Fixer, sin contexto de Spring. */
+/** FR-UC-23: máquina de estados de la verificación del Fixer, sin contexto de Spring. */
 class FixerProfileTest {
     private static final UUID FIXER = UUID.randomUUID();
     private static final UUID REVIEWER = UUID.randomUUID();

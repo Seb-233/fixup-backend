@@ -15,8 +15,8 @@ Este documento describe la arquitectura de almacenamiento de objetos, el ciclo d
   - Procesamiento durable, desacoplado y con reintentos seguros para la eliminación de objetos en almacenamiento.
   - Rutas REST estabilizadas bajo el recurso `/pieces` y respuestas 404 `PIECE_NOT_FOUND` indistinguibles para piezas inexistentes y ajenas.
 
-- **FR-UC-16 (Documentos de verificación del Fixer):**
-  - Mantiene temporalmente su contrato con `storageKey` hasta su respectiva iteración de migración al ciclo controlado de medios.
+- **FR-UC-23 (Documentos de verificación del Fixer):**
+  - Migrado al mismo ciclo controlado de medios que el portafolio: el cliente ya no envía `storageKey`, sino un `mediaId` obtenido de `POST /media/uploads` (`purpose: FIXER_VERIFICATION`) y confirmado con `POST /media/uploads/{mediaId}/confirm` antes de archivarlo en `POST /fixers/me/verification/documents`.
 
 ---
 

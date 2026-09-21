@@ -14,7 +14,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/** FR-UC-16: only a PLATFORM_ADMIN still valid in PostgreSQL decides a verification. */
+/** FR-UC-23: only a PLATFORM_ADMIN still valid in PostgreSQL decides a verification. */
 @Service
 public class ReviewFixerVerification implements FixerReview {
     private final FixerProfiles profiles;
