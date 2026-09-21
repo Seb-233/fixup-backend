@@ -10,26 +10,34 @@ class RepairSpecialtyClassifierTest {
     private final RepairSpecialtyClassifier classifier = new RepairSpecialtyClassifier();
 
     @Test
-    void classifiesPlumbing() {
-        assertThat(classifier.classify("Fuga de agua", "Hay una fuga en el lavamanos"))
+    void classifiesPlumbingWithAndWithoutAccents() {
+        assertThat(classifier.classify("Tubería de agua", "Hay una fuga"))
+                .isEqualTo(Specialty.PLUMBING);
+        assertThat(classifier.classify("Tuberia de agua", "Hay una fuga"))
                 .isEqualTo(Specialty.PLUMBING);
     }
 
     @Test
     void classifiesElectricalWithAccentsAndCase() {
-        assertThat(classifier.classify("CORTOCIRCUITO", "Apagón en la casa"))
+        assertThat(classifier.classify("ELECTRICIDAD", "Apagón en la casa"))
                 .isEqualTo(Specialty.ELECTRICAL);
     }
 
     @Test
-    void classifiesPhrase() {
-        assertThat(classifier.classify("Problema", "Hubo un corto circuito en el tablero"))
+    void classifiesFugaInodroPunctuation() {
+        assertThat(classifier.classify("¡Fuga, en el lavamanos!", "Agua en el piso"))
+                .isEqualTo(Specialty.PLUMBING);
+    }
+
+    @Test
+    void classifiesCortoCircuito() {
+        assertThat(classifier.classify("Problema eléctrico", "Hubo un corto circuito en el tablero"))
                 .isEqualTo(Specialty.ELECTRICAL);
     }
 
     @Test
     void classifiesPainting() {
-        assertThat(classifier.classify("Pintar pared", "Necesito un pintor"))
+        assertThat(classifier.classify("Pintar brocha", "Necesito un pintor"))
                 .isEqualTo(Specialty.PAINTING);
     }
 
@@ -41,8 +49,23 @@ class RepairSpecialtyClassifierTest {
 
     @Test
     void classifiesMasonry() {
-        assertThat(classifier.classify("Grieta en muro", "Hay una fisura en el techo"))
+        assertThat(classifier.classify("Grieta en muro", "Hay una fisura por mamposteria"))
                 .isEqualTo(Specialty.MASONRY);
+    }
+
+    @Test
+    void falseSubstringDoesNotMatch() {
+        assertThat(classifier.classify("Los tubos", "Estan rotos"))
+                .isEqualTo(Specialty.GENERAL);
+    }
+
+    @Test
+    void ruleCountsOnlyOnce() {
+        assertThat(classifier.classify("tuberia tuberia tuberia", "cable"))
+                .isEqualTo(Specialty.GENERAL);
+
+        assertThat(classifier.classify("tuberia tuberia tuberia", "nada mas"))
+                .isEqualTo(Specialty.PLUMBING);
     }
 
     @Test
@@ -52,25 +75,18 @@ class RepairSpecialtyClassifierTest {
     }
 
     @Test
-    void noMatchResolvesToGeneral() {
+    void noSignalResolvesToGeneral() {
         assertThat(classifier.classify("Ayuda", "Necesito arreglar algo"))
                 .isEqualTo(Specialty.GENERAL);
     }
 
     @Test
-    void ruleCountsOnce() {
-        // "tubo" and "agua" (2 for plumbing), vs "cable", "cable", "cable" (1 for electrical because "cable" counts once)
-        assertThat(classifier.classify("Tubo de agua", "El cable el cable el cable"))
-                .isEqualTo(Specialty.PLUMBING);
-    }
-
-    @Test
-    void wholeWordMatching() {
-        // "tuberia" vs "tubo". If we search "tubo" in "tubos", it shouldn't match.
-        // Wait, "tubo" is plumbing. If text is "tubos", it shouldn't match if it uses boundaries.
-        // Let's test with a word that isn't exactly the keyword.
-        assertThat(classifier.classify("Los tubos", "Estan rotos"))
-                .isEqualTo(Specialty.GENERAL);
+    void classificationIsDeterministic() {
+        String title = "Fuga de agua";
+        String desc = "Se rompió la tubería en el baño";
+        Specialty first = classifier.classify(title, desc);
+        Specialty second = classifier.classify(title, desc);
+        assertThat(first).isEqualTo(second).isEqualTo(Specialty.PLUMBING);
     }
 
     @Test

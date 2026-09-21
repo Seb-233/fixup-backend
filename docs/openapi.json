@@ -2900,6 +2900,24 @@
   },
   "components" : {
     "schemas" : {
+      "ErrorResponse" : {
+        "type" : "object",
+        "properties" : {
+          "status" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "code" : {
+            "type" : "string"
+          },
+          "message" : {
+            "type" : "string"
+          },
+          "path" : {
+            "type" : "string"
+          }
+        }
+      },
       "OpenRequest" : {
         "type" : "object",
         "additionalProperties" : false,
@@ -2929,24 +2947,6 @@
           }
         },
         "required" : [ "description", "propertyId", "title" ]
-      },
-      "ErrorResponse" : {
-        "type" : "object",
-        "properties" : {
-          "status" : {
-            "type" : "integer",
-            "format" : "int32"
-          },
-          "code" : {
-            "type" : "string"
-          },
-          "message" : {
-            "type" : "string"
-          },
-          "path" : {
-            "type" : "string"
-          }
-        }
       },
       "PhotoResponse" : {
         "type" : "object",

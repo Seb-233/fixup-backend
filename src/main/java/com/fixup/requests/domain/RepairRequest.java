@@ -13,7 +13,7 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * FR-UC-18: la solicitud que el Fixer evalÃºa antes de cotizar. Las fotografÃ­as se guardan como
+ * FR-UC-18: la solicitud que el Fixer evalúa antes de cotizar. Las fotografías se guardan como
  * storage keys; el contenido nunca cruza la API.
  */
 public record RepairRequest(UUID id, UUID propertyId, UUID ownerUserId, Specialty specialty, String title,
@@ -73,9 +73,9 @@ public record RepairRequest(UUID id, UUID propertyId, UUID ownerUserId, Specialt
     }
 
     /**
-     * FR-UC-25: la autorizaciÃ³n se resuelve sobre el registro, no sobre la pantalla. El dueÃ±o
-     * siempre lo ve; un Fixer ve la solicitud mientras estÃ¡ en oferta, porque necesita la
-     * descripciÃ³n y las fotos para cotizar, y despuÃ©s solo si el trabajo quedÃ³ asignado a Ã©l.
+     * FR-UC-25: la autorización se resuelve sobre el registro, no sobre la pantalla. El dueño
+     * siempre lo ve; un Fixer ve la solicitud mientras está en oferta, porque necesita la
+     * descripción y las fotos para cotizar, y después solo si el trabajo quedó asignado a él.
      * Un identificador adivinado no alcanza para leer la solicitud de otro.
      */
     public void requireVisibleTo(CurrentActor actor) {

@@ -43,7 +43,7 @@ class RepairRequestTest {
     private static final Instant NOW = Instant.parse("2026-09-18T15:00:00Z");
 
     private RepairRequest open() {
-        return RepairRequest.open(UUID.randomUUID(), UUID.randomUUID(), OWNER, Specialty.PLUMBING, "Gotera en el baÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â±o",
+        return RepairRequest.open(UUID.randomUUID(), UUID.randomUUID(), OWNER, Specialty.PLUMBING, "Gotera en el baño",
                 "El agua cae desde el techo cuando el vecino abre la ducha.", List.of(UUID.randomUUID()), NOW);
     }
 

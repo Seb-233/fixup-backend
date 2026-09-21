@@ -12,7 +12,7 @@ import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/** FR-UC-18: el propietario abre la solicitud que los Fixers verÃ¡n en su bandeja. */
+/** FR-UC-18: el propietario abre la solicitud que los Fixers verán en su bandeja. */
 @Service
 public class CreateRepairRequest {
     private final RepairRequests requests;

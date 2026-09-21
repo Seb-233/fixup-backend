@@ -426,7 +426,7 @@ class PostgresRowLevelSecurityIT {
         UUID owner = provisionWithRole("auth0|rls-chat-owner-admin", "OWNER");
         UUID fixer = provisionVerifiedFixer("auth0|rls-chat-fixer-admin", "MASONRY");
         UUID request = createAssignedRequest(owner, fixer, "MASONRY", "Chat admin");
-        UUID message = createChatMessage(request, fixer, "Hola dueÃƒÆ’Ã‚Â±o");
+        UUID message = createChatMessage(request, fixer, "Hola dueño");
 
         assertThat(visibleChatMessageIds(admin, "PLATFORM_ADMIN")).contains(message);
     }

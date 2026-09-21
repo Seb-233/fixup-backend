@@ -36,7 +36,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
-/** FR-UC-18: solicitudes de reparaciÃƒÆ’Ã‚Â³n. Controllers stay thin and never touch JPA. */
+/** FR-UC-18: solicitudes de reparación. Controllers stay thin and never touch JPA. */
 @RestController
 @RequestMapping(value = "/requests", produces = MediaType.APPLICATION_JSON_VALUE)
 @SecurityRequirement(name = "bearerAuth")

@@ -27,7 +27,7 @@ public class RepairSpecialtyClassifier {
         ));
         KEYWORDS.put(Specialty.PAINTING, Set.of(
                 "pintura", "pintor", "pintar", "brocha", "rodillo", "esmalte", "acrilico",
-                "mancha", "descascarado", "estuco", "resane", "resanar", "pared", "techo"
+                "mancha", "descascarado", "estuco", "resane", "resanar", "latex"
         ));
         KEYWORDS.put(Specialty.CARPENTRY, Set.of(
                 "carpinteria", "carpintero", "madera", "mueble", "puerta", "ventana", "bisagra",
@@ -88,8 +88,8 @@ public class RepairSpecialtyClassifier {
     private String normalize(String text) {
         String normalized = Normalizer.normalize(text, Normalizer.Form.NFD);
         normalized = normalized.replaceAll("\\p{M}", "");
-        normalized = normalized.replaceAll("[^a-zA-Z0-9\\\\s]", " ");
-        normalized = normalized.replaceAll("\\\\s+", " ").trim();
-        return normalized.toLowerCase();
+        normalized = normalized.replaceAll("[^a-zA-Z0-9\\s]", " ");
+        normalized = normalized.replaceAll("\\s+", " ").trim();
+        return normalized.toLowerCase(java.util.Locale.ROOT);
     }
 }

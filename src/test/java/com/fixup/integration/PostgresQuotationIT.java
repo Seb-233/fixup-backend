@@ -57,7 +57,7 @@ class PostgresQuotationIT extends QuotationHttpContract {
     void strangerCannotReadDetail() throws Exception {
         String ownerSubject = "auth0|owner-secret";
         provisionOwner(ownerSubject);
-        UUID requestId = createRequest(ownerSubject, "PLUMBING", "Gotera baÃƒÂ±o", "ReparaciÃƒÂ³n requerida con urgencia");
+        UUID requestId = createRequest(ownerSubject, "PLUMBING", "Gotera baño", "Reparación requerida con urgencia");
 
         String strangerSubject = "auth0|stranger-user";
         provision(strangerSubject); // Authenticated user with no special role
@@ -124,7 +124,7 @@ class PostgresQuotationIT extends QuotationHttpContract {
                     "requestId": "%s",
                     "amount": 90000,
                     "estimatedDays": 2,
-                    "message": "LleguÃƒÂ© tarde"
+                    "message": "Llegué tarde"
                 }
                 """.formatted(requestId);
 
@@ -146,7 +146,7 @@ class PostgresQuotationIT extends QuotationHttpContract {
     void concurrentQuotationSubmissionAndAcceptanceLeavesConsistentState() throws Exception {
         String ownerSubject = "auth0|owner-concurrent-sub-acc";
         provisionOwner(ownerSubject);
-        UUID requestId = createRequest(ownerSubject, "PLUMBING", "TuberÃƒÂ­a rota", "Fuga en baÃƒÂ±o principal");
+        UUID requestId = createRequest(ownerSubject, "PLUMBING", "Tubería rota", "Fuga en baño principal");
 
         String fixerASubject = "auth0|fixer-concurrent-sub-acc-a";
         provisionVerifiedFixer(fixerASubject, "PLUMBING");
