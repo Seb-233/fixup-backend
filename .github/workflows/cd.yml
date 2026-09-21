@@ -1,0 +1,160 @@
+name: Backend CD
+
+# Triggers only when Backend CI completes successfully on main.
+# This keeps CI and CD decoupled: CI runs on all branches/PRs,
+# CD only promotes a green main build to the cluster.
+on:
+  workflow_run:
+    workflows: ["Backend CI"]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+  packages: write          # required to push images to ghcr.io
+  deployments: write       # required to update GitHub Environment deployment status
+
+concurrency:
+  group: cd-${{ github.ref }}
+  cancel-in-progress: false  # never cancel a deploy in progress
+
+env:
+  IMAGE: ghcr.io/seb-233/fixup-backend
+
+jobs:
+  build-and-deploy:
+    name: Build, push & deploy
+    runs-on: self-hosted
+    environment: Production  # secrets come from this GitHub Environment
+    # Only run if the triggering CI workflow actually passed
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+
+    steps:
+      # ── 1. Source ────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Compute short SHA
+        id: sha
+        run: |
+          SHORT=$(echo "${{ github.event.workflow_run.head_sha }}" | cut -c1-7)
+          echo "short=${SHORT}" >> "$GITHUB_OUTPUT"
+
+      # ── 2. Docker build & push to ghcr.io ───────────────────
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          # Three tags: immutable SHA, mutable branch alias, mutable latest
+          tags: |
+            ${{ env.IMAGE }}:sha-${{ steps.sha.outputs.short }}
+            ${{ env.IMAGE }}:main
+            ${{ env.IMAGE }}:latest
+          # Layer cache stored in the registry — speeds up subsequent builds
+          cache-from: type=registry,ref=${{ env.IMAGE }}:buildcache
+          cache-to: type=registry,ref=${{ env.IMAGE }}:buildcache,mode=max
+
+      # ── 3. Configure kubectl ─────────────────────────────────
+      - name: Set up kubeconfig
+        run: |
+          mkdir -p "$HOME/.kube"
+          # KUBE_CONFIG secret contains the kubeconfig encoded in base64.
+          # Generate it with: cat ~/.kube/config | base64 -w 0
+          printf '%s' "${{ secrets.KUBE_CONFIG }}" | base64 -d > "$HOME/.kube/config"
+          chmod 600 "$HOME/.kube/config"
+
+      # ── 4. Bootstrap namespace ───────────────────────────────
+      - name: Apply namespace
+        run: kubectl apply -f k8s/namespace.yml
+
+      # ── 5. Sync Kubernetes Secrets from GitHub Secrets ───────
+      #       --dry-run=client + apply makes this idempotent.
+      - name: Sync Kubernetes Secrets
+        run: |
+          # imagePullSecret so the cluster can pull from ghcr.io
+          # Uses GHCR_PAT (a Personal Access Token with read:packages scope)
+          # instead of GITHUB_TOKEN, which expires after each workflow run.
+          kubectl create secret docker-registry ghcr-pull-secret \
+            --namespace=fixup \
+            --docker-server=ghcr.io \
+            --docker-username=seb-233 \
+            --docker-password=${{ secrets.GHCR_PAT }} \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+          # PostgreSQL credentials
+          kubectl create secret generic postgres-secret \
+            --namespace=fixup \
+            --from-literal=POSTGRES_DB=${{ secrets.POSTGRES_DB }} \
+            --from-literal=POSTGRES_USER=${{ secrets.POSTGRES_USER }} \
+            --from-literal=POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }} \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+          # MinIO credentials
+          kubectl create secret generic minio-secret \
+            --namespace=fixup \
+            --from-literal=MINIO_ROOT_USER=${{ secrets.MINIO_ROOT_USER }} \
+            --from-literal=MINIO_ROOT_PASSWORD=${{ secrets.MINIO_ROOT_PASSWORD }} \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+          # Backend application secrets (envFrom in backend-deployment.yml)
+          kubectl create secret generic backend-secret \
+            --namespace=fixup \
+            --from-literal=DATABASE_URL=jdbc:postgresql://postgres:5432/${{ secrets.POSTGRES_DB }} \
+            --from-literal=DATABASE_USERNAME=${{ secrets.POSTGRES_USER }} \
+            --from-literal=DATABASE_PASSWORD=${{ secrets.POSTGRES_PASSWORD }} \
+            --from-literal=AUTH0_ISSUER_URI=${{ secrets.AUTH0_ISSUER_URI }} \
+            --from-literal=AUTH0_AUDIENCE=${{ secrets.AUTH0_AUDIENCE }} \
+            --from-literal=CORS_ALLOWED_ORIGINS=${{ secrets.CORS_ALLOWED_ORIGINS }} \
+            --from-literal=FIXUP_STORAGE_ENDPOINT=http://minio:9000 \
+            --from-literal=FIXUP_STORAGE_PUBLIC_ENDPOINT=${{ secrets.FIXUP_STORAGE_PUBLIC_ENDPOINT }} \
+            --from-literal=FIXUP_STORAGE_ACCESS_KEY=${{ secrets.MINIO_ROOT_USER }} \
+            --from-literal=FIXUP_STORAGE_SECRET_KEY=${{ secrets.MINIO_ROOT_PASSWORD }} \
+            --from-literal=FIXUP_STORAGE_BUCKET=${{ secrets.FIXUP_STORAGE_BUCKET }} \
+            --from-literal=FIXUP_STORAGE_REGION=${{ secrets.FIXUP_STORAGE_REGION }} \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      # ── 6. Apply infrastructure manifests ────────────────────
+      - name: Apply infrastructure
+        run: |
+          kubectl apply -f k8s/postgres-statefulset.yml
+          kubectl apply -f k8s/minio-statefulset.yml
+          kubectl apply -f k8s/backend-service.yml
+          kubectl apply -f k8s/backend-ingress.yml
+
+      # ── 7. Deploy backend with the exact SHA tag ─────────────
+      - name: Apply backend deployment
+        run: kubectl apply -f k8s/backend-deployment.yml
+
+      - name: Update image tag
+        run: |
+          kubectl set image deployment/fixup-backend \
+            fixup-backend=${{ env.IMAGE }}:sha-${{ steps.sha.outputs.short }} \
+            --namespace=fixup
+
+      # ── 8. Verify rollout ────────────────────────────────────
+      - name: Wait for rollout
+        run: |
+          kubectl rollout status deployment/fixup-backend \
+            --namespace=fixup \
+            --timeout=180s
+
+      - name: Verify health endpoint
+        run: |
+          POD=$(kubectl get pod -n fixup \
+            -l app=fixup-backend \
+            -o jsonpath='{.items[0].metadata.name}')
+          kubectl exec -n fixup "$POD" -- \
+            wget -qO- http://localhost:8080/actuator/health
