@@ -16,7 +16,7 @@ import java.util.UUID;
  * FR-UC-18: la solicitud que el Fixer evalúa antes de cotizar. Las fotografías se guardan como
  * storage keys; el contenido nunca cruza la API.
  */
-public record RepairRequest(UUID id, UUID ownerUserId, Specialty specialty, String title,
+public record RepairRequest(UUID id, UUID propertyId, UUID ownerUserId, Specialty specialty, String title,
         String description, List<UUID> mediaIds, RepairRequestStatus status,
         UUID assignedFixerUserId, Instant createdAt, Instant updatedAt) {
 
@@ -44,9 +44,13 @@ public record RepairRequest(UUID id, UUID ownerUserId, Specialty specialty, Stri
         }
     }
 
-    public static RepairRequest open(UUID id, UUID ownerUserId, Specialty specialty, String title,
+    public static RepairRequest open(UUID id, UUID propertyId, UUID ownerUserId, Specialty specialty, String title,
             String description, List<UUID> mediaIds, Instant now) {
-        return new RepairRequest(id, ownerUserId, specialty, title, description, mediaIds,
+        if (propertyId == null) {
+            throw new RepairRequestConflictException("INVALID_PROPERTY",
+                    "A propertyId is required to open a new repair request");
+        }
+        return new RepairRequest(id, propertyId, ownerUserId, specialty, title, description, mediaIds,
                 RepairRequestStatus.OPEN, null, now, now);
     }
 
@@ -60,7 +64,7 @@ public record RepairRequest(UUID id, UUID ownerUserId, Specialty specialty, Stri
             throw new RepairRequestConflictException("SELF_ASSIGNMENT",
                     "The owner of the request cannot be assigned as its fixer");
         }
-        return new RepairRequest(id, ownerUserId, specialty, title, description, mediaIds,
+        return new RepairRequest(id, propertyId, ownerUserId, specialty, title, description, mediaIds,
                 RepairRequestStatus.ASSIGNED, fixerUserId, createdAt, now);
     }
 

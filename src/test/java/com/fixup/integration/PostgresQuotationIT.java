@@ -31,6 +31,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @Import({TestJwtConfiguration.class, TestStorageConfiguration.class, QuotationHttpContract.EventRecorder.class})
 @Testcontainers
 class PostgresQuotationIT extends QuotationHttpContract {
+    @Override
+    protected org.springframework.test.web.servlet.ResultMatcher expectedDenialStatus() {
+        return org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isNotFound();
+    }
     @Container
     static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:17-alpine");
 

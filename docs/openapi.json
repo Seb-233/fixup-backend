@@ -2900,12 +2900,31 @@
   },
   "components" : {
     "schemas" : {
+      "ErrorResponse" : {
+        "type" : "object",
+        "properties" : {
+          "status" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "code" : {
+            "type" : "string"
+          },
+          "message" : {
+            "type" : "string"
+          },
+          "path" : {
+            "type" : "string"
+          }
+        }
+      },
       "OpenRequest" : {
         "type" : "object",
         "additionalProperties" : false,
         "properties" : {
-          "specialty" : {
-            "$ref" : "#/components/schemas/Specialty"
+          "propertyId" : {
+            "type" : "string",
+            "format" : "uuid"
           },
           "title" : {
             "type" : "string",
@@ -2927,29 +2946,7 @@
             "minItems" : 0
           }
         },
-        "required" : [ "description", "specialty", "title" ]
-      },
-      "Specialty" : {
-        "type" : "string",
-        "enum" : [ "PLUMBING", "ELECTRICAL", "PAINTING", "CARPENTRY", "MASONRY", "GENERAL" ]
-      },
-      "ErrorResponse" : {
-        "type" : "object",
-        "properties" : {
-          "status" : {
-            "type" : "integer",
-            "format" : "int32"
-          },
-          "code" : {
-            "type" : "string"
-          },
-          "message" : {
-            "type" : "string"
-          },
-          "path" : {
-            "type" : "string"
-          }
-        }
+        "required" : [ "description", "propertyId", "title" ]
       },
       "PhotoResponse" : {
         "type" : "object",
@@ -2976,6 +2973,10 @@
         "type" : "object",
         "properties" : {
           "requestId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "propertyId" : {
             "type" : "string",
             "format" : "uuid"
           },
@@ -3007,6 +3008,10 @@
           }
         },
         "required" : [ "createdAt", "description", "photos", "requestId", "specialty", "status", "title" ]
+      },
+      "Specialty" : {
+        "type" : "string",
+        "enum" : [ "PLUMBING", "ELECTRICAL", "PAINTING", "CARPENTRY", "MASONRY", "GENERAL" ]
       },
       "SendMessageRequest" : {
         "type" : "object",

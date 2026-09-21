@@ -71,6 +71,12 @@ class RepairRequestController {
         this.mediaAttachmentService = mediaAttachmentService;
     }
 
+    @org.springframework.web.bind.annotation.ExceptionHandler(com.fixup.properties.api.PropertyNotFoundException.class)
+    org.springframework.http.ResponseEntity<ErrorResponse> handlePropertyNotFound(jakarta.servlet.http.HttpServletRequest request) {
+        return org.springframework.http.ResponseEntity.status(org.springframework.http.HttpStatus.NOT_FOUND)
+                .body(new ErrorResponse(404, "NOT_FOUND", "The property does not exist", request.getRequestURI()));
+    }
+
     @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
     @Operation(summary = "Open a repair request",
             description = "The body carries media asset IDs. No raw image binary content crosses this API.")
@@ -79,7 +85,7 @@ class RepairRequestController {
     RequestDetailResponse open(@Valid @RequestBody OpenRequest body) {
         var mediaIds = body.mediaIds() == null ? List.<UUID>of() : body.mediaIds();
         var summary = createRequest.execute(actors.currentActor(),
-                new NewRepairRequest(body.specialty(), body.title(), body.description(), mediaIds));
+                new NewRepairRequest(body.propertyId(), body.title(), body.description(), mediaIds));
         var photos = mediaAttachmentService.resolveReadUrls(summary.mediaIds());
         return RequestDetailResponse.of(summary, photos);
     }
@@ -116,7 +122,8 @@ class RepairRequestController {
     }
 
     @Schema(additionalProperties = Schema.AdditionalPropertiesValue.FALSE)
-    record OpenRequest(@NotNull Specialty specialty, @NotBlank @Size(max = 150) String title,
+    @com.fasterxml.jackson.annotation.JsonIgnoreProperties(ignoreUnknown = false)
+    record OpenRequest(@NotNull UUID propertyId, @NotBlank @Size(max = 150) String title,
             @NotBlank @Size(max = 2000) String description,
             @Size(max = 6) List<@NotNull UUID> mediaIds) {
         public OpenRequest {
@@ -132,6 +139,7 @@ class RepairRequestController {
     }
 
     @Schema(requiredProperties = {"requestId", "specialty", "title", "createdAt"})
+    @com.fasterxml.jackson.annotation.JsonIgnoreProperties(ignoreUnknown = false)
     record OpenRequestSummaryResponse(UUID requestId, Specialty specialty, String title, Instant createdAt) {
         static OpenRequestSummaryResponse of(com.fixup.requests.domain.RepairRequest request) {
             return new OpenRequestSummaryResponse(request.id(), request.specialty(), request.title(), request.createdAt());
@@ -140,7 +148,7 @@ class RepairRequestController {
 
     @Schema(requiredProperties = {"requestId", "specialty", "title", "description", "photos",
         "status", "createdAt"})
-    record RequestDetailResponse(UUID requestId, Specialty specialty, String title, String description,
+    record RequestDetailResponse(UUID requestId, UUID propertyId, Specialty specialty, String title, String description,
             List<PhotoResponse> photos, RepairRequestStatus status,
             @Schema(types = {"string", "null"}) UUID assignedFixerUserId, Instant createdAt) {
 
@@ -149,7 +157,7 @@ class RepairRequestController {
             var photoResponses = photos == null ? List.<PhotoResponse>of() : photos.stream()
                     .map(p -> new PhotoResponse(p.mediaId(), p.readUrl(), p.readUrlExpiresAt()))
                     .toList();
-            return new RequestDetailResponse(request.id(), request.specialty(), request.title(), request.description(),
+            return new RequestDetailResponse(request.id(), request.propertyId(), request.specialty(), request.title(), request.description(),
                     photoResponses, request.status(), request.assignedFixerUserId(), request.createdAt());
         }
 
@@ -158,7 +166,7 @@ class RepairRequestController {
             var photoResponses = photos == null ? List.<PhotoResponse>of() : photos.stream()
                     .map(p -> new PhotoResponse(p.mediaId(), p.readUrl(), p.readUrlExpiresAt()))
                     .toList();
-            return new RequestDetailResponse(summary.id(), summary.specialty(), summary.title(), summary.description(),
+            return new RequestDetailResponse(summary.id(), summary.propertyId(), summary.specialty(), summary.title(), summary.description(),
                     photoResponses, summary.status(), summary.assignedFixerUserId(), summary.createdAt());
         }
     }

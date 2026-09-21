@@ -25,6 +25,8 @@ class RepairRequestEntity {
     @Id
     @Column(name = "id")
     private UUID id;
+    @Column(name = "property_id", updatable = false)
+    private UUID propertyId;
     @Column(name = "owner_user_id", nullable = false, updatable = false)
     private UUID ownerUserId;
     @Enumerated(EnumType.STRING)
@@ -56,6 +58,7 @@ class RepairRequestEntity {
     static RepairRequestEntity from(RepairRequest request) {
         var entity = new RepairRequestEntity();
         entity.id = request.id();
+        entity.propertyId = request.propertyId();
         entity.ownerUserId = request.ownerUserId();
         entity.specialty = request.specialty();
         entity.title = request.title();
@@ -74,7 +77,7 @@ class RepairRequestEntity {
     }
 
     RepairRequest toDomain() {
-        return new RepairRequest(id, ownerUserId, specialty, title, description, List.copyOf(mediaIds),
+        return new RepairRequest(id, propertyId, ownerUserId, specialty, title, description, List.copyOf(mediaIds),
                 status, assignedFixerUserId, createdAt, updatedAt);
     }
 }

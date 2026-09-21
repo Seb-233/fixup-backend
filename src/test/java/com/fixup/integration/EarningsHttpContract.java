@@ -89,19 +89,14 @@ abstract class EarningsHttpContract {
     }
 
     private UUID createRequest(String ownerSubject, String specialty) throws Exception {
-        String body = """
-                {
-                    "specialty": "%s",
-                    "title": "Tubo roto",
-                    "description": "Fuga constante de agua en la cocina",
-                    "mediaIds": []
-                }
-                """.formatted(specialty);
-        var result = mvc.perform(post("/requests").with(identity(ownerSubject))
-                .contentType(MediaType.APPLICATION_JSON).content(body))
-                .andExpect(status().isCreated()).andReturn();
-        return UUID.fromString(mapper.readTree(result.getResponse().getContentAsString())
-                .get("requestId").asText());
+        java.util.UUID reqPropId = java.util.UUID.randomUUID();
+        java.util.UUID ownerUserId = java.util.UUID.fromString(mapper.readTree(mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/auth/me").with(org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt().jwt(j -> j.subject(ownerSubject)))).andReturn().getResponse().getContentAsString()).get("id").asText());
+        jdbc.update("INSERT INTO properties (id, owner_user_id, name, address, city, area_m2, created_at, updated_at) VALUES (?, ?, 'Prop', 'Addr', 'City', 10, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)", reqPropId, ownerUserId);
+        String body = "{\"propertyId\":\"" + reqPropId.toString() + "\",\"title\":\"Tubo roto\",\"description\":\"Fuga constante de agua en la cocina\",\"mediaIds\":[]}";
+        var result = mvc.perform(post("/requests").with(identity(ownerSubject)).contentType(MediaType.APPLICATION_JSON).content(body)).andExpect(status().isCreated()).andReturn();
+        java.util.UUID reqId = java.util.UUID.fromString(mapper.readTree(result.getResponse().getContentAsString()).get("requestId").asText());
+        jdbc.update("UPDATE repair_requests SET specialty = ? WHERE id = ?", specialty, reqId);
+        return reqId;
     }
 
     private UUID submitQuotation(String fixerSubject, UUID requestId, long amount) throws Exception {

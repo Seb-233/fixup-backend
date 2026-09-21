@@ -32,6 +32,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  */
 abstract class QuotationHttpContract {
 
+    protected abstract org.springframework.test.web.servlet.ResultMatcher expectedDenialStatus();
+
+
     @Autowired MockMvc mvc;
     @Autowired JdbcTemplate jdbc;
     @Autowired ObjectMapper mapper;
@@ -119,19 +122,14 @@ abstract class QuotationHttpContract {
     UUID createRequestWithMedia(String ownerSubject, String specialty, String title, String description,
             List<UUID> mediaIds) throws Exception {
         String mediaArray = mapper.writeValueAsString(mediaIds);
-        String body = """
-                {
-                    "specialty": "%s",
-                    "title": "%s",
-                    "description": "%s",
-                    "mediaIds": %s
-                }
-                """.formatted(specialty, title, description, mediaArray);
-        var result = mvc.perform(post("/requests").with(identity(ownerSubject))
-                .contentType(MediaType.APPLICATION_JSON).content(body))
-                .andExpect(status().isCreated())
-                .andReturn();
-        return UUID.fromString(mapper.readTree(result.getResponse().getContentAsString()).get("requestId").asText());
+        java.util.UUID reqPropId = java.util.UUID.randomUUID();
+        java.util.UUID ownerUserId = java.util.UUID.fromString(mapper.readTree(mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/auth/me").with(org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt().jwt(j -> j.subject(ownerSubject)))).andReturn().getResponse().getContentAsString()).get("id").asText());
+        jdbc.update("INSERT INTO properties (id, owner_user_id, name, address, city, area_m2, created_at, updated_at) VALUES (?, ?, 'Prop', 'Addr', 'City', 10, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)", reqPropId, ownerUserId);
+        String body = "{\"propertyId\":\"" + reqPropId.toString() + "\",\"title\":\"" + title + "\",\"description\":\"" + description + "\",\"mediaIds\":" + mediaArray + "}";
+        var result = mvc.perform(post("/requests").with(identity(ownerSubject)).contentType(MediaType.APPLICATION_JSON).content(body)).andExpect(status().isCreated()).andReturn();
+        java.util.UUID reqId = java.util.UUID.fromString(mapper.readTree(result.getResponse().getContentAsString()).get("requestId").asText());
+        jdbc.update("UPDATE repair_requests SET specialty = ? WHERE id = ?", specialty, reqId);
+        return reqId;
     }
 
     UUID uploadAndConfirmRepairRequestMedia(String ownerSubject, UUID ownerUserId) throws Exception {
@@ -178,8 +176,7 @@ abstract class QuotationHttpContract {
 
         // GET /requests/{requestId} must return 403 for unverified fixer
         mvc.perform(get("/requests/" + requestId).with(identity(fixerSubject)))
-                .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+                .andExpect(expectedDenialStatus());
     }
 
     @Test
@@ -198,8 +195,7 @@ abstract class QuotationHttpContract {
 
         // Detail request for incompatible specialty must return 403
         mvc.perform(get("/requests/" + requestId).with(identity(fixerSubject)))
-                .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+                .andExpect(expectedDenialStatus());
     }
 
     @Test
@@ -540,8 +536,7 @@ abstract class QuotationHttpContract {
 
         var result = mvc.perform(post("/quotations").with(identity(fixerSubject))
                 .contentType(MediaType.APPLICATION_JSON).content(body))
-                .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"))
+                .andExpect(expectedDenialStatus())
                 .andReturn();
 
         String content = result.getResponse().getContentAsString();
@@ -718,12 +713,14 @@ abstract class QuotationHttpContract {
 
         String otherOwnerSubject = "auth0|other-owner-media";
         UUID otherOwnerUserId = provisionOwner(otherOwnerSubject);
+        java.util.UUID reqPropIdA = java.util.UUID.randomUUID();
+        jdbc.update("INSERT INTO properties (id, owner_user_id, name, address, city, area_m2, created_at, updated_at) VALUES (?, ?, 'Prop', 'Addr', 'City', 10, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)", reqPropIdA, ownerUserId);
         UUID alienMedia = uploadAndConfirmRepairRequestMedia(otherOwnerSubject, otherOwnerUserId);
 
         // Alien media -> 404
         String alienReq = """
-                {"specialty":"PLUMBING","title":"Tubo","description":"Desc","mediaIds":["%s"]}
-                """.formatted(alienMedia);
+                {"propertyId":"%s","title":"Tubo","description":"Desc","mediaIds":["%s"]}
+                """.formatted(reqPropIdA, alienMedia);
         mvc.perform(post("/requests").with(identity(ownerSubject))
                 .contentType(MediaType.APPLICATION_JSON).content(alienReq))
                 .andExpect(status().isNotFound());
@@ -731,8 +728,8 @@ abstract class QuotationHttpContract {
         // Duplicate media in request -> 400
         UUID myMedia = uploadAndConfirmRepairRequestMedia(ownerSubject, ownerUserId);
         String dupReq = """
-                {"specialty":"PLUMBING","title":"Tubo","description":"Desc","mediaIds":["%s","%s"]}
-                """.formatted(myMedia, myMedia);
+                {"propertyId":"%s","title":"Tubo","description":"Desc","mediaIds":["%s","%s"]}
+                """.formatted(reqPropIdA, myMedia, myMedia);
         mvc.perform(post("/requests").with(identity(ownerSubject))
                 .contentType(MediaType.APPLICATION_JSON).content(dupReq))
                 .andExpect(status().isBadRequest());
@@ -740,8 +737,8 @@ abstract class QuotationHttpContract {
         // More than 6 mediaIds -> 400
         var tooManyIds = java.util.stream.Stream.generate(UUID::randomUUID).limit(7).toList();
         String tooManyReq = """
-                {"specialty":"PLUMBING","title":"Tubo","description":"Desc","mediaIds":%s}
-                """.formatted(mapper.writeValueAsString(tooManyIds));
+                {"propertyId":"%s","title":"Tubo","description":"Desc","mediaIds":%s}
+                """.formatted(reqPropIdA, mapper.writeValueAsString(tooManyIds));
         mvc.perform(post("/requests").with(identity(ownerSubject))
                 .contentType(MediaType.APPLICATION_JSON).content(tooManyReq))
                 .andExpect(status().isBadRequest());
@@ -753,9 +750,11 @@ abstract class QuotationHttpContract {
         jdbc.update("INSERT INTO media_assets (id, owner_user_id, purpose, object_key, content_type, size_bytes, status, upload_expires_at, confirmed_at, created_at) "
                 + "VALUES (?, ?, 'FIXER_PORTFOLIO', ?, 'image/jpeg', 100, 'READY', CURRENT_TIMESTAMP + INTERVAL '1' DAY, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
                 portfolioMedia, ownerUserId, portKey);
+        java.util.UUID reqPropIdP = java.util.UUID.randomUUID();
+        jdbc.update("INSERT INTO properties (id, owner_user_id, name, address, city, area_m2, created_at, updated_at) VALUES (?, ?, 'Prop', 'Addr', 'City', 10, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)", reqPropIdP, ownerUserId);
         String portReq = """
-                {"specialty":"PLUMBING","title":"Tubo","description":"Desc","mediaIds":["%s"]}
-                """.formatted(portfolioMedia);
+                {"propertyId":"%s","title":"Tubo","description":"Desc","mediaIds":["%s"]}
+                """.formatted(reqPropIdP, portfolioMedia);
         mvc.perform(post("/requests").with(identity(ownerSubject))
                 .contentType(MediaType.APPLICATION_JSON).content(portReq))
                 .andExpect(status().isBadRequest());
@@ -765,9 +764,11 @@ abstract class QuotationHttpContract {
         assertThat(req1).isNotNull();
 
         // Already ATTACHED media cannot be reused -> 409
+        java.util.UUID reqPropIdR = java.util.UUID.randomUUID();
+        jdbc.update("INSERT INTO properties (id, owner_user_id, name, address, city, area_m2, created_at, updated_at) VALUES (?, ?, 'Prop', 'Addr', 'City', 10, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)", reqPropIdR, ownerUserId);
         String reuseReq = """
-                {"specialty":"PLUMBING","title":"Otro tubo","description":"Desc","mediaIds":["%s"]}
-                """.formatted(myMedia);
+                {"propertyId":"%s","title":"Otro tubo","description":"Desc","mediaIds":["%s"]}
+                """.formatted(reqPropIdR, myMedia);
         mvc.perform(post("/requests").with(identity(ownerSubject))
                 .contentType(MediaType.APPLICATION_JSON).content(reuseReq))
                 .andExpect(status().isConflict());

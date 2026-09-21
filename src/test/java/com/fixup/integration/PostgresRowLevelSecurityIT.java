@@ -110,11 +110,12 @@ class PostgresRowLevelSecurityIT {
     // Fixtures are written directly with SQL, under the unrestricted connection: this is data setup,
     // not the thing under test. RLS itself is only exercised through actingAs() below.
     private UUID createRequest(UUID ownerId, String specialty, String title) {
+        UUID propertyId = createProperty(ownerId, title + " Property");
         UUID id = UUID.randomUUID();
-        jdbc.update("INSERT INTO repair_requests (id, owner_user_id, specialty, title, description, status, "
-                        + "created_at, updated_at) VALUES (?, ?, ?, ?, 'fixture description', 'OPEN', "
+        jdbc.update("INSERT INTO repair_requests (id, property_id, owner_user_id, specialty, title, description, status, "
+                        + "created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'fixture description', 'OPEN', "
                         + "CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
-                id, ownerId, specialty, title);
+                id, propertyId, ownerId, specialty, title);
         return id;
     }
 
@@ -356,11 +357,12 @@ class PostgresRowLevelSecurityIT {
     // ---------- FR-UC-24: chat messages ----------
 
     private UUID createAssignedRequest(UUID ownerId, UUID fixerId, String specialty, String title) {
+        UUID propertyId = createProperty(ownerId, title + " Property");
         UUID id = UUID.randomUUID();
-        jdbc.update("INSERT INTO repair_requests (id, owner_user_id, specialty, title, description, status, "
-                        + "assigned_fixer_user_id, created_at, updated_at) VALUES (?, ?, ?, ?, "
+        jdbc.update("INSERT INTO repair_requests (id, property_id, owner_user_id, specialty, title, description, status, "
+                        + "assigned_fixer_user_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, "
                         + "'fixture description', 'ASSIGNED', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
-                id, ownerId, specialty, title, fixerId);
+                id, propertyId, ownerId, specialty, title, fixerId);
         return id;
     }
 
@@ -491,5 +493,34 @@ class PostgresRowLevelSecurityIT {
                 return statement.executeUpdate();
             }
         })).hasMessageContaining("row-level security policy");
+    }
+    private boolean attemptLockRequest(UUID userId, String role, UUID requestId) {
+        return actingAs(userId, role, connection -> {
+            try (var statement = connection.prepareStatement("SELECT id FROM repair_requests WHERE id = ? FOR UPDATE")) {
+                statement.setObject(1, requestId);
+                try (var rs = statement.executeQuery()) {
+                    return rs.next();
+                }
+            }
+        });
+    }
+
+    @org.junit.jupiter.api.Test
+    void explicitlyTestsSelectForUpdateLocking() throws Exception {
+        UUID owner = provisionWithRole("auth0|owner-for-lock", "OWNER");
+        UUID eligibleFixer = provisionVerifiedFixer("auth0|eligible-fixer-for-lock", "PLUMBING");
+        UUID wrongSpecialtyFixer = provisionVerifiedFixer("auth0|wrong-fixer-for-lock", "ELECTRICAL");
+        UUID pendingFixer = provisionWithRole("auth0|pending-fixer-for-lock", "FIXER");
+        // Pending fixer needs verification_status = 'PENDING' and specialty PLUMBING
+        jdbc.update("INSERT INTO fixer_specialties (fixer_user_id, specialty) VALUES (?, ?)", pendingFixer, "PLUMBING");
+
+        UUID request = createRequest(owner, "PLUMBING", "Lock test");
+
+        // wrong-specialty fixer -> no obtiene fila
+        org.assertj.core.api.Assertions.assertThat(attemptLockRequest(wrongSpecialtyFixer, "FIXER", request)).isFalse();
+        // pending fixer -> no obtiene fila
+        org.assertj.core.api.Assertions.assertThat(attemptLockRequest(pendingFixer, "FIXER", request)).isFalse();
+        // eligible fixer -> funciona
+        org.assertj.core.api.Assertions.assertThat(attemptLockRequest(eligibleFixer, "FIXER", request)).isTrue();
     }
 }
