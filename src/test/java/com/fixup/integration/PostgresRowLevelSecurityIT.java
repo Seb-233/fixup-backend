@@ -426,7 +426,7 @@ class PostgresRowLevelSecurityIT {
         UUID owner = provisionWithRole("auth0|rls-chat-owner-admin", "OWNER");
         UUID fixer = provisionVerifiedFixer("auth0|rls-chat-fixer-admin", "MASONRY");
         UUID request = createAssignedRequest(owner, fixer, "MASONRY", "Chat admin");
-        UUID message = createChatMessage(request, fixer, "Hola dueÃ±o");
+        UUID message = createChatMessage(request, fixer, "Hola dueÃƒÆ’Ã‚Â±o");
 
         assertThat(visibleChatMessageIds(admin, "PLATFORM_ADMIN")).contains(message);
     }
@@ -493,5 +493,34 @@ class PostgresRowLevelSecurityIT {
                 return statement.executeUpdate();
             }
         })).hasMessageContaining("row-level security policy");
+    }
+    private boolean attemptLockRequest(UUID userId, String role, UUID requestId) {
+        return actingAs(userId, role, connection -> {
+            try (var statement = connection.prepareStatement("SELECT id FROM repair_requests WHERE id = ? FOR UPDATE")) {
+                statement.setObject(1, requestId);
+                try (var rs = statement.executeQuery()) {
+                    return rs.next();
+                }
+            }
+        });
+    }
+
+    @org.junit.jupiter.api.Test
+    void explicitlyTestsSelectForUpdateLocking() throws Exception {
+        UUID owner = provisionWithRole("auth0|owner-for-lock", "OWNER");
+        UUID eligibleFixer = provisionVerifiedFixer("auth0|eligible-fixer-for-lock", "PLUMBING");
+        UUID wrongSpecialtyFixer = provisionVerifiedFixer("auth0|wrong-fixer-for-lock", "ELECTRICAL");
+        UUID pendingFixer = provisionWithRole("auth0|pending-fixer-for-lock", "FIXER");
+        // Pending fixer needs verification_status = 'PENDING' and specialty PLUMBING
+        jdbc.update("INSERT INTO fixer_specialties (fixer_user_id, specialty) VALUES (?, ?)", pendingFixer, "PLUMBING");
+
+        UUID request = createRequest(owner, "PLUMBING", "Lock test");
+
+        // wrong-specialty fixer -> no obtiene fila
+        org.assertj.core.api.Assertions.assertThat(attemptLockRequest(wrongSpecialtyFixer, "FIXER", request)).isFalse();
+        // pending fixer -> no obtiene fila
+        org.assertj.core.api.Assertions.assertThat(attemptLockRequest(pendingFixer, "FIXER", request)).isFalse();
+        // eligible fixer -> funciona
+        org.assertj.core.api.Assertions.assertThat(attemptLockRequest(eligibleFixer, "FIXER", request)).isTrue();
     }
 }

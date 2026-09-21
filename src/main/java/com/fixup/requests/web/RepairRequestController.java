@@ -36,7 +36,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
-/** FR-UC-18: solicitudes de reparaciÃ³n. Controllers stay thin and never touch JPA. */
+/** FR-UC-18: solicitudes de reparaciÃƒÆ’Ã‚Â³n. Controllers stay thin and never touch JPA. */
 @RestController
 @RequestMapping(value = "/requests", produces = MediaType.APPLICATION_JSON_VALUE)
 @SecurityRequirement(name = "bearerAuth")
@@ -69,6 +69,12 @@ class RepairRequestController {
         this.listOpen = listOpen;
         this.getRequest = getRequest;
         this.mediaAttachmentService = mediaAttachmentService;
+    }
+
+    @org.springframework.web.bind.annotation.ExceptionHandler(com.fixup.properties.api.PropertyNotFoundException.class)
+    org.springframework.http.ResponseEntity<ErrorResponse> handlePropertyNotFound(jakarta.servlet.http.HttpServletRequest request) {
+        return org.springframework.http.ResponseEntity.status(org.springframework.http.HttpStatus.NOT_FOUND)
+                .body(new ErrorResponse(404, "NOT_FOUND", "The property does not exist", request.getRequestURI()));
     }
 
     @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
@@ -116,6 +122,7 @@ class RepairRequestController {
     }
 
     @Schema(additionalProperties = Schema.AdditionalPropertiesValue.FALSE)
+    @com.fasterxml.jackson.annotation.JsonIgnoreProperties(ignoreUnknown = false)
     record OpenRequest(@NotNull UUID propertyId, @NotBlank @Size(max = 150) String title,
             @NotBlank @Size(max = 2000) String description,
             @Size(max = 6) List<@NotNull UUID> mediaIds) {
@@ -132,6 +139,7 @@ class RepairRequestController {
     }
 
     @Schema(requiredProperties = {"requestId", "specialty", "title", "createdAt"})
+    @com.fasterxml.jackson.annotation.JsonIgnoreProperties(ignoreUnknown = false)
     record OpenRequestSummaryResponse(UUID requestId, Specialty specialty, String title, Instant createdAt) {
         static OpenRequestSummaryResponse of(com.fixup.requests.domain.RepairRequest request) {
             return new OpenRequestSummaryResponse(request.id(), request.specialty(), request.title(), request.createdAt());

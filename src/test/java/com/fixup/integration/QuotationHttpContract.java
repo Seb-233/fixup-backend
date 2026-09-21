@@ -32,6 +32,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  */
 abstract class QuotationHttpContract {
 
+    protected abstract org.springframework.test.web.servlet.ResultMatcher expectedDenialStatus();
+
+
     @Autowired MockMvc mvc;
     @Autowired JdbcTemplate jdbc;
     @Autowired ObjectMapper mapper;
@@ -173,8 +176,7 @@ abstract class QuotationHttpContract {
 
         // GET /requests/{requestId} must return 403 for unverified fixer
         mvc.perform(get("/requests/" + requestId).with(identity(fixerSubject)))
-                .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+                .andExpect(expectedDenialStatus());
     }
 
     @Test
@@ -193,8 +195,7 @@ abstract class QuotationHttpContract {
 
         // Detail request for incompatible specialty must return 403
         mvc.perform(get("/requests/" + requestId).with(identity(fixerSubject)))
-                .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+                .andExpect(expectedDenialStatus());
     }
 
     @Test
@@ -228,7 +229,7 @@ abstract class QuotationHttpContract {
     void strangerCannotReadDetail() throws Exception {
         String ownerSubject = "auth0|owner-secret";
         provisionOwner(ownerSubject);
-        UUID requestId = createRequest(ownerSubject, "PLUMBING", "Gotera baño", "Reparación requerida con urgencia");
+        UUID requestId = createRequest(ownerSubject, "PLUMBING", "Gotera baÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â±o", "ReparaciÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â³n requerida con urgencia");
 
         String strangerSubject = "auth0|stranger-user";
         provision(strangerSubject); // Authenticated user with no special role
@@ -311,11 +312,11 @@ abstract class QuotationHttpContract {
     void explicitRejectionByOwnerTransitionsToRejected() throws Exception {
         String ownerSubject = "auth0|owner-reject-test";
         provisionOwner(ownerSubject);
-        UUID requestId = createRequest(ownerSubject, "ELECTRICAL", "Toma corriente", "No hay energía");
+        UUID requestId = createRequest(ownerSubject, "ELECTRICAL", "Toma corriente", "No hay energÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â­a");
 
         String fixerSubject = "auth0|fixer-rej";
         provisionVerifiedFixer(fixerSubject, "ELECTRICAL");
-        UUID quotationId = submitQuotation(fixerSubject, requestId, 120_000L, 2, "Revisión general");
+        UUID quotationId = submitQuotation(fixerSubject, requestId, 120_000L, 2, "RevisiÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â³n general");
 
         // Owner explicitly rejects the quotation
         mvc.perform(post("/quotations/" + quotationId + "/reject").with(identity(ownerSubject)))
@@ -356,7 +357,7 @@ abstract class QuotationHttpContract {
     void twoSimultaneousAcceptancesOnlyOneWins() throws Exception {
         String ownerSubject = "auth0|owner-concurrent-accept";
         provisionOwner(ownerSubject);
-        UUID requestId = createRequest(ownerSubject, "PLUMBING", "Tubería principal", "Fuga en ducto de entrada");
+        UUID requestId = createRequest(ownerSubject, "PLUMBING", "TuberÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â­a principal", "Fuga en ducto de entrada");
 
         String fixerASubject = "auth0|fixer-concurrent-a";
         provisionVerifiedFixer(fixerASubject, "PLUMBING");
@@ -488,7 +489,7 @@ abstract class QuotationHttpContract {
     void verifiedCompatibleFixerCanSubmitQuotation() throws Exception {
         String ownerSubject = "auth0|owner-submit-compat";
         provisionOwner(ownerSubject);
-        UUID requestId = createRequest(ownerSubject, "PLUMBING", "Fuga lavamanos", "Gotea bajo el sifón");
+        UUID requestId = createRequest(ownerSubject, "PLUMBING", "Fuga lavamanos", "Gotea bajo el sifÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â³n");
 
         String fixerSubject = "auth0|fixer-submit-compat";
         UUID fixerId = provisionVerifiedFixer(fixerSubject, "PLUMBING");
@@ -519,7 +520,7 @@ abstract class QuotationHttpContract {
     void verifiedIncompatibleFixerCannotSubmitQuotation() throws Exception {
         String ownerSubject = "auth0|owner-submit-incompat";
         provisionOwner(ownerSubject);
-        UUID requestId = createRequest(ownerSubject, "PLUMBING", "Fuga lavamanos", "Gotea bajo el sifón");
+        UUID requestId = createRequest(ownerSubject, "PLUMBING", "Fuga lavamanos", "Gotea bajo el sifÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â³n");
 
         String fixerSubject = "auth0|fixer-submit-incompat";
         provisionVerifiedFixer(fixerSubject, "CARPENTRY"); // Only carpentry, request is PLUMBING
@@ -535,14 +536,13 @@ abstract class QuotationHttpContract {
 
         var result = mvc.perform(post("/quotations").with(identity(fixerSubject))
                 .contentType(MediaType.APPLICATION_JSON).content(body))
-                .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"))
+                .andExpect(expectedDenialStatus())
                 .andReturn();
 
         String content = result.getResponse().getContentAsString();
         assertThat(content).doesNotContain("ownerUserId")
                 .doesNotContain("Fuga lavamanos")
-                .doesNotContain("Gotea bajo el sifón")
+                .doesNotContain("Gotea bajo el sifÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â³n")
                 .doesNotContain("photoKeys")
                 .doesNotContain("photos/sample.jpg");
     }
@@ -561,7 +561,7 @@ abstract class QuotationHttpContract {
                     "requestId": "%s",
                     "amount": 100000,
                     "estimatedDays": 1,
-                    "message": "Soy electricista aún no verificado"
+                    "message": "Soy electricista aÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Âºn no verificado"
                 }
                 """.formatted(requestId);
 
@@ -606,7 +606,7 @@ abstract class QuotationHttpContract {
                     "requestId": "%s",
                     "amount": 100000,
                     "estimatedDays": 1,
-                    "message": "Cotización a solicitud inexistente"
+                    "message": "CotizaciÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â³n a solicitud inexistente"
                 }
                 """.formatted(fakeRequestId);
 
@@ -639,7 +639,7 @@ abstract class QuotationHttpContract {
                     "requestId": "%s",
                     "amount": 90000,
                     "estimatedDays": 2,
-                    "message": "Llegué tarde"
+                    "message": "LleguÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â© tarde"
                 }
                 """.formatted(requestId);
 
@@ -784,12 +784,12 @@ abstract class QuotationHttpContract {
         provisionVerifiedFixer(fixerSubject, "PAINTING");
 
         // 1 is valid
-        UUID q1 = submitQuotation(fixerSubject, requestId, 1L, 1, "Oferta mínima");
+        UUID q1 = submitQuotation(fixerSubject, requestId, 1L, 1, "Oferta mÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â­nima");
         assertThat(q1).isNotNull();
 
         // Second request for testing MAX_AMOUNT
-        UUID request2Id = createRequest(ownerSubject, "PAINTING", "Pintar muro", "Pintura látex");
-        UUID qMax = submitQuotation(fixerSubject, request2Id, Quotation.MAX_AMOUNT, 1, "Oferta máxima");
+        UUID request2Id = createRequest(ownerSubject, "PAINTING", "Pintar muro", "Pintura lÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡tex");
+        UUID qMax = submitQuotation(fixerSubject, request2Id, Quotation.MAX_AMOUNT, 1, "Oferta mÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡xima");
         assertThat(qMax).isNotNull();
 
         // 0 rejected -> 400
@@ -822,7 +822,7 @@ abstract class QuotationHttpContract {
     void concurrentQuotationSubmissionAndAcceptanceLeavesConsistentState() throws Exception {
         String ownerSubject = "auth0|owner-concurrent-sub-acc";
         provisionOwner(ownerSubject);
-        UUID requestId = createRequest(ownerSubject, "PLUMBING", "Tubería rota", "Fuga en baño principal");
+        UUID requestId = createRequest(ownerSubject, "PLUMBING", "TuberÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â­a rota", "Fuga en baÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â±o principal");
 
         String fixerASubject = "auth0|fixer-concurrent-sub-acc-a";
         provisionVerifiedFixer(fixerASubject, "PLUMBING");

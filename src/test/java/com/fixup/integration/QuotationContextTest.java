@@ -10,4 +10,8 @@ import org.springframework.test.context.ActiveProfiles;
 @ActiveProfiles("test")
 @Import({TestJwtConfiguration.class, TestStorageConfiguration.class, QuotationHttpContract.EventRecorder.class})
 class QuotationContextTest extends QuotationHttpContract {
+    @Override
+    protected org.springframework.test.web.servlet.ResultMatcher expectedDenialStatus() {
+        return org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isForbidden();
+    }
 }

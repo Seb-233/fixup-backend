@@ -31,6 +31,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @Import({TestJwtConfiguration.class, TestStorageConfiguration.class, QuotationHttpContract.EventRecorder.class})
 @Testcontainers
 class PostgresQuotationIT extends QuotationHttpContract {
+    @Override
+    protected org.springframework.test.web.servlet.ResultMatcher expectedDenialStatus() {
+        return org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isNotFound();
+    }
     @Container
     static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:17-alpine");
 
@@ -53,7 +57,7 @@ class PostgresQuotationIT extends QuotationHttpContract {
     void strangerCannotReadDetail() throws Exception {
         String ownerSubject = "auth0|owner-secret";
         provisionOwner(ownerSubject);
-        UUID requestId = createRequest(ownerSubject, "PLUMBING", "Gotera baño", "Reparación requerida con urgencia");
+        UUID requestId = createRequest(ownerSubject, "PLUMBING", "Gotera baÃƒÂ±o", "ReparaciÃƒÂ³n requerida con urgencia");
 
         String strangerSubject = "auth0|stranger-user";
         provision(strangerSubject); // Authenticated user with no special role
@@ -120,7 +124,7 @@ class PostgresQuotationIT extends QuotationHttpContract {
                     "requestId": "%s",
                     "amount": 90000,
                     "estimatedDays": 2,
-                    "message": "Llegué tarde"
+                    "message": "LleguÃƒÂ© tarde"
                 }
                 """.formatted(requestId);
 
@@ -142,7 +146,7 @@ class PostgresQuotationIT extends QuotationHttpContract {
     void concurrentQuotationSubmissionAndAcceptanceLeavesConsistentState() throws Exception {
         String ownerSubject = "auth0|owner-concurrent-sub-acc";
         provisionOwner(ownerSubject);
-        UUID requestId = createRequest(ownerSubject, "PLUMBING", "Tubería rota", "Fuga en baño principal");
+        UUID requestId = createRequest(ownerSubject, "PLUMBING", "TuberÃƒÂ­a rota", "Fuga en baÃƒÂ±o principal");
 
         String fixerASubject = "auth0|fixer-concurrent-sub-acc-a";
         provisionVerifiedFixer(fixerASubject, "PLUMBING");
