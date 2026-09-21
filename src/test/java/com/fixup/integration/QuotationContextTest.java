@@ -1,0 +1,17 @@
+package com.fixup.integration;
+
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
+import org.springframework.test.context.ActiveProfiles;
+
+@SpringBootTest
+@AutoConfigureMockMvc
+@ActiveProfiles("test")
+@Import({TestJwtConfiguration.class, TestStorageConfiguration.class, QuotationHttpContract.EventRecorder.class})
+class QuotationContextTest extends QuotationHttpContract {
+    @Override
+    protected org.springframework.test.web.servlet.ResultMatcher expectedDenialStatus() {
+        return org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isForbidden();
+    }
+}

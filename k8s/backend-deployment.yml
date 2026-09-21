@@ -1,0 +1,72 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fixup-backend
+  namespace: fixup
+  labels:
+    app: fixup-backend
+    app.kubernetes.io/name: fixup-backend
+    app.kubernetes.io/part-of: fixup
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: fixup-backend
+  # Wait for new pod to be ready before terminating old one
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: fixup-backend
+        app.kubernetes.io/name: fixup-backend
+    spec:
+      imagePullSecrets:
+        - name: ghcr-pull-secret     # created by cd.yml on every deploy
+      terminationGracePeriodSeconds: 30
+      # Match the non-root user created in the Dockerfile (fixup:fixup)
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      containers:
+        - name: fixup-backend
+          # Image tag is overwritten by cd.yml via: kubectl set image
+          image: ghcr.io/seb-233/fixup-backend:latest
+          ports:
+            - name: http
+              containerPort: 8080
+          # All env vars come from the backend-secret synced by cd.yml
+          envFrom:
+            - secretRef:
+                name: backend-secret
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8080
+            initialDelaySeconds: 40
+            periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8080
+            initialDelaySeconds: 90    # Spring Boot + Flyway migrations take time
+            periodSeconds: 30
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1Gi"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: false  # Spring Boot writes temp files

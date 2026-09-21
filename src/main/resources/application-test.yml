@@ -1,0 +1,28 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:fixup;MODE=PostgreSQL;DB_CLOSE_DELAY=-1
+    username: sa
+    password:
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: https://issuer.example.test/
+          audiences: https://api.example.test
+          jwk-set-uri: https://issuer.example.test/.well-known/jwks.json
+fixup:
+  cors:
+    allowed-origins: http://localhost:4200
+  storage:
+    endpoint: ${FIXUP_STORAGE_ENDPOINT:http://localhost:9000}
+    public-endpoint: ${FIXUP_STORAGE_PUBLIC_ENDPOINT:http://localhost:9000}
+    access-key: ${FIXUP_STORAGE_ACCESS_KEY:fixup}
+    secret-key: ${FIXUP_STORAGE_SECRET_KEY:development-only-secret}
+    bucket: ${FIXUP_STORAGE_BUCKET:fixup-private}
+    region: ${FIXUP_STORAGE_REGION:us-east-1}
+    auto-create-bucket: true
+  media:
+    portfolio:
+      max-file-size: 10485760
+    deletion:
+      enabled: false

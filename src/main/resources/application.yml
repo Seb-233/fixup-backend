@@ -1,0 +1,65 @@
+spring:
+  application:
+    name: fixup-backend
+  datasource:
+    url: ${DATABASE_URL}
+    username: ${DATABASE_USERNAME}
+    password: ${DATABASE_PASSWORD}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+  flyway:
+    enabled: true
+    # {vendor} resolves to the connected JDBC vendor at runtime: PostgreSQL-only migrations (RLS
+    # policies, roles) live under migration-postgres/postgresql and Flyway simply finds nothing there
+    # when the active profile runs against H2, instead of failing to parse Postgres-only syntax.
+    locations: classpath:db/migration,classpath:db/migration-postgres/{vendor}
+  jackson:
+    deserialization:
+      fail-on-unknown-properties: true
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${AUTH0_ISSUER_URI}
+          audiences: ${AUTH0_AUDIENCE}
+          jwk-set-uri: ${AUTH0_JWK_SET_URI:${AUTH0_ISSUER_URI}.well-known/jwks.json}
+management:
+  endpoints:
+    enabled-by-default: false
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      enabled: true
+      show-details: never
+      show-components: never
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+fixup:
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS}
+  storage:
+    endpoint: ${FIXUP_STORAGE_ENDPOINT:http://localhost:9000}
+    public-endpoint: ${FIXUP_STORAGE_PUBLIC_ENDPOINT:${fixup.storage.endpoint}}
+    access-key: ${FIXUP_STORAGE_ACCESS_KEY}
+    secret-key: ${FIXUP_STORAGE_SECRET_KEY}
+    bucket: ${FIXUP_STORAGE_BUCKET:fixup-private}
+    region: ${FIXUP_STORAGE_REGION:us-east-1}
+    auto-create-bucket: false
+  media:
+    portfolio:
+      max-file-size: 10485760
+    deletion:
+      enabled: ${FIXUP_MEDIA_DELETION_ENABLED:true}
+      polling-delay: ${FIXUP_MEDIA_DELETION_POLLING_DELAY:30s}
+      batch-size: ${FIXUP_MEDIA_DELETION_BATCH_SIZE:10}
+      lock-timeout: ${FIXUP_MEDIA_DELETION_LOCK_TIMEOUT:5m}
+      max-attempts: ${FIXUP_MEDIA_DELETION_MAX_ATTEMPTS:5}
+      initial-backoff: ${FIXUP_MEDIA_DELETION_INITIAL_BACKOFF:30s}
