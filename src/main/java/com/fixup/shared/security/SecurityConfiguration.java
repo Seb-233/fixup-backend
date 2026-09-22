@@ -65,6 +65,7 @@ class SecurityConfiguration {
                             .requestMatchers("/jobs/**").authenticated()
                             .requestMatchers("/payments/**").authenticated()
                             .requestMatchers("/properties/**").authenticated()
+                            .requestMatchers("/contracts/**").authenticated()
                             .anyRequest().denyAll();
                 })
                 .exceptionHandling(errors -> errors.authenticationEntryPoint(entryPoint)

@@ -25,8 +25,8 @@ interface LeaseContractJpaRepository extends JpaRepository<LeaseContractEntity, 
             + "    OR c.realEstateManagerUserId = :userId))) "
             + "AND (:status IS NULL OR c.status = :status) "
             + "AND (:propertyId IS NULL OR c.propertyId = :propertyId) "
-            + "AND (:startFrom IS NULL OR c.startDate >= :startFrom) "
-            + "AND (:endUntil IS NULL OR c.endDate <= :endUntil) "
+            + "AND c.startDate >= COALESCE(:startFrom, c.startDate) "
+            + "AND c.endDate <= COALESCE(:endUntil, c.endDate) "
             + "ORDER BY c.updatedAt DESC")
     List<LeaseContractEntity> findByUserFiltered(@Param("userId") UUID userId,
             @Param("role") String role,

@@ -4,6 +4,7 @@ import com.fixup.contracts.api.ContractStatus;
 import com.fixup.contracts.api.PaymentFrequency;
 import com.fixup.contracts.domain.LeaseContract;
 import jakarta.persistence.Column;
+import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -13,8 +14,6 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
-import org.hibernate.annotations.JdbcTypeCode;
-import org.hibernate.type.SqlTypes;
 
 @Entity
 @Table(name = "lease_contracts")
@@ -50,7 +49,7 @@ class LeaseContractEntity {
     private String currency;
     @Column(name = "contract_terms", length = 10000)
     private String contractTerms;
-    @JdbcTypeCode(SqlTypes.JSON)
+    @Convert(converter = MediaIdsConverter.class)
     @Column(name = "media_ids", length = 4000)
     private List<UUID> mediaIds;
     @Column(name = "clauses", length = 10000)
