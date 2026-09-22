@@ -92,6 +92,170 @@
         } ]
       }
     },
+    "/requests/{requestId}/start" : {
+      "post" : {
+        "tags" : [ "repair-request-controller" ],
+        "summary" : "Start the repair work",
+        "description" : "FR-UC-08: only the assigned fixer, and only from ASSIGNED.",
+        "operationId" : "start",
+        "parameters" : [ {
+          "name" : "requestId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "responses" : {
+          "400" : {
+            "description" : "Invalid specialty, missing field or unexpected client fields",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Inactive account, missing role or request not visible to the caller",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "The repair request does not exist",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "The transition does not apply to the current state of the request",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "200" : {
+            "description" : "The request is now in progress",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RequestDetailResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/requests/{requestId}/resume" : {
+      "post" : {
+        "tags" : [ "repair-request-controller" ],
+        "summary" : "Resume a repair request that was on hold",
+        "description" : "FR-UC-08: either the owner or the assigned fixer, only from ON_HOLD.",
+        "operationId" : "resume",
+        "parameters" : [ {
+          "name" : "requestId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "responses" : {
+          "400" : {
+            "description" : "Invalid specialty, missing field or unexpected client fields",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Inactive account, missing role or request not visible to the caller",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "The repair request does not exist",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "The transition does not apply to the current state of the request",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "200" : {
+            "description" : "The request is in progress again",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RequestDetailResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
     "/requests/{requestId}/messages" : {
       "get" : {
         "tags" : [ "chat-controller" ],
@@ -257,6 +421,170 @@
               "application/json" : {
                 "schema" : {
                   "$ref" : "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/requests/{requestId}/hold" : {
+      "post" : {
+        "tags" : [ "repair-request-controller" ],
+        "summary" : "Put the repair work on hold",
+        "description" : "FR-UC-08: either the owner or the assigned fixer, from ASSIGNED or IN_PROGRESS.",
+        "operationId" : "hold",
+        "parameters" : [ {
+          "name" : "requestId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "responses" : {
+          "400" : {
+            "description" : "Invalid specialty, missing field or unexpected client fields",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Inactive account, missing role or request not visible to the caller",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "The repair request does not exist",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "The transition does not apply to the current state of the request",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "200" : {
+            "description" : "The request is on hold",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RequestDetailResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/requests/{requestId}/cancel" : {
+      "post" : {
+        "tags" : [ "repair-request-controller" ],
+        "summary" : "Cancel a repair request",
+        "description" : "FR-UC-08: only its owner, and never one that is already completed or cancelled. Completing a request is not a route of its own: it happens when the fixer closes the job through POST /jobs/{jobId}/complete, which is what releases the escrow.",
+        "operationId" : "cancel",
+        "parameters" : [ {
+          "name" : "requestId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "responses" : {
+          "400" : {
+            "description" : "Invalid specialty, missing field or unexpected client fields",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Inactive account, missing role or request not visible to the caller",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "The repair request does not exist",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "The transition does not apply to the current state of the request",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "200" : {
+            "description" : "The request is cancelled",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RequestDetailResponse"
                 }
               }
             }
@@ -542,6 +870,98 @@
         }
       }
     },
+    "/properties/{propertyId}/unlist" : {
+      "post" : {
+        "tags" : [ "property-controller" ],
+        "operationId" : "unlist",
+        "parameters" : [ {
+          "name" : "propertyId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PropertySummary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/properties/{propertyId}/publish" : {
+      "post" : {
+        "tags" : [ "property-controller" ],
+        "operationId" : "publish",
+        "parameters" : [ {
+          "name" : "propertyId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/PublicationRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PropertySummary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/properties/publish-batch" : {
+      "post" : {
+        "tags" : [ "property-controller" ],
+        "operationId" : "publishBatch",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/BatchPublicationRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/BatchResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/payments/me/payouts" : {
       "get" : {
         "tags" : [ "payment-controller" ],
@@ -681,6 +1101,112 @@
                 }
               }
             }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/notifications/{notificationId}/read" : {
+      "post" : {
+        "tags" : [ "notification-controller" ],
+        "summary" : "Mark a single notification as read",
+        "operationId" : "markRead",
+        "parameters" : [ {
+          "name" : "notificationId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "responses" : {
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Inactive account or missing role",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "Notification not found",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "200" : {
+            "description" : "Notification marked as read",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/NotificationItemResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/notifications/read-all" : {
+      "post" : {
+        "tags" : [ "notification-controller" ],
+        "summary" : "Mark all notifications for the current user as read",
+        "operationId" : "markAllRead",
+        "responses" : {
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Inactive account or missing role",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "Notification not found",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "200" : {
+            "description" : "All notifications marked as read"
           }
         },
         "security" : [ {
@@ -1044,7 +1570,7 @@
         "tags" : [ "portfolio-controller" ],
         "summary" : "Publish a piece in the fixer's own portfolio",
         "description" : "Attaches a confirmed media asset to the portfolio. Requires a verified fixer.",
-        "operationId" : "publish",
+        "operationId" : "publish_1",
         "requestBody" : {
           "content" : {
             "application/json" : {
@@ -1981,6 +2507,98 @@
         } ]
       }
     },
+    "/requests/{requestId}/urgency" : {
+      "patch" : {
+        "tags" : [ "repair-request-controller" ],
+        "summary" : "Change the urgency of a repair request",
+        "description" : "FR-UC-08: reclassifying the urgency moves the committed SLA deadline, which is measured from the moment the request was opened.",
+        "operationId" : "changeUrgency",
+        "parameters" : [ {
+          "name" : "requestId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/UrgencyRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "400" : {
+            "description" : "Invalid specialty, missing field or unexpected client fields",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Inactive account, missing role or request not visible to the caller",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "The repair request does not exist",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "The transition does not apply to the current state of the request",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "200" : {
+            "description" : "The request with its new urgency and deadline",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RequestDetailResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
     "/contracts/{contractId}/terminate-as-tenant" : {
       "patch" : {
         "tags" : [ "lease-contract-controller" ],
@@ -2364,7 +2982,7 @@
         "tags" : [ "lease-contract-controller" ],
         "summary" : "Cancel a non-final contract",
         "description" : "Can be used by owner, manager, tenant or admin to cancel any non-final contract.",
-        "operationId" : "cancel",
+        "operationId" : "cancel_1",
         "parameters" : [ {
           "name" : "contractId",
           "in" : "path",
@@ -2945,6 +3563,132 @@
               "application/json" : {
                 "schema" : {
                   "$ref" : "#/components/schemas/EarningsResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/notifications" : {
+      "get" : {
+        "tags" : [ "notification-controller" ],
+        "summary" : "List notifications for the current user",
+        "description" : "Returns newest first. Use includeRead=true to return all notifications; default returns unread only.",
+        "operationId" : "list_1",
+        "parameters" : [ {
+          "name" : "includeRead",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "boolean",
+            "default" : false
+          }
+        }, {
+          "name" : "limit",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "default" : 100
+          }
+        } ],
+        "responses" : {
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Inactive account or missing role",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "Notification not found",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "200" : {
+            "description" : "Notifications for the current user",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/NotificationItemResponse"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/notifications/unread-count" : {
+      "get" : {
+        "tags" : [ "notification-controller" ],
+        "summary" : "Count unread notifications for the current user",
+        "operationId" : "unreadCount",
+        "responses" : {
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Inactive account or missing role",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "Notification not found",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "200" : {
+            "description" : "Unread notification count",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/UnreadCountResponse"
                 }
               }
             }
@@ -3783,9 +4527,17 @@
             },
             "maxItems" : 6,
             "minItems" : 0
+          },
+          "urgency" : {
+            "$ref" : "#/components/schemas/RepairRequestUrgency",
+            "description" : "FR-UC-08: optional; the request opens as MEDIUM when absent"
           }
         },
         "required" : [ "description", "propertyId", "title" ]
+      },
+      "RepairRequestUrgency" : {
+        "type" : "string",
+        "enum" : [ "LOW", "MEDIUM", "HIGH", "URGENT" ]
       },
       "PhotoResponse" : {
         "type" : "object",
@@ -3806,7 +4558,7 @@
       },
       "RepairRequestStatus" : {
         "type" : "string",
-        "enum" : [ "OPEN", "ASSIGNED" ]
+        "enum" : [ "OPEN", "ASSIGNED", "IN_PROGRESS", "ON_HOLD", "COMPLETED", "CANCELLED" ]
       },
       "RequestDetailResponse" : {
         "type" : "object",
@@ -3837,6 +4589,13 @@
           "status" : {
             "$ref" : "#/components/schemas/RepairRequestStatus"
           },
+          "urgency" : {
+            "$ref" : "#/components/schemas/RepairRequestUrgency"
+          },
+          "slaDeadline" : {
+            "type" : [ "string", "null" ],
+            "format" : "date-time"
+          },
           "assignedFixerUserId" : {
             "type" : [ "string", "null" ],
             "format" : "uuid"
@@ -3846,7 +4605,7 @@
             "format" : "date-time"
           }
         },
-        "required" : [ "createdAt", "description", "photos", "requestId", "specialty", "status", "title" ]
+        "required" : [ "createdAt", "description", "photos", "requestId", "specialty", "status", "title", "urgency" ]
       },
       "Specialty" : {
         "type" : "string",
@@ -3981,6 +4740,10 @@
           }
         }
       },
+      "PropertyStatus" : {
+        "type" : "string",
+        "enum" : [ "DRAFT", "PUBLISHED", "UNLISTED" ]
+      },
       "PropertySummary" : {
         "type" : "object",
         "properties" : {
@@ -3999,6 +4762,110 @@
           },
           "areaM2" : {
             "type" : "number"
+          },
+          "type" : {
+            "$ref" : "#/components/schemas/PropertyType"
+          },
+          "status" : {
+            "$ref" : "#/components/schemas/PropertyStatus"
+          },
+          "title" : {
+            "type" : "string"
+          },
+          "description" : {
+            "type" : "string"
+          },
+          "zone" : {
+            "type" : "string"
+          },
+          "monthlyRentSuggestion" : {
+            "type" : "number"
+          },
+          "publishedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "unlistedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          }
+        }
+      },
+      "PropertyType" : {
+        "type" : "string",
+        "enum" : [ "APARTMENT", "HOUSE", "STORE", "OFFICE", "STUDIO", "GARAGE", "LAND" ]
+      },
+      "PublicationRequest" : {
+        "type" : "object",
+        "properties" : {
+          "type" : {
+            "$ref" : "#/components/schemas/PropertyType"
+          },
+          "title" : {
+            "type" : "string"
+          },
+          "description" : {
+            "type" : "string"
+          },
+          "zone" : {
+            "type" : "string"
+          },
+          "monthlyRentSuggestion" : {
+            "type" : "number"
+          }
+        },
+        "required" : [ "monthlyRentSuggestion", "title", "type", "zone" ]
+      },
+      "BatchPublicationItem" : {
+        "type" : "object",
+        "properties" : {
+          "propertyId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "type" : {
+            "$ref" : "#/components/schemas/PropertyType"
+          },
+          "title" : {
+            "type" : "string"
+          },
+          "description" : {
+            "type" : "string"
+          },
+          "zone" : {
+            "type" : "string"
+          },
+          "monthlyRentSuggestion" : {
+            "type" : "number"
+          }
+        },
+        "required" : [ "monthlyRentSuggestion", "propertyId", "title", "type", "zone" ]
+      },
+      "BatchPublicationRequest" : {
+        "type" : "object",
+        "properties" : {
+          "properties" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/BatchPublicationItem"
+            },
+            "minItems" : 1
+          }
+        },
+        "required" : [ "properties" ]
+      },
+      "BatchResult" : {
+        "type" : "object",
+        "properties" : {
+          "published" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/PropertySummary"
+            }
+          },
+          "publishedCount" : {
+            "type" : "integer",
+            "format" : "int32"
           }
         }
       },
@@ -4030,6 +4897,44 @@
       "PayoutStatus" : {
         "type" : "string",
         "enum" : [ "REQUESTED" ]
+      },
+      "NotificationItemResponse" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "type" : {
+            "$ref" : "#/components/schemas/NotificationType"
+          },
+          "title" : {
+            "type" : "string"
+          },
+          "message" : {
+            "type" : "string"
+          },
+          "relatedEntityId" : {
+            "type" : [ "string", "null" ],
+            "format" : "uuid"
+          },
+          "read" : {
+            "type" : "boolean"
+          },
+          "createdAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "readAt" : {
+            "type" : [ "string", "null" ],
+            "format" : "date-time"
+          }
+        },
+        "required" : [ "createdAt", "id", "read", "title", "type" ]
+      },
+      "NotificationType" : {
+        "type" : "string",
+        "enum" : [ "REPAIR_REQUEST_OPENED", "REPAIR_REQUEST_ASSIGNED", "REPAIR_REQUEST_STARTED", "REPAIR_REQUEST_COMPLETED", "REPAIR_REQUEST_CANCELLED", "REPAIR_REQUEST_ON_HOLD", "REPAIR_REQUEST_RESUMED", "REPAIR_REQUEST_URGENCY_CHANGED", "SLA_WARNING", "SLA_BREACH", "NEW_QUOTATION", "QUOTATION_ACCEPTED", "QUOTATION_REJECTED", "CONTRACT_CREATED", "CONTRACT_SIGNED", "CONTRACT_RENEWED", "CONTRACT_TERMINATED", "CONTRACT_CANCELLED", "PROPERTY_PUBLISHED", "PROPERTY_BATCH_PUBLISHED", "PROPERTY_UNLISTED" ]
       },
       "MediaPurpose" : {
         "type" : "string",
@@ -4613,6 +5518,16 @@
         "type" : "string",
         "enum" : [ "ACTIVE", "SUSPENDED", "DISABLED" ]
       },
+      "UrgencyRequest" : {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "urgency" : {
+            "$ref" : "#/components/schemas/RepairRequestUrgency"
+          }
+        },
+        "required" : [ "urgency" ]
+      },
       "TerminateCancelRequest" : {
         "type" : "object",
         "properties" : {
@@ -4724,6 +5639,16 @@
           }
         },
         "required" : [ "availableBalance", "grossTotal", "heldBalance", "history", "paidOutTotal", "totalCommission" ]
+      },
+      "UnreadCountResponse" : {
+        "type" : "object",
+        "properties" : {
+          "count" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        },
+        "required" : [ "count" ]
       },
       "OwnPortfolioResponse" : {
         "type" : "object",

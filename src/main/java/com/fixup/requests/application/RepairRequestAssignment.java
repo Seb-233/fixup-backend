@@ -1,11 +1,13 @@
 package com.fixup.requests.application;
 
+import com.fixup.requests.api.RepairRequestCompleted;
 import com.fixup.requests.api.RepairRequestDirectory;
 import com.fixup.requests.api.RepairRequestNotFoundException;
 import com.fixup.requests.api.RepairRequestSnapshot;
 import com.fixup.requests.domain.RepairRequests;
 import java.time.Instant;
 import java.util.UUID;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,9 +20,11 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 class RepairRequestAssignment implements RepairRequestDirectory {
     private final RepairRequests requests;
+    private final ApplicationEventPublisher events;
 
-    RepairRequestAssignment(RepairRequests requests) {
+    RepairRequestAssignment(RepairRequests requests, ApplicationEventPublisher events) {
         this.requests = requests;
+        this.events = events;
     }
 
     @Override
@@ -52,6 +56,10 @@ class RepairRequestAssignment implements RepairRequestDirectory {
     public void complete(UUID requestId) {
         var request = requests.findByIdForUpdate(requestId)
                 .orElseThrow(RepairRequestNotFoundException::new);
-        requests.update(request.complete(Instant.now()));
+        var now = Instant.now();
+        var completed = request.complete(now);
+        requests.update(completed);
+        events.publishEvent(new RepairRequestCompleted(completed.id(), completed.ownerUserId(),
+                completed.assignedFixerUserId(), now));
     }
 }

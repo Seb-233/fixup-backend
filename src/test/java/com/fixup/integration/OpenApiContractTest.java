@@ -57,6 +57,11 @@ class OpenApiContractTest {
                 "/quotations/{quotationId}/accept", "/quotations/{quotationId}/reject",
                 "/jobs/me", "/jobs/{jobId}/complete",
                 "/payments/me/earnings", "/payments/me/payouts", "/properties", "/properties/{propertyId}", "/properties/me",
+                "/properties/publish-batch", "/properties/{propertyId}/publish", "/properties/{propertyId}/unlist",
+                "/requests/{requestId}/urgency", "/requests/{requestId}/start", "/requests/{requestId}/hold",
+                "/requests/{requestId}/resume", "/requests/{requestId}/cancel",
+                "/notifications", "/notifications/unread-count", "/notifications/{notificationId}/read",
+                "/notifications/read-all",
                 "/contracts", "/contracts/me", "/contracts/{contractId}",
                 "/contracts/{contractId}/send-for-tenant-signature",
                 "/contracts/{contractId}/sign-as-tenant",
@@ -147,7 +152,22 @@ class OpenApiContractTest {
         assertThat(contract.at("/components/schemas/Specialty/enum").toString())
                 .contains("PLUMBING", "ELECTRICAL", "PAINTING", "CARPENTRY", "MASONRY", "GENERAL");
         assertThat(contract.at("/components/schemas/RepairRequestStatus/enum").toString())
-                .contains("OPEN", "ASSIGNED");
+                .contains("OPEN", "ASSIGNED", "IN_PROGRESS", "ON_HOLD", "COMPLETED", "CANCELLED");
+        // FR-UC-08: la urgencia y su plazo son parte del contrato, no un detalle interno.
+        assertThat(contract.at("/components/schemas/RepairRequestUrgency/enum").toString())
+                .contains("LOW", "MEDIUM", "HIGH", "URGENT");
+        assertThat(contract.at("/components/schemas/RequestDetailResponse/properties").toString())
+                .contains("urgency", "slaDeadline");
+        // FR-UC-12: el ciclo de publicación del inmueble.
+        assertThat(contract.at("/components/schemas/PropertyStatus/enum").toString())
+                .contains("DRAFT", "PUBLISHED", "UNLISTED");
+        assertThat(contract.at("/components/schemas/PropertyType/enum").toString())
+                .contains("APARTMENT", "HOUSE", "STUDIO");
+        // FR-UC-10: ningún tipo de aviso sin emisor. Los siete que nadie publicaba se quitaron.
+        assertThat(contract.at("/components/schemas/NotificationType/enum").toString())
+                .contains("PROPERTY_PUBLISHED", "PROPERTY_BATCH_PUBLISHED", "SLA_WARNING", "SLA_BREACH")
+                .doesNotContain("GENERAL", "PROPERTY_UPDATED", "PORTFOLIO_PIECE_APPROVED",
+                        "FIXER_VERIFICATION_SUBMITTED");
         assertThat(contract.at("/components/schemas/QuotationStatus/enum").toString())
                 .contains("SUBMITTED", "ACCEPTED", "REJECTED");
         assertThat(contract.at("/components/schemas/RequestDetailResponse/properties/assignedFixerUserId/type")

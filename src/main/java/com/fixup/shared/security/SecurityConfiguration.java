@@ -66,6 +66,7 @@ class SecurityConfiguration {
                             .requestMatchers("/payments/**").authenticated()
                             .requestMatchers("/properties/**").authenticated()
                             .requestMatchers("/contracts/**").authenticated()
+                            .requestMatchers("/notifications/**").authenticated()
                             .anyRequest().denyAll();
                 })
                 .exceptionHandling(errors -> errors.authenticationEntryPoint(entryPoint)
@@ -82,7 +83,10 @@ class SecurityConfiguration {
         var cors = new CorsConfiguration();
         cors.setAllowedOrigins(Arrays.stream(configuredOrigins.split(","))
                 .map(String::trim).filter(origin -> !origin.isEmpty()).toList());
-        cors.setAllowedMethods(List.of("GET", "POST", "DELETE", "OPTIONS"));
+        // PATCH entró con las transiciones de FR-UC-14 y FR-UC-08 (firmar, terminar y cancelar un
+        // contrato, cambiar la urgencia de una solicitud). Sin él, el preflight del navegador las
+        // bloquea aunque el backend las sirva: MockMvc no ejerce CORS y por eso no se notaba.
+        cors.setAllowedMethods(List.of("GET", "POST", "PATCH", "DELETE", "OPTIONS"));
         cors.setAllowedHeaders(List.of("Authorization", "Content-Type", "Accept"));
         cors.setAllowCredentials(false);
         cors.setMaxAge(3600L);
