@@ -1652,6 +1652,180 @@
         } ]
       }
     },
+    "/contracts" : {
+      "post" : {
+        "tags" : [ "lease-contract-controller" ],
+        "summary" : "Create a new lease contract (DRAFT status)",
+        "operationId" : "create_1",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/NewContractData"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "400" : {
+            "description" : "Invalid fields, missing data or unexpected client fields",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Inactive account or not authorized on this contract",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "Contract not found",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "Contract state does not allow the requested transition or invalid data",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "201" : {
+            "description" : "Contract created in DRAFT status",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ContractSummary"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/contracts/{contractId}/renew" : {
+      "post" : {
+        "tags" : [ "lease-contract-controller" ],
+        "summary" : "Renew an ACTIVE/SIGNED/EXPIRED contract",
+        "description" : "Creates a NEW contract referencing the original via originalContractId. Owner or manager only. The new contract starts in DRAFT again.",
+        "operationId" : "renew",
+        "parameters" : [ {
+          "name" : "contractId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/RenewalData"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "400" : {
+            "description" : "Invalid fields, missing data or unexpected client fields",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Inactive account or not authorized on this contract",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "Contract not found",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "Contract state does not allow the requested transition or invalid data",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "201" : {
+            "description" : "Renewed contract created",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ContractSummary"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
     "/auth/select-role" : {
       "post" : {
         "tags" : [ "current-user-controller" ],
@@ -1795,6 +1969,466 @@
             "description" : "Identity conflict",
             "content" : {
               "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/contracts/{contractId}/terminate-as-tenant" : {
+      "patch" : {
+        "tags" : [ "lease-contract-controller" ],
+        "summary" : "Tenant terminates a SIGNED or ACTIVE contract",
+        "operationId" : "terminateAsTenant",
+        "parameters" : [ {
+          "name" : "contractId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/TerminateCancelRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "400" : {
+            "description" : "Invalid fields, missing data or unexpected client fields",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Inactive account or not authorized on this contract",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "Contract not found",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "Contract state does not allow the requested transition or invalid data",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/contracts/{contractId}/terminate-as-owner" : {
+      "patch" : {
+        "tags" : [ "lease-contract-controller" ],
+        "summary" : "Owner terminates a SIGNED or ACTIVE contract",
+        "operationId" : "terminateAsOwner",
+        "parameters" : [ {
+          "name" : "contractId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/TerminateCancelRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "400" : {
+            "description" : "Invalid fields, missing data or unexpected client fields",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Inactive account or not authorized on this contract",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "Contract not found",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "Contract state does not allow the requested transition or invalid data",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/contracts/{contractId}/sign-as-tenant" : {
+      "patch" : {
+        "tags" : [ "lease-contract-controller" ],
+        "summary" : "Tenant signs the contract",
+        "description" : "Transition PENDING_TENANT_SIGNATURE -> PENDING_OWNER_SIGNATURE.",
+        "operationId" : "signAsTenant",
+        "parameters" : [ {
+          "name" : "contractId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "responses" : {
+          "400" : {
+            "description" : "Invalid fields, missing data or unexpected client fields",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Inactive account or not authorized on this contract",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "Contract not found",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "Contract state does not allow the requested transition or invalid data",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/contracts/{contractId}/sign-as-owner" : {
+      "patch" : {
+        "tags" : [ "lease-contract-controller" ],
+        "summary" : "Owner/manager signs the contract",
+        "description" : "Transition PENDING_OWNER_SIGNATURE -> SIGNED or ACTIVE (if already started).",
+        "operationId" : "signAsOwner",
+        "parameters" : [ {
+          "name" : "contractId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "responses" : {
+          "400" : {
+            "description" : "Invalid fields, missing data or unexpected client fields",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Inactive account or not authorized on this contract",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "Contract not found",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "Contract state does not allow the requested transition or invalid data",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/contracts/{contractId}/send-for-tenant-signature" : {
+      "patch" : {
+        "tags" : [ "lease-contract-controller" ],
+        "summary" : "Owner sends the contract to tenant for first signature",
+        "description" : "Transition DRAFT -> PENDING_TENANT_SIGNATURE. Can only be called by owner, manager or platform admin.",
+        "operationId" : "sendForTenantSignature",
+        "parameters" : [ {
+          "name" : "contractId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "responses" : {
+          "400" : {
+            "description" : "Invalid fields, missing data or unexpected client fields",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Inactive account or not authorized on this contract",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "Contract not found",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "Contract state does not allow the requested transition or invalid data",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/contracts/{contractId}/cancel" : {
+      "patch" : {
+        "tags" : [ "lease-contract-controller" ],
+        "summary" : "Cancel a non-final contract",
+        "description" : "Can be used by owner, manager, tenant or admin to cancel any non-final contract.",
+        "operationId" : "cancel",
+        "parameters" : [ {
+          "name" : "contractId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/TerminateCancelRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "400" : {
+            "description" : "Invalid fields, missing data or unexpected client fields",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Inactive account or not authorized on this contract",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "Contract not found",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "Contract state does not allow the requested transition or invalid data",
+            "content" : {
+              "application/json" : {
                 "schema" : {
                   "$ref" : "#/components/schemas/ErrorResponse"
                 }
@@ -2687,6 +3321,211 @@
         } ]
       }
     },
+    "/contracts/{contractId}" : {
+      "get" : {
+        "tags" : [ "lease-contract-controller" ],
+        "summary" : "Get one lease contract by ID",
+        "operationId" : "detail_1",
+        "parameters" : [ {
+          "name" : "contractId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "responses" : {
+          "400" : {
+            "description" : "Invalid fields, missing data or unexpected client fields",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Inactive account or not authorized on this contract",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "Contract not found",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "Contract state does not allow the requested transition or invalid data",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "200" : {
+            "description" : "The contract detail",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ContractSummary"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/contracts/me" : {
+      "get" : {
+        "tags" : [ "lease-contract-controller" ],
+        "summary" : "List contracts visible to the current user",
+        "description" : "Returns contracts where the user is the owner, tenant or real estate manager. Filter by role (OWNER/TENANT/MANAGER/ANY), status, property, date range.",
+        "operationId" : "listMine",
+        "parameters" : [ {
+          "name" : "role",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "status",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "$ref" : "#/components/schemas/ContractStatus"
+          }
+        }, {
+          "name" : "propertyId",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        }, {
+          "name" : "startFrom",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "format" : "date"
+          }
+        }, {
+          "name" : "endUntil",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "format" : "date"
+          }
+        }, {
+          "name" : "limit",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "default" : 100
+          }
+        } ],
+        "responses" : {
+          "400" : {
+            "description" : "Invalid fields, missing data or unexpected client fields",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Inactive account or not authorized on this contract",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "Contract not found",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "Contract state does not allow the requested transition or invalid data",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "200" : {
+            "description" : "Contracts visible to the current user",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/ContractSummary"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
     "/auth/me" : {
       "get" : {
         "tags" : [ "current-user-controller" ],
@@ -3474,6 +4313,242 @@
         },
         "required" : [ "specialties" ]
       },
+      "NewContractData" : {
+        "type" : "object",
+        "properties" : {
+          "propertyId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "tenantUserId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "realEstateManagerUserId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "startDate" : {
+            "type" : "string",
+            "format" : "date"
+          },
+          "endDate" : {
+            "type" : "string",
+            "format" : "date"
+          },
+          "monthlyRent" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "securityDeposit" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 0
+          },
+          "paymentFrequency" : {
+            "$ref" : "#/components/schemas/PaymentFrequency"
+          },
+          "paymentDayOfMonth" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "currency" : {
+            "type" : "string",
+            "maxLength" : 8,
+            "minLength" : 0
+          },
+          "contractTerms" : {
+            "type" : "string",
+            "maxLength" : 10000,
+            "minLength" : 0
+          },
+          "mediaIds" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string",
+              "format" : "uuid"
+            }
+          },
+          "clauses" : {
+            "type" : "string",
+            "maxLength" : 10000,
+            "minLength" : 0
+          }
+        },
+        "required" : [ "endDate", "propertyId", "startDate", "tenantUserId" ]
+      },
+      "PaymentFrequency" : {
+        "type" : "string",
+        "enum" : [ "MONTHLY", "BIWEEKLY", "WEEKLY", "QUARTERLY", "YEARLY" ]
+      },
+      "ContractStatus" : {
+        "type" : "string",
+        "enum" : [ "DRAFT", "PENDING_TENANT_SIGNATURE", "PENDING_OWNER_SIGNATURE", "SIGNED", "ACTIVE", "EXPIRED", "TERMINATED_BY_OWNER", "TERMINATED_BY_TENANT", "CANCELLED" ]
+      },
+      "ContractSummary" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "propertyId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "ownerUserId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "tenantUserId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "realEstateManagerUserId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "status" : {
+            "$ref" : "#/components/schemas/ContractStatus"
+          },
+          "startDate" : {
+            "type" : "string",
+            "format" : "date"
+          },
+          "endDate" : {
+            "type" : "string",
+            "format" : "date"
+          },
+          "monthlyRent" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "securityDeposit" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "paymentFrequency" : {
+            "$ref" : "#/components/schemas/PaymentFrequency"
+          },
+          "paymentDayOfMonth" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "currency" : {
+            "type" : "string"
+          },
+          "contractTerms" : {
+            "type" : "string"
+          },
+          "mediaIds" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string",
+              "format" : "uuid"
+            }
+          },
+          "clauses" : {
+            "type" : "string"
+          },
+          "ownerSigned" : {
+            "type" : "boolean"
+          },
+          "tenantSigned" : {
+            "type" : "boolean"
+          },
+          "tenantSignedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "ownerSignedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "signedByOwnerUserId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "signedByTenantUserId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "terminationReason" : {
+            "type" : "string"
+          },
+          "terminatedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "terminatedByUserId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "terminatedFromStatus" : {
+            "$ref" : "#/components/schemas/ContractStatus"
+          },
+          "cancellationReason" : {
+            "type" : "string"
+          },
+          "cancelledAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "cancelledByUserId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "renewalStartDate" : {
+            "type" : "string",
+            "format" : "date"
+          },
+          "renewalEndDate" : {
+            "type" : "string",
+            "format" : "date"
+          },
+          "originalContractId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "createdAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "updatedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          }
+        }
+      },
+      "RenewalData" : {
+        "type" : "object",
+        "properties" : {
+          "newStartDate" : {
+            "type" : "string",
+            "format" : "date"
+          },
+          "newEndDate" : {
+            "type" : "string",
+            "format" : "date"
+          },
+          "newMonthlyRent" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "newSecurityDeposit" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 0
+          },
+          "newPaymentFrequency" : {
+            "$ref" : "#/components/schemas/PaymentFrequency"
+          },
+          "newPaymentDayOfMonth" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        },
+        "required" : [ "newEndDate", "newStartDate" ]
+      },
       "Role" : {
         "type" : "string",
         "enum" : [ "OWNER", "TENANT", "FIXER", "REAL_ESTATE_MANAGER", "PLATFORM_ADMIN" ]
@@ -3537,6 +4612,17 @@
       "UserStatus" : {
         "type" : "string",
         "enum" : [ "ACTIVE", "SUSPENDED", "DISABLED" ]
+      },
+      "TerminateCancelRequest" : {
+        "type" : "object",
+        "properties" : {
+          "reason" : {
+            "type" : "string",
+            "maxLength" : 2000,
+            "minLength" : 0
+          }
+        },
+        "required" : [ "reason" ]
       },
       "OpenRequestSummaryResponse" : {
         "type" : "object",
