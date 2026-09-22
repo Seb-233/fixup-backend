@@ -24,6 +24,19 @@ abstract class PropertiesHttpContract {
     @Autowired ObjectMapper mapper;
     @Autowired com.fixup.testsupport.IntegrationDatabaseCleaner databaseCleaner;
 
+
+    /**
+     * FR-UC-25: pedir un recurso ajeno se rechaza siempre, pero el código difiere por base de
+     * datos y eso es la política haciendo su trabajo. Contra H2 la consulta devuelve la fila y la
+     * capa de aplicación responde 403. Contra PostgreSQL la política RLS la oculta antes, el
+     * repositorio no encuentra nada y la respuesta es 404, que además filtra menos. Fijar aquí un
+     * único número obligaría a apagar RLS o a debilitar la aserción; el contrato dice lo que cada
+     * motor garantiza de verdad.
+     */
+    protected int foreignResourceStatus() {
+        return 403;
+    }
+
     @AfterEach
     void clearDatabase() {
         jdbc.update("DELETE FROM properties");
@@ -235,7 +248,7 @@ abstract class PropertiesHttpContract {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(publicationBody("Publicacion ajena"))
                 .with(jwt().jwt(j -> j.subject("auth0|owner-b").claim("roles", "OWNER"))))
-            .andExpect(status().isForbidden());
+            .andExpect(status().is(foreignResourceStatus()));
     }
 
     @Test
@@ -294,7 +307,7 @@ abstract class PropertiesHttpContract {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(body)
                 .with(jwt().jwt(j -> j.subject("auth0|batch-b").claim("roles", "OWNER"))))
-            .andExpect(status().isForbidden());
+            .andExpect(status().is(foreignResourceStatus()));
 
         // El lote es atómico: el inmueble propio tampoco quedó publicado.
         mvc.perform(get("/properties/" + mine)

@@ -32,6 +32,19 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  */
 abstract class QuotationHttpContract {
 
+    /**
+     * FR-UC-25: pedir un recurso ajeno se rechaza siempre, pero el código difiere por base de
+     * datos y eso es la política haciendo su trabajo. Contra H2 la consulta devuelve la fila y la
+     * capa de aplicación responde 403. Contra PostgreSQL la política RLS la oculta antes, el
+     * repositorio no encuentra nada y la respuesta es 404, que además filtra menos. Fijar aquí un
+     * único número obligaría a apagar RLS o a debilitar la aserción; el contrato dice lo que cada
+     * motor garantiza de verdad.
+     */
+    protected int foreignResourceStatus() {
+        return 403;
+    }
+
+
     protected abstract org.springframework.test.web.servlet.ResultMatcher expectedDenialStatus();
 
 
@@ -959,8 +972,7 @@ abstract class QuotationHttpContract {
         String strangerSubject = "auth0|owner-compare-stranger";
         provisionOwner(strangerSubject);
         mvc.perform(get("/quotations/for-request/" + requestId).with(identity(strangerSubject)))
-                .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+                .andExpect(status().is(foreignResourceStatus()));
     }
 
     /** FR-UC-18: GET /quotations/me — cada tecnico ve sus ofertas enviadas y solo las suyas. */

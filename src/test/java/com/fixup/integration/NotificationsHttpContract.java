@@ -39,6 +39,19 @@ abstract class NotificationsHttpContract {
 
     private static final Duration ASYNC_TIMEOUT = Duration.ofSeconds(10);
 
+
+    /**
+     * FR-UC-25: pedir un recurso ajeno se rechaza siempre, pero el código difiere por base de
+     * datos y eso es la política haciendo su trabajo. Contra H2 la consulta devuelve la fila y la
+     * capa de aplicación responde 403. Contra PostgreSQL la política RLS la oculta antes, el
+     * repositorio no encuentra nada y la respuesta es 404, que además filtra menos. Fijar aquí un
+     * único número obligaría a apagar RLS o a debilitar la aserción; el contrato dice lo que cada
+     * motor garantiza de verdad.
+     */
+    protected int foreignResourceStatus() {
+        return 403;
+    }
+
     @AfterEach
     void clearDatabase() {
         databaseCleaner.clean();
@@ -193,7 +206,7 @@ abstract class NotificationsHttpContract {
         // cuando existe pero es de otro. El rechazo es igual de firme en ambos.
         mvc.perform(post("/notifications/" + notificationId + "/read")
                 .with(as("auth0|notif-intruder", "OWNER")))
-            .andExpect(status().isForbidden());
+            .andExpect(status().is(foreignResourceStatus()));
 
         // Sigue sin leer para su dueño: el intento ajeno no la tocó.
         assertThat(jdbc.queryForObject("SELECT is_read FROM notifications WHERE id = ?",

@@ -220,4 +220,9 @@ class PostgresQuotationIT extends QuotationHttpContract {
         assertThat(rejectedCount).isEqualTo(totalCount - 1);
         assertThat(requestStatus).isEqualTo("ASSIGNED");
     }
+
+    @Override
+    protected int foreignResourceStatus() {
+        return 404;
+    }
 }

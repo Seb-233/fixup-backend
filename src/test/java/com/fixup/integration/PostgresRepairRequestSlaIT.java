@@ -29,4 +29,9 @@ class PostgresRepairRequestSlaIT extends RepairRequestSlaHttpContract {
         registry.add("spring.flyway.user", postgres::getUsername);
         registry.add("spring.flyway.password", postgres::getPassword);
     }
+
+    @Override
+    protected int foreignResourceStatus() {
+        return 404;
+    }
 }

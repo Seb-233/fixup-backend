@@ -42,6 +42,19 @@ abstract class RepairRequestSlaHttpContract {
     @Autowired CheckRepairRequestSla checkSla;
     @Autowired com.fixup.testsupport.IntegrationDatabaseCleaner databaseCleaner;
 
+
+    /**
+     * FR-UC-25: pedir un recurso ajeno se rechaza siempre, pero el código difiere por base de
+     * datos y eso es la política haciendo su trabajo. Contra H2 la consulta devuelve la fila y la
+     * capa de aplicación responde 403. Contra PostgreSQL la política RLS la oculta antes, el
+     * repositorio no encuentra nada y la respuesta es 404, que además filtra menos. Fijar aquí un
+     * único número obligaría a apagar RLS o a debilitar la aserción; el contrato dice lo que cada
+     * motor garantiza de verdad.
+     */
+    protected int foreignResourceStatus() {
+        return 403;
+    }
+
     @AfterEach
     void clearDatabase() {
         databaseCleaner.clean();
@@ -157,7 +170,7 @@ abstract class RepairRequestSlaHttpContract {
 
         mvc.perform(patch("/requests/" + requestId + "/urgency").with(as("auth0|sla-stranger", "OWNER"))
                 .contentType(MediaType.APPLICATION_JSON).content("{\"urgency\":\"URGENT\"}"))
-            .andExpect(status().isForbidden());
+            .andExpect(status().is(foreignResourceStatus()));
     }
 
     // ---------- el barrido de SLA ----------
@@ -247,7 +260,7 @@ abstract class RepairRequestSlaHttpContract {
         assignTo(requestId, fixerId);
 
         mvc.perform(post("/requests/" + requestId + "/start").with(as("auth0|sla-other-fixer", "FIXER")))
-            .andExpect(status().isForbidden());
+            .andExpect(status().is(foreignResourceStatus()));
     }
 
     @Test
@@ -257,7 +270,7 @@ abstract class RepairRequestSlaHttpContract {
         String requestId = openRequest("auth0|sla-open-owner", seedProperty(ownerId), "MEDIUM");
 
         mvc.perform(post("/requests/" + requestId + "/start").with(as("auth0|sla-open-fixer", "FIXER")))
-            .andExpect(status().isForbidden());
+            .andExpect(status().is(foreignResourceStatus()));
     }
 
     @Test
@@ -267,7 +280,7 @@ abstract class RepairRequestSlaHttpContract {
         String requestId = openRequest("auth0|sla-cancel-owner", seedProperty(ownerId), "MEDIUM");
 
         mvc.perform(post("/requests/" + requestId + "/cancel").with(as("auth0|sla-cancel-stranger", "OWNER")))
-            .andExpect(status().isForbidden());
+            .andExpect(status().is(foreignResourceStatus()));
 
         mvc.perform(post("/requests/" + requestId + "/cancel").with(as("auth0|sla-cancel-owner", "OWNER")))
             .andExpect(status().isOk())
