@@ -6,11 +6,11 @@ import java.util.UUID;
 /**
  * Immutable view another module may read to decide its own rules. It carries no photo, no
  * description and no JPA entity: quotations only needs to know who owns the request and whether
- * it still admits offers, and messaging additionally needs to know who the assigned fixer is once
- * it does.
+ * it still admits offers, messaging additionally needs to know who the assigned fixer is once
+ * it does, y notifications necesita la urgencia para redactar el aviso.
  */
 public record RepairRequestSnapshot(UUID requestId, UUID ownerUserId, Specialty specialty,
-        RepairRequestStatus status, UUID assignedFixerUserId) {
+        RepairRequestStatus status, UUID assignedFixerUserId, RepairRequestUrgency urgency) {
 
     public boolean isOpen() {
         return status == RepairRequestStatus.OPEN;

@@ -36,7 +36,7 @@ final class RequestAccess {
         }
     }
 
-    private static void requireActive(CurrentActor actor) {
+    static void requireActive(CurrentActor actor) {
         if (actor.status() != UserStatus.ACTIVE) {
             throw new RepairRequestAccessDeniedException();
         }

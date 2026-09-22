@@ -21,6 +21,10 @@ fixup:
     bucket: ${FIXUP_STORAGE_BUCKET:fixup-private}
     region: ${FIXUP_STORAGE_REGION:us-east-1}
     auto-create-bucket: true
+  sla:
+    # FR-UC-08: el reloj queda apagado en pruebas. El barrido se invoca explícitamente desde la
+    # prueba de contrato, que es la única forma de afirmar sobre él sin esperar treinta segundos.
+    enabled: false
   media:
     portfolio:
       max-file-size: 10485760

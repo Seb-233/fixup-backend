@@ -6,6 +6,7 @@ import com.fixup.quotations.api.QuotationConflictException;
 import com.fixup.quotations.api.QuotationNotFoundException;
 import com.fixup.quotations.domain.Quotation;
 import com.fixup.quotations.domain.Quotations;
+import com.fixup.requests.api.RepairRequestAssigned;
 import com.fixup.requests.api.RepairRequestDirectory;
 import java.time.Instant;
 import java.util.UUID;
@@ -79,7 +80,9 @@ public class AcceptQuotation {
         // 9. Assign the request.
         requests.assign(requestId, accepted.fixerUserId());
 
-        // 10. Publish event.
+        // 10. Publish events: la asignación de la solicitud y la aceptación de la cotización.
+        events.publishEvent(new RepairRequestAssigned(requestId, request.ownerUserId(),
+                accepted.fixerUserId(), now));
         events.publishEvent(new QuotationAccepted(accepted.id(), accepted.requestId(),
                 accepted.fixerUserId(), request.ownerUserId(), accepted.amount(), now));
 

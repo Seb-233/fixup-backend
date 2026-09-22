@@ -5,11 +5,17 @@ import com.fixup.fixers.api.Specialty;
 import com.fixup.media.api.MediaAttachmentService;
 import com.fixup.media.api.SignedMediaView;
 import com.fixup.requests.api.RepairRequestStatus;
+import com.fixup.requests.api.RepairRequestUrgency;
+import com.fixup.requests.application.CancelRepairRequest;
 import com.fixup.requests.application.CreateRepairRequest;
 import com.fixup.requests.application.GetRepairRequest;
 import com.fixup.requests.application.ListOpenRepairRequests;
 import com.fixup.requests.application.ListOwnRepairRequests;
 import com.fixup.requests.application.NewRepairRequest;
+import com.fixup.requests.application.PutRepairRequestOnHold;
+import com.fixup.requests.application.ResumeRepairRequest;
+import com.fixup.requests.application.StartRepairProgress;
+import com.fixup.requests.application.UpdateRepairRequestUrgency;
 import com.fixup.requests.application.RepairRequestSummary;
 import com.fixup.shared.errors.ErrorResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -29,6 +35,7 @@ import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -58,16 +65,28 @@ class RepairRequestController {
     private final ListOwnRepairRequests listOwn;
     private final ListOpenRepairRequests listOpen;
     private final GetRepairRequest getRequest;
+    private final UpdateRepairRequestUrgency updateUrgency;
+    private final StartRepairProgress startProgress;
+    private final PutRepairRequestOnHold putOnHold;
+    private final ResumeRepairRequest resumeRequest;
+    private final CancelRepairRequest cancelRequest;
     private final MediaAttachmentService mediaAttachmentService;
 
     RepairRequestController(CurrentActorProvider actors, CreateRepairRequest createRequest,
             ListOwnRepairRequests listOwn, ListOpenRepairRequests listOpen, GetRepairRequest getRequest,
-            MediaAttachmentService mediaAttachmentService) {
+            UpdateRepairRequestUrgency updateUrgency, StartRepairProgress startProgress,
+            PutRepairRequestOnHold putOnHold, ResumeRepairRequest resumeRequest,
+            CancelRepairRequest cancelRequest, MediaAttachmentService mediaAttachmentService) {
         this.actors = actors;
         this.createRequest = createRequest;
         this.listOwn = listOwn;
         this.listOpen = listOpen;
         this.getRequest = getRequest;
+        this.updateUrgency = updateUrgency;
+        this.startProgress = startProgress;
+        this.putOnHold = putOnHold;
+        this.resumeRequest = resumeRequest;
+        this.cancelRequest = cancelRequest;
         this.mediaAttachmentService = mediaAttachmentService;
     }
 
@@ -85,7 +104,8 @@ class RepairRequestController {
     RequestDetailResponse open(@Valid @RequestBody OpenRequest body) {
         var mediaIds = body.mediaIds() == null ? List.<UUID>of() : body.mediaIds();
         var summary = createRequest.execute(actors.currentActor(),
-                new NewRepairRequest(body.propertyId(), body.title(), body.description(), mediaIds));
+                new NewRepairRequest(body.propertyId(), body.title(), body.description(), mediaIds,
+                        body.urgency()));
         var photos = mediaAttachmentService.resolveReadUrls(summary.mediaIds());
         return RequestDetailResponse.of(summary, photos);
     }
@@ -121,11 +141,66 @@ class RepairRequestController {
         return RequestDetailResponse.of(request, photos);
     }
 
+    @PatchMapping(value = "/{requestId}/urgency", consumes = MediaType.APPLICATION_JSON_VALUE)
+    @Operation(summary = "Change the urgency of a repair request",
+            description = "FR-UC-08: reclassifying the urgency moves the committed SLA deadline, which is measured "
+                    + "from the moment the request was opened.")
+    @ApiResponse(responseCode = "200", description = "The request with its new urgency and deadline")
+    RequestDetailResponse changeUrgency(@PathVariable UUID requestId,
+            @Valid @RequestBody UrgencyRequest body) {
+        return detailOf(updateUrgency.execute(actors.currentActor(), requestId, body.urgency()));
+    }
+
+    @PostMapping("/{requestId}/start")
+    @Operation(summary = "Start the repair work",
+            description = "FR-UC-08: only the assigned fixer, and only from ASSIGNED.")
+    @ApiResponse(responseCode = "200", description = "The request is now in progress")
+    RequestDetailResponse start(@PathVariable UUID requestId) {
+        return detailOf(startProgress.execute(actors.currentActor(), requestId));
+    }
+
+    @PostMapping("/{requestId}/hold")
+    @Operation(summary = "Put the repair work on hold",
+            description = "FR-UC-08: either the owner or the assigned fixer, from ASSIGNED or IN_PROGRESS.")
+    @ApiResponse(responseCode = "200", description = "The request is on hold")
+    RequestDetailResponse hold(@PathVariable UUID requestId) {
+        return detailOf(putOnHold.execute(actors.currentActor(), requestId));
+    }
+
+    @PostMapping("/{requestId}/resume")
+    @Operation(summary = "Resume a repair request that was on hold",
+            description = "FR-UC-08: either the owner or the assigned fixer, only from ON_HOLD.")
+    @ApiResponse(responseCode = "200", description = "The request is in progress again")
+    RequestDetailResponse resume(@PathVariable UUID requestId) {
+        return detailOf(resumeRequest.execute(actors.currentActor(), requestId));
+    }
+
+    @PostMapping("/{requestId}/cancel")
+    @Operation(summary = "Cancel a repair request",
+            description = "FR-UC-08: only its owner, and never one that is already completed or cancelled. "
+                    + "Completing a request is not a route of its own: it happens when the fixer closes the job "
+                    + "through POST /jobs/{jobId}/complete, which is what releases the escrow.")
+    @ApiResponse(responseCode = "200", description = "The request is cancelled")
+    RequestDetailResponse cancel(@PathVariable UUID requestId) {
+        return detailOf(cancelRequest.execute(actors.currentActor(), requestId));
+    }
+
+    private RequestDetailResponse detailOf(RepairRequestSummary summary) {
+        return RequestDetailResponse.of(summary, mediaAttachmentService.resolveReadUrls(summary.mediaIds()));
+    }
+
+    @Schema(additionalProperties = Schema.AdditionalPropertiesValue.FALSE)
+    @com.fasterxml.jackson.annotation.JsonIgnoreProperties(ignoreUnknown = false)
+    record UrgencyRequest(@NotNull RepairRequestUrgency urgency) {
+    }
+
     @Schema(additionalProperties = Schema.AdditionalPropertiesValue.FALSE)
     @com.fasterxml.jackson.annotation.JsonIgnoreProperties(ignoreUnknown = false)
     record OpenRequest(@NotNull UUID propertyId, @NotBlank @Size(max = 150) String title,
             @NotBlank @Size(max = 2000) String description,
-            @Size(max = 6) List<@NotNull UUID> mediaIds) {
+            @Size(max = 6) List<@NotNull UUID> mediaIds,
+            @Schema(description = "FR-UC-08: optional; the request opens as MEDIUM when absent")
+            RepairRequestUrgency urgency) {
         public OpenRequest {
             if (mediaIds != null) {
                 if (mediaIds.contains(null)) {
@@ -147,9 +222,11 @@ class RepairRequestController {
     }
 
     @Schema(requiredProperties = {"requestId", "specialty", "title", "description", "photos",
-        "status", "createdAt"})
+        "status", "urgency", "createdAt"})
     record RequestDetailResponse(UUID requestId, UUID propertyId, Specialty specialty, String title, String description,
             List<PhotoResponse> photos, RepairRequestStatus status,
+            RepairRequestUrgency urgency,
+            @Schema(types = {"string", "null"}) Instant slaDeadline,
             @Schema(types = {"string", "null"}) UUID assignedFixerUserId, Instant createdAt) {
 
         static RequestDetailResponse of(com.fixup.requests.domain.RepairRequest request,
@@ -158,7 +235,8 @@ class RepairRequestController {
                     .map(p -> new PhotoResponse(p.mediaId(), p.readUrl(), p.readUrlExpiresAt()))
                     .toList();
             return new RequestDetailResponse(request.id(), request.propertyId(), request.specialty(), request.title(), request.description(),
-                    photoResponses, request.status(), request.assignedFixerUserId(), request.createdAt());
+                    photoResponses, request.status(), request.urgency(), request.slaDeadline(),
+                    request.assignedFixerUserId(), request.createdAt());
         }
 
         static RequestDetailResponse of(RepairRequestSummary summary,
@@ -167,7 +245,8 @@ class RepairRequestController {
                     .map(p -> new PhotoResponse(p.mediaId(), p.readUrl(), p.readUrlExpiresAt()))
                     .toList();
             return new RequestDetailResponse(summary.id(), summary.propertyId(), summary.specialty(), summary.title(), summary.description(),
-                    photoResponses, summary.status(), summary.assignedFixerUserId(), summary.createdAt());
+                    photoResponses, summary.status(), summary.urgency(), summary.slaDeadline(),
+                    summary.assignedFixerUserId(), summary.createdAt());
         }
     }
 

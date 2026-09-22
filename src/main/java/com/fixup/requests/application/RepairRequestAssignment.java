@@ -46,4 +46,12 @@ class RepairRequestAssignment implements RepairRequestDirectory {
                 .orElseThrow(RepairRequestNotFoundException::new);
         requests.update(request.assign(fixerUserId, Instant.now()));
     }
+
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void complete(UUID requestId) {
+        var request = requests.findByIdForUpdate(requestId)
+                .orElseThrow(RepairRequestNotFoundException::new);
+        requests.update(request.complete(Instant.now()));
+    }
 }
