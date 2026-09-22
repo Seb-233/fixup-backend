@@ -1,8 +1,12 @@
 package com.fixup.properties.infrastructure;
 
+import com.fixup.properties.api.PropertyStatus;
+import com.fixup.properties.api.PropertyType;
 import com.fixup.properties.domain.Property;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
@@ -39,6 +43,32 @@ class PropertyEntity {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "property_type", nullable = false, length = 16)
+    private PropertyType type;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status", nullable = false, length = 16)
+    private PropertyStatus status;
+
+    @Column(name = "title", length = 150)
+    private String title;
+
+    @Column(name = "description", length = 4000)
+    private String description;
+
+    @Column(name = "zone", length = 100)
+    private String zone;
+
+    @Column(name = "monthly_rent_suggestion", precision = 14, scale = 2)
+    private BigDecimal monthlyRentSuggestion;
+
+    @Column(name = "published_at")
+    private Instant publishedAt;
+
+    @Column(name = "unlisted_at")
+    private Instant unlistedAt;
+
     protected PropertyEntity() {}
 
     PropertyEntity(Property property) {
@@ -50,9 +80,18 @@ class PropertyEntity {
         this.areaM2 = property.areaM2();
         this.createdAt = property.createdAt();
         this.updatedAt = property.updatedAt();
+        this.type = property.type();
+        this.status = property.status();
+        this.title = property.title();
+        this.description = property.description();
+        this.zone = property.zone();
+        this.monthlyRentSuggestion = property.monthlyRentSuggestion();
+        this.publishedAt = property.publishedAt();
+        this.unlistedAt = property.unlistedAt();
     }
 
     Property toDomain() {
-        return new Property(id, ownerUserId, name, address, city, areaM2, createdAt, updatedAt);
+        return new Property(id, ownerUserId, name, address, city, areaM2, createdAt, updatedAt,
+            type, status, title, description, zone, monthlyRentSuggestion, publishedAt, unlistedAt);
     }
 }

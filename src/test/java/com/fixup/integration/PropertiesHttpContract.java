@@ -140,6 +140,166 @@ abstract class PropertiesHttpContract {
                 .with(jwt().jwt(j -> j.subject("auth0|owner2").claim("roles", "OWNER"))))
             .andExpect(status().isNotFound());
     }
+
+    /** Crea un inmueble por la API real, para que la política RLS de INSERT también se ejerza. */
+    private String createProperty(String auth0Id, String name) throws Exception {
+        String json = """
+            {"name": "%s", "address": "123 Main St", "city": "Bogota", "areaM2": 150.50}
+            """.formatted(name);
+        String response = mvc.perform(post("/properties")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(json)
+                .with(jwt().jwt(j -> j.subject(auth0Id).claim("roles", "OWNER"))))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.status").value("DRAFT"))
+            .andReturn().getResponse().getContentAsString();
+        return mapper.readTree(response).get("id").asText();
+    }
+
+    private static String publicationBody(String title) {
+        return """
+            {"type": "APARTMENT", "title": "%s", "description": "Luminoso y central",
+             "zone": "Chapinero", "monthlyRentSuggestion": 2500000.00}
+            """.formatted(title);
+    }
+
+    @Test
+    void publishesAndUnlistsProperty() throws Exception {
+        UUID ownerId = UUID.randomUUID();
+        seedUser(ownerId, "auth0|publisher");
+        String propertyId = createProperty("auth0|publisher", "Apto 302");
+
+        // FR-UC-12: publicar es una transición sobre el inmueble que ya existe.
+        mvc.perform(post("/properties/" + propertyId + "/publish")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(publicationBody("Apartamento en Chapinero"))
+                .with(jwt().jwt(j -> j.subject("auth0|publisher").claim("roles", "OWNER"))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.status").value("PUBLISHED"))
+            .andExpect(jsonPath("$.title").value("Apartamento en Chapinero"))
+            .andExpect(jsonPath("$.zone").value("Chapinero"))
+            .andExpect(jsonPath("$.monthlyRentSuggestion").value(2500000.00))
+            .andExpect(jsonPath("$.publishedAt").isNotEmpty())
+            .andExpect(jsonPath("$.unlistedAt").isEmpty());
+
+        // Retirar la oferta conserva la fecha de publicación original.
+        mvc.perform(post("/properties/" + propertyId + "/unlist")
+                .with(jwt().jwt(j -> j.subject("auth0|publisher").claim("roles", "OWNER"))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.status").value("UNLISTED"))
+            .andExpect(jsonPath("$.publishedAt").isNotEmpty())
+            .andExpect(jsonPath("$.unlistedAt").isNotEmpty());
+    }
+
+    @Test
+    void rejectsPublishingAnAlreadyPublishedProperty() throws Exception {
+        UUID ownerId = UUID.randomUUID();
+        seedUser(ownerId, "auth0|twice");
+        String propertyId = createProperty("auth0|twice", "Apto 401");
+
+        mvc.perform(post("/properties/" + propertyId + "/publish")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(publicationBody("Primera publicacion"))
+                .with(jwt().jwt(j -> j.subject("auth0|twice").claim("roles", "OWNER"))))
+            .andExpect(status().isOk());
+
+        mvc.perform(post("/properties/" + propertyId + "/publish")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(publicationBody("Segunda publicacion"))
+                .with(jwt().jwt(j -> j.subject("auth0|twice").claim("roles", "OWNER"))))
+            .andExpect(status().isConflict());
+    }
+
+    @Test
+    void rejectsUnlistingAPropertyThatWasNeverPublished() throws Exception {
+        UUID ownerId = UUID.randomUUID();
+        seedUser(ownerId, "auth0|draftonly");
+        String propertyId = createProperty("auth0|draftonly", "Apto 500");
+
+        mvc.perform(post("/properties/" + propertyId + "/unlist")
+                .with(jwt().jwt(j -> j.subject("auth0|draftonly").claim("roles", "OWNER"))))
+            .andExpect(status().isConflict());
+    }
+
+    @Test
+    void rejectsPublicationByAnotherOwner() throws Exception {
+        UUID owner1Id = UUID.randomUUID();
+        seedUser(owner1Id, "auth0|owner-a");
+        UUID owner2Id = UUID.randomUUID();
+        seedUser(owner2Id, "auth0|owner-b");
+
+        String propertyId = createProperty("auth0|owner-a", "Casa del dueno A");
+
+        // FR-UC-25: publicar lo ajeno se rechaza aunque quien llame sea un OWNER activo.
+        mvc.perform(post("/properties/" + propertyId + "/publish")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(publicationBody("Publicacion ajena"))
+                .with(jwt().jwt(j -> j.subject("auth0|owner-b").claim("roles", "OWNER"))))
+            .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void publishesABatchOfProperties() throws Exception {
+        UUID ownerId = UUID.randomUUID();
+        seedUser(ownerId, "auth0|batch");
+        String first = createProperty("auth0|batch", "Apto 1");
+        String second = createProperty("auth0|batch", "Apto 2");
+
+        String body = """
+            {"properties": [
+              {"propertyId": "%s", "type": "APARTMENT", "title": "Apto uno",
+               "zone": "Chapinero", "monthlyRentSuggestion": 1800000.00},
+              {"propertyId": "%s", "type": "STUDIO", "title": "Apto dos",
+               "zone": "Usaquen", "monthlyRentSuggestion": 1200000.00}
+            ]}
+            """.formatted(first, second);
+
+        mvc.perform(post("/properties/publish-batch")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body)
+                .with(jwt().jwt(j -> j.subject("auth0|batch").claim("roles", "OWNER"))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.publishedCount").value(2))
+            .andExpect(jsonPath("$.published", hasSize(2)))
+            .andExpect(jsonPath("$.published[0].status").value("PUBLISHED"))
+            .andExpect(jsonPath("$.published[1].status").value("PUBLISHED"));
+
+        mvc.perform(get("/properties/" + second)
+                .with(jwt().jwt(j -> j.subject("auth0|batch").claim("roles", "OWNER"))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.status").value("PUBLISHED"))
+            .andExpect(jsonPath("$.type").value("STUDIO"));
+    }
+
+    @Test
+    void rejectsBatchPublicationContainingAPropertyOfAnotherOwner() throws Exception {
+        UUID owner1Id = UUID.randomUUID();
+        seedUser(owner1Id, "auth0|batch-a");
+        UUID owner2Id = UUID.randomUUID();
+        seedUser(owner2Id, "auth0|batch-b");
+
+        String mine = createProperty("auth0|batch-b", "Mio");
+        String theirs = createProperty("auth0|batch-a", "Ajeno");
+
+        String body = """
+            {"properties": [
+              {"propertyId": "%s", "type": "APARTMENT", "title": "Mio",
+               "zone": "Chapinero", "monthlyRentSuggestion": 1800000.00},
+              {"propertyId": "%s", "type": "APARTMENT", "title": "Ajeno",
+               "zone": "Usaquen", "monthlyRentSuggestion": 1200000.00}
+            ]}
+            """.formatted(mine, theirs);
+
+        mvc.perform(post("/properties/publish-batch")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body)
+                .with(jwt().jwt(j -> j.subject("auth0|batch-b").claim("roles", "OWNER"))))
+            .andExpect(status().isForbidden());
+
+        // El lote es atómico: el inmueble propio tampoco quedó publicado.
+        mvc.perform(get("/properties/" + mine)
+                .with(jwt().jwt(j -> j.subject("auth0|batch-b").claim("roles", "OWNER"))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.status").value("DRAFT"));
+    }
 }
-
-
