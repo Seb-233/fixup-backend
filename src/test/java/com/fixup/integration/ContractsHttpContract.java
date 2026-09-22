@@ -265,4 +265,162 @@ abstract class ContractsHttpContract {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.status").value("DRAFT"));
     }
+
+    private void signUntilSigned(String contractId, String ownerAuth0Id, String tenantAuth0Id)
+            throws Exception {
+        mvc.perform(patch("/contracts/" + contractId + "/send-for-tenant-signature")
+                .with(as(ownerAuth0Id, "OWNER")))
+            .andExpect(status().isOk());
+        mvc.perform(patch("/contracts/" + contractId + "/sign-as-tenant")
+                .with(as(tenantAuth0Id, "TENANT")))
+            .andExpect(status().isOk());
+        mvc.perform(patch("/contracts/" + contractId + "/sign-as-owner")
+                .with(as(ownerAuth0Id, "OWNER")))
+            .andExpect(status().isOk());
+    }
+
+    private String renewalBody() {
+        return """
+            {
+              "newStartDate": "%s",
+              "newEndDate": "%s",
+              "newMonthlyRent": 2700000,
+              "newSecurityDeposit": 2700000,
+              "newPaymentFrequency": "MONTHLY",
+              "newPaymentDayOfMonth": 5
+            }
+            """.formatted(END.plusDays(1), END.plusMonths(12));
+    }
+
+    /**
+     * POST /contracts/{id}/renew: la renovacion no modifica el contrato firmado, crea uno nuevo
+     * en DRAFT que apunta al original. Cierra la ultima ruta de FR-UC-14 sin prueba de contrato.
+     */
+    @Test
+    void renewsASignedContractIntoANewDraft() throws Exception {
+        seedUser("auth0|renew-owner", "OWNER");
+        UUID tenantId = seedUser("auth0|renew-tenant", "TENANT");
+        UUID propertyId = UUID.randomUUID();
+
+        String contractId = createContract("auth0|renew-owner", propertyId, tenantId, null);
+        signUntilSigned(contractId, "auth0|renew-owner", "auth0|renew-tenant");
+
+        String response = mvc.perform(post("/contracts/" + contractId + "/renew")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(renewalBody())
+                .with(as("auth0|renew-owner", "OWNER")))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.status").value("DRAFT"))
+            .andExpect(jsonPath("$.originalContractId").value(contractId))
+            .andExpect(jsonPath("$.propertyId").value(propertyId.toString()))
+            .andExpect(jsonPath("$.ownerSigned").value(false))
+            .andExpect(jsonPath("$.tenantSigned").value(false))
+            .andReturn().getResponse().getContentAsString();
+
+        org.assertj.core.api.Assertions.assertThat(mapper.readTree(response).get("id").asText())
+                .isNotEqualTo(contractId);
+
+        // El original no desaparece: el propietario pasa a ver dos contratos.
+        mvc.perform(get("/contracts/me").with(as("auth0|renew-owner", "OWNER")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$", hasSize(2)));
+    }
+
+    @Test
+    void rejectsRenewalOfADraft() throws Exception {
+        seedUser("auth0|renew-draft-owner", "OWNER");
+        UUID tenantId = seedUser("auth0|renew-draft-tenant", "TENANT");
+
+        String contractId = createContract("auth0|renew-draft-owner", UUID.randomUUID(), tenantId,
+                null);
+
+        mvc.perform(post("/contracts/" + contractId + "/renew")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(renewalBody())
+                .with(as("auth0|renew-draft-owner", "OWNER")))
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.code").value("INVALID_STATUS_FOR_RENEWAL"));
+    }
+
+    /** PATCH /contracts/{id}/terminate-as-owner: estado final, actor y estado de origen. */
+    @Test
+    void terminatesASignedContractAsOwner() throws Exception {
+        UUID ownerId = seedUser("auth0|term-owner", "OWNER");
+        UUID tenantId = seedUser("auth0|term-tenant", "TENANT");
+
+        String contractId = createContract("auth0|term-owner", UUID.randomUUID(), tenantId, null);
+        signUntilSigned(contractId, "auth0|term-owner", "auth0|term-tenant");
+
+        mvc.perform(patch("/contracts/" + contractId + "/terminate-as-owner")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"reason\":\"El inmueble se vendio.\"}")
+                .with(as("auth0|term-owner", "OWNER")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.status").value("TERMINATED_BY_OWNER"))
+            .andExpect(jsonPath("$.terminatedFromStatus").value("SIGNED"))
+            .andExpect(jsonPath("$.terminatedByUserId").value(ownerId.toString()))
+            .andExpect(jsonPath("$.terminationReason").value("El inmueble se vendio."));
+    }
+
+    /** PATCH /contracts/{id}/terminate-as-tenant, y el 409 cuando el contrato aun es DRAFT. */
+    @Test
+    void terminatesAsTenantAndRefusesToTerminateADraft() throws Exception {
+        seedUser("auth0|term2-owner", "OWNER");
+        UUID tenantId = seedUser("auth0|term2-tenant", "TENANT");
+
+        String contractId = createContract("auth0|term2-owner", UUID.randomUUID(), tenantId, null);
+
+        // Un DRAFT se cancela, no se termina.
+        mvc.perform(patch("/contracts/" + contractId + "/terminate-as-tenant")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"reason\":\"Ya no me interesa.\"}")
+                .with(as("auth0|term2-tenant", "TENANT")))
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.code").value("INVALID_STATUS_FOR_TERMINATION"));
+
+        signUntilSigned(contractId, "auth0|term2-owner", "auth0|term2-tenant");
+
+        mvc.perform(patch("/contracts/" + contractId + "/terminate-as-tenant")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"reason\":\"Traslado laboral a otra ciudad.\"}")
+                .with(as("auth0|term2-tenant", "TENANT")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.status").value("TERMINATED_BY_TENANT"))
+            .andExpect(jsonPath("$.terminatedByUserId").value(tenantId.toString()));
+
+        // Ya terminado, no se puede volver a terminar.
+        mvc.perform(patch("/contracts/" + contractId + "/terminate-as-owner")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"reason\":\"Intento tardio.\"}")
+                .with(as("auth0|term2-owner", "OWNER")))
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.code").value("INVALID_STATUS_FOR_TERMINATION"));
+    }
+
+    /** ASR-SE-09 sobre la terminacion: cada parte solo puede usar su propia ruta. */
+    @Test
+    void rejectsTerminationByTheWrongParty() throws Exception {
+        seedUser("auth0|wrong-owner", "OWNER");
+        UUID tenantId = seedUser("auth0|wrong-tenant", "TENANT");
+
+        String contractId = createContract("auth0|wrong-owner", UUID.randomUUID(), tenantId, null);
+        signUntilSigned(contractId, "auth0|wrong-owner", "auth0|wrong-tenant");
+
+        mvc.perform(patch("/contracts/" + contractId + "/terminate-as-owner")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"reason\":\"No soy el propietario.\"}")
+                .with(as("auth0|wrong-tenant", "TENANT")))
+            .andExpect(status().isForbidden());
+
+        mvc.perform(patch("/contracts/" + contractId + "/terminate-as-tenant")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"reason\":\"No soy el inquilino.\"}")
+                .with(as("auth0|wrong-owner", "OWNER")))
+            .andExpect(status().isForbidden());
+
+        // Nada cambio: sigue firmado.
+        mvc.perform(get("/contracts/" + contractId).with(as("auth0|wrong-owner", "OWNER")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.status").value("SIGNED"));
+    }
 }

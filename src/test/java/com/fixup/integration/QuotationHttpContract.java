@@ -929,4 +929,71 @@ abstract class QuotationHttpContract {
                 .andExpect(jsonPath("$", hasSize(1)))
                 .andExpect(jsonPath("$[0].requestId").value(requestId.toString()));
     }
+
+    /**
+     * FR-UC-18: GET /quotations/for-request/{requestId} — el tablero comparativo del propietario,
+     * mas barata primero. Era la ultima ruta de quotations sin prueba de contrato HTTP.
+     */
+    @Test
+    void ownerComparesReceivedQuotationsCheapestFirst() throws Exception {
+        String ownerSubject = "auth0|owner-compare";
+        provisionOwner(ownerSubject);
+        UUID requestId = createRequest(ownerSubject, "PLUMBING", "Cambio de tuberia",
+                "Reemplazo de la tuberia de la cocina");
+
+        provisionVerifiedFixer("auth0|fixer-expensive", "PLUMBING");
+        provisionVerifiedFixer("auth0|fixer-cheap", "PLUMBING");
+        UUID expensive = submitQuotation("auth0|fixer-expensive", requestId, 900000, 5,
+                "Incluye materiales");
+        UUID cheap = submitQuotation("auth0|fixer-cheap", requestId, 500000, 7,
+                "Solo mano de obra");
+
+        mvc.perform(get("/quotations/for-request/" + requestId).with(identity(ownerSubject)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(2)))
+                .andExpect(jsonPath("$[0].id").value(cheap.toString()))
+                .andExpect(jsonPath("$[0].amount").value(500000))
+                .andExpect(jsonPath("$[1].id").value(expensive.toString()));
+
+        // Otro propietario no abre las ofertas de una solicitud ajena.
+        String strangerSubject = "auth0|owner-compare-stranger";
+        provisionOwner(strangerSubject);
+        mvc.perform(get("/quotations/for-request/" + requestId).with(identity(strangerSubject)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+    }
+
+    /** FR-UC-18: GET /quotations/me — cada tecnico ve sus ofertas enviadas y solo las suyas. */
+    @Test
+    void fixerListsOnlyOwnQuotations() throws Exception {
+        String ownerSubject = "auth0|owner-inbox-list";
+        provisionOwner(ownerSubject);
+        UUID firstRequest = createRequest(ownerSubject, "ELECTRICAL", "Tablero electrico",
+                "Revision del tablero principal");
+        UUID secondRequest = createRequest(ownerSubject, "ELECTRICAL", "Tomas danadas",
+                "Cambio de tomacorrientes del segundo piso");
+
+        provisionVerifiedFixer("auth0|fixer-mine", "ELECTRICAL");
+        provisionVerifiedFixer("auth0|fixer-other", "ELECTRICAL");
+        UUID first = submitQuotation("auth0|fixer-mine", firstRequest, 300000, 2,
+                "Diagnostico incluido");
+        UUID second = submitQuotation("auth0|fixer-mine", secondRequest, 450000, 3,
+                "Materiales aparte");
+        submitQuotation("auth0|fixer-other", firstRequest, 800000, 1, "Servicio express");
+
+        mvc.perform(get("/quotations/me").with(identity("auth0|fixer-mine")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(2)))
+                .andExpect(jsonPath("$[*].id", org.hamcrest.Matchers.containsInAnyOrder(
+                        first.toString(), second.toString())));
+
+        mvc.perform(get("/quotations/me").with(identity("auth0|fixer-other")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(1)));
+
+        // Un propietario no es tecnico: no tiene bandeja de ofertas enviadas.
+        mvc.perform(get("/quotations/me").with(identity(ownerSubject)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+    }
 }
