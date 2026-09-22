@@ -37,6 +37,8 @@ class OpenApiContractTest {
         assertThat(contract.at("/components/securitySchemes/bearerAuth/scheme").asText()).isEqualTo("bearer");
         assertThat(contract.at("/components/schemas/Role/enum").toString()).contains("PLATFORM_ADMIN", "OWNER", "FIXER");
         assertThat(contract.at("/components/schemas/UserStatus/enum").toString()).contains("ACTIVE", "SUSPENDED", "DISABLED");
+        assertThat(contract.at("/components/schemas/ContractStatus/enum").toString())
+                .contains("DRAFT", "PENDING_TENANT_SIGNATURE", "SIGNED", "CANCELLED");
         var paths = contract.get("paths");
         assertThat(paths.fieldNames()).toIterable().containsExactlyInAnyOrder(
                 "/auth/bootstrap", "/auth/me", "/auth/select-role",
@@ -54,7 +56,15 @@ class OpenApiContractTest {
                 "/quotations", "/quotations/me", "/quotations/for-request/{requestId}",
                 "/quotations/{quotationId}/accept", "/quotations/{quotationId}/reject",
                 "/jobs/me", "/jobs/{jobId}/complete",
-                "/payments/me/earnings", "/payments/me/payouts", "/properties", "/properties/{propertyId}", "/properties/me");
+                "/payments/me/earnings", "/payments/me/payouts", "/properties", "/properties/{propertyId}", "/properties/me",
+                "/contracts", "/contracts/me", "/contracts/{contractId}",
+                "/contracts/{contractId}/send-for-tenant-signature",
+                "/contracts/{contractId}/sign-as-tenant",
+                "/contracts/{contractId}/sign-as-owner",
+                "/contracts/{contractId}/terminate-as-owner",
+                "/contracts/{contractId}/terminate-as-tenant",
+                "/contracts/{contractId}/cancel",
+                "/contracts/{contractId}/renew");
         assertThat(paths.fieldNames()).toIterable().doesNotContain(
                 "/media/me/portfolio/{pieceId}",
                 "/media/me/portfolio/{pieceId}/hide",
