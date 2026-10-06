@@ -17,7 +17,9 @@ public class SelectInitialRole {
 
     @Transactional
     public Set<Role> execute(CurrentActor actor, Role role) {
-        RolePolicy.requireSelfAssignable(role);
+        if (!actor.hasRole(role)) {
+            RolePolicy.requireSelfAssignable(role);
+        }
         return assignments.grant(actor.internalUserId(), role).roles();
     }
 }

@@ -22,6 +22,12 @@ class JpaProperties implements Properties {
     }
 
     @Override
+    public List<Property> saveAll(List<Property> properties) {
+        var entities = properties.stream().map(PropertyEntity::new).toList();
+        return repository.saveAll(entities).stream().map(PropertyEntity::toDomain).toList();
+    }
+
+    @Override
     public Optional<Property> findById(UUID id) {
         return repository.findById(id).map(PropertyEntity::toDomain);
     }
