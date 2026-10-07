@@ -15,10 +15,4 @@ public interface FixerEligibility {
 
     /** Persisted trade specialties associated with the fixer by user ID. */
     Set<Specialty> specialtiesOf(UUID fixerUserId);
-
-    /** City associated with the fixer profile (for proximity matching). */
-    String cityOf(CurrentActor actor);
-
-    /** City associated with the fixer profile by user ID. */
-    String cityOf(UUID fixerUserId);
 }

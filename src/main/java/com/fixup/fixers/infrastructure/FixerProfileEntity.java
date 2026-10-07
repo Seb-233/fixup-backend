@@ -13,7 +13,6 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.Table;
-import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.HashSet;
 import java.util.Set;
@@ -45,12 +44,6 @@ class FixerProfileEntity {
     private Instant consentAcceptedAt;
     @Column(name = "consent_version", length = 16)
     private String consentVersion;
-    @Column(name = "city", length = 100)
-    private String city;
-    @Column(name = "latitude", precision = 10, scale = 6)
-    private BigDecimal latitude;
-    @Column(name = "longitude", precision = 10, scale = 6)
-    private BigDecimal longitude;
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
     @Column(name = "updated_at", nullable = false)
@@ -76,14 +69,11 @@ class FixerProfileEntity {
         rejectionReason = profile.rejectionReason();
         consentAcceptedAt = profile.consentAcceptedAt();
         consentVersion = profile.consentVersion();
-        city = profile.city();
-        latitude = profile.latitude();
-        longitude = profile.longitude();
         updatedAt = profile.updatedAt();
     }
 
     FixerProfile toDomain() {
         return new FixerProfile(userId, verificationStatus, Set.copyOf(specialties), submittedAt, decidedAt, decidedBy,
-                rejectionReason, consentAcceptedAt, consentVersion, city, latitude, longitude, createdAt, updatedAt);
+                rejectionReason, consentAcceptedAt, consentVersion, createdAt, updatedAt);
     }
 }

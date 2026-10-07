@@ -1,10 +1,8 @@
 package com.fixup.properties.application;
 
-import com.fixup.properties.api.PropertyStatus;
 import com.fixup.properties.domain.Property;
 
 import java.math.BigDecimal;
-import java.time.Instant;
 import java.util.UUID;
 
 public record PropertySummary(
@@ -12,9 +10,7 @@ public record PropertySummary(
     String name,
     String address,
     String city,
-    BigDecimal areaM2,
-    PropertyStatus status,
-    Instant publishedAt
+    BigDecimal areaM2
 ) {
     public static PropertySummary from(Property property) {
         return new PropertySummary(
@@ -22,9 +18,7 @@ public record PropertySummary(
             property.name(),
             property.address(),
             property.city(),
-            property.areaM2(),
-            property.status(),
-            property.publishedAt()
+            property.areaM2()
         );
     }
 }

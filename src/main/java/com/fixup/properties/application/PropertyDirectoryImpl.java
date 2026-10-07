@@ -33,9 +33,7 @@ class PropertyDirectoryImpl implements PropertyDirectory {
             property.name(),
             property.address(),
             property.city(),
-            property.areaM2(),
-            property.latitude(),
-            property.longitude()
+            property.areaM2()
         );
     }
 }
