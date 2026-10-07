@@ -1,6 +1,7 @@
 package com.fixup.requests.infrastructure;
 
 import com.fixup.requests.api.RepairRequestStatus;
+import com.fixup.requests.api.UrgencyLevel;
 import com.fixup.fixers.api.Specialty;
 import com.fixup.requests.domain.RepairRequest;
 import jakarta.persistence.CollectionTable;
@@ -27,6 +28,8 @@ class RepairRequestEntity {
     private UUID id;
     @Column(name = "property_id", updatable = false)
     private UUID propertyId;
+    @Column(name = "property_city", length = 100)
+    private String propertyCity;
     @Column(name = "owner_user_id", nullable = false, updatable = false)
     private UUID ownerUserId;
     @Enumerated(EnumType.STRING)
@@ -45,6 +48,13 @@ class RepairRequestEntity {
     private Instant createdAt;
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
+    @Enumerated(EnumType.STRING)
+    @Column(name = "urgency_level", nullable = false, length = 16)
+    private UrgencyLevel urgencyLevel;
+    @Column(name = "sla_deadline")
+    private Instant slaDeadline;
+    @Column(name = "last_escalation_notified_at")
+    private Instant lastEscalationNotifiedAt;
 
     @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(name = "repair_request_photos", joinColumns = @JoinColumn(name = "request_id"))
@@ -59,25 +69,32 @@ class RepairRequestEntity {
         var entity = new RepairRequestEntity();
         entity.id = request.id();
         entity.propertyId = request.propertyId();
+        entity.propertyCity = request.propertyCity();
         entity.ownerUserId = request.ownerUserId();
         entity.specialty = request.specialty();
         entity.title = request.title();
         entity.description = request.description();
         entity.mediaIds = new ArrayList<>(request.mediaIds());
         entity.createdAt = request.createdAt();
+        entity.urgencyLevel = request.urgencyLevel();
+        entity.slaDeadline = request.slaDeadline();
+        entity.lastEscalationNotifiedAt = request.lastEscalationNotifiedAt();
         entity.apply(request);
         return entity;
     }
 
-    /** Only the mutable part of the request travels back: ownership and photos never change. */
     void apply(RepairRequest request) {
         status = request.status();
         assignedFixerUserId = request.assignedFixerUserId();
         updatedAt = request.updatedAt();
+        urgencyLevel = request.urgencyLevel();
+        slaDeadline = request.slaDeadline();
+        lastEscalationNotifiedAt = request.lastEscalationNotifiedAt();
     }
 
     RepairRequest toDomain() {
-        return new RepairRequest(id, propertyId, ownerUserId, specialty, title, description, List.copyOf(mediaIds),
-                status, assignedFixerUserId, createdAt, updatedAt);
+        return new RepairRequest(id, propertyId, propertyCity, ownerUserId, specialty, title, description, List.copyOf(mediaIds),
+                status, assignedFixerUserId, createdAt, updatedAt,
+                urgencyLevel, slaDeadline, lastEscalationNotifiedAt);
     }
 }

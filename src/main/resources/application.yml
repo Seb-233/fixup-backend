@@ -2,20 +2,25 @@ spring:
   application:
     name: fixup-backend
   datasource:
-    url: ${DATABASE_URL}
-    username: ${DATABASE_USERNAME}
-    password: ${DATABASE_PASSWORD}
+    url: ${DATABASE_URL:jdbc:h2:mem:fixup;MODE=PostgreSQL;DB_CLOSE_DELAY=-1;DATABASE_TO_LOWER=TRUE}
+    username: ${DATABASE_USERNAME:sa}
+    password: ${DATABASE_PASSWORD:}
+    driver-class-name: ${DATABASE_DRIVER:org.h2.Driver}
   jpa:
     open-in-view: false
     hibernate:
       ddl-auto: validate
     show-sql: false
+    properties:
+      hibernate:
+        dialect: ${HIBERNATE_DIALECT:org.hibernate.dialect.H2Dialect}
   flyway:
     enabled: true
-    # {vendor} resolves to the connected JDBC vendor at runtime: PostgreSQL-only migrations (RLS
-    # policies, roles) live under migration-postgres/postgresql and Flyway simply finds nothing there
-    # when the active profile runs against H2, instead of failing to parse Postgres-only syntax.
     locations: classpath:db/migration,classpath:db/migration-postgres/{vendor}
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
   jackson:
     deserialization:
       fail-on-unknown-properties: true
@@ -23,33 +28,34 @@ spring:
     oauth2:
       resourceserver:
         jwt:
-          issuer-uri: ${AUTH0_ISSUER_URI}
-          audiences: ${AUTH0_AUDIENCE}
-          jwk-set-uri: ${AUTH0_JWK_SET_URI:${AUTH0_ISSUER_URI}.well-known/jwks.json}
+          issuer-uri: ${AUTH0_ISSUER_URI:https://dev-uzssz142azr2k5hv.us.auth0.com/}
+          audiences: ${AUTH0_AUDIENCE:urn:fixup:api}
+          jwk-set-uri: ${AUTH0_JWK_SET_URI:${AUTH0_ISSUER_URI:https://dev-uzssz142azr2k5hv.us.auth0.com/}.well-known/jwks.json}
 management:
   endpoints:
     enabled-by-default: false
     web:
       exposure:
-        include: health
+        include: health,info,metrics
   endpoint:
     health:
       enabled: true
-      show-details: never
-      show-components: never
+      show-details: always
+      show-components: always
 springdoc:
   api-docs:
-    enabled: false
+    enabled: ${SPRINGDOC_API_DOCS_ENABLED:true}
   swagger-ui:
-    enabled: false
+    enabled: ${SPRINGDOC_SWAGGER_UI_ENABLED:true}
+    path: ${SPRINGDOC_SWAGGER_UI_PATH:/swagger-ui.html}
 fixup:
   cors:
-    allowed-origins: ${CORS_ALLOWED_ORIGINS}
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:4200}
   storage:
     endpoint: ${FIXUP_STORAGE_ENDPOINT:http://localhost:9000}
     public-endpoint: ${FIXUP_STORAGE_PUBLIC_ENDPOINT:${fixup.storage.endpoint}}
-    access-key: ${FIXUP_STORAGE_ACCESS_KEY}
-    secret-key: ${FIXUP_STORAGE_SECRET_KEY}
+    access-key: ${FIXUP_STORAGE_ACCESS_KEY:minioadmin}
+    secret-key: ${FIXUP_STORAGE_SECRET_KEY:minioadmin}
     bucket: ${FIXUP_STORAGE_BUCKET:fixup-private}
     region: ${FIXUP_STORAGE_REGION:us-east-1}
     auto-create-bucket: false

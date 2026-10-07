@@ -7,6 +7,7 @@ import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -53,9 +54,14 @@ class SecurityConfiguration {
                 .formLogin(form -> form.disable())
                 .sessionManagement(sessions -> sessions.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .requestCache(cache -> cache.disable())
+                .headers(headers -> headers.frameOptions(frame -> frame.sameOrigin()))
                 .authorizeHttpRequests(requests -> {
                     requests.requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                            .requestMatchers("/actuator/health").permitAll();
+                            .requestMatchers("/actuator/health", "/actuator/info", "/actuator/metrics",
+                                    "/actuator/metrics/**").permitAll();
+                    requests.requestMatchers("/h2-console", "/h2-console/**",
+                                    "/swagger-ui", "/swagger-ui/**", "/v3/api-docs", "/v3/api-docs/**",
+                                    "/demo/**").permitAll();
                     requests.requestMatchers("/auth/**").authenticated()
                             .requestMatchers("/fixers/**").authenticated()
                             .requestMatchers("/media/**").authenticated()
@@ -65,6 +71,13 @@ class SecurityConfiguration {
                             .requestMatchers("/jobs/**").authenticated()
                             .requestMatchers("/payments/**").authenticated()
                             .requestMatchers("/properties/**").authenticated()
+                            .requestMatchers("/contracts/**").authenticated()
+                            .requestMatchers("/notifications/**").authenticated()
+                            .requestMatchers("/administration/**").authenticated()
+                            .requestMatchers("/users/**").authenticated()
+                            .requestMatchers("/portfolio/**").authenticated()
+                            .requestMatchers("/earnings/**").authenticated()
+                            .requestMatchers("/chat/**", "/messages/**").authenticated()
                             .anyRequest().denyAll();
                 })
                 .exceptionHandling(errors -> errors.authenticationEntryPoint(entryPoint)
