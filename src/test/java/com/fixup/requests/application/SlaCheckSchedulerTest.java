@@ -2,6 +2,8 @@ package com.fixup.requests.application;
 
 import com.fixup.fixers.api.Specialty;
 import com.fixup.requests.api.RepairRequestStatus;
+import com.fixup.requests.api.SlaBreached;
+import com.fixup.requests.api.SlaWarningRaised;
 import com.fixup.requests.api.UrgencyLevel;
 import com.fixup.requests.domain.RepairRequest;
 import com.fixup.requests.domain.RepairRequests;
@@ -19,24 +21,28 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.mock.mockito.MockBean;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Primary;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.event.ApplicationEvents;
+import org.springframework.test.context.event.RecordApplicationEvents;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @SpringBootTest
 @ActiveProfiles("test")
+@RecordApplicationEvents
 class SlaCheckSchedulerTest {
 
     @Autowired SlaCheckScheduler scheduler;
     @Autowired Clock clock;
     @MockBean RepairRequests requests;
-    @Autowired ApplicationEventPublisher eventPublisher;
+    @Autowired ApplicationEvents events;
 
     private Instant baseNow;
     private UUID requestId;
@@ -116,11 +122,13 @@ class SlaCheckSchedulerTest {
 
         scheduler.checkSlas();
 
-        ArgumentCaptor<RepairRequest> captor = ArgumentCaptor.forClass(RepairRequest.class);
-        verify(requests, atLeastOnce()).update(captor.capture());
-        boolean changed = captor.getAllValues().stream()
-                .anyMatch(r -> r.status() != RepairRequestStatus.OPEN);
-        assertThat(changed).isFalse();
+        verify(requests, never()).update(any(RepairRequest.class));
+        assertThat(open.status()).isEqualTo(RepairRequestStatus.OPEN);
+        assertThat(open.updatedAt()).isEqualTo(baseNow.minus(Duration.ofHours(10)));
+        assertThat(open.slaDeadline()).isEqualTo(deadline);
+        assertThat(open.lastEscalationNotifiedAt()).isNull();
+        assertThat(events.stream(SlaWarningRaised.class)).isEmpty();
+        assertThat(events.stream(SlaBreached.class)).isEmpty();
     }
 
     @TestConfiguration

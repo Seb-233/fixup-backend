@@ -1,4 +1,4 @@
-package com.fixup.shared.demo;
+package com.fixup;
 
 import com.fixup.shared.security.JwtValidation;
 import com.nimbusds.jose.JOSEException;

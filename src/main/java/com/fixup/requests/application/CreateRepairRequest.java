@@ -2,9 +2,7 @@ package com.fixup.requests.application;
 
 import com.fixup.identityaccess.api.CurrentActor;
 import com.fixup.media.api.MediaAttachmentService;
-import com.fixup.notifications.api.NotificationType;
-import com.fixup.notifications.domain.Notification;
-import com.fixup.notifications.domain.Notificaciones;
+import com.fixup.notifications.api.RequestNotifications;
 import com.fixup.requests.api.UrgencyLevel;
 import com.fixup.requests.domain.RepairRequest;
 import com.fixup.requests.domain.RepairRequests;
@@ -13,7 +11,6 @@ import com.fixup.fixers.api.Specialty;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,16 +21,16 @@ public class CreateRepairRequest {
     private final PropertyDirectory propertyDirectory;
     private final RepairSpecialtyClassifier classifier;
     private final MediaAttachmentService mediaAttachmentService;
-    private final Notificaciones notificaciones;
+    private final RequestNotifications notifications;
     private final Clock clock;
 
     CreateRepairRequest(RepairRequests requests, MediaAttachmentService mediaAttachmentService, PropertyDirectory propertyDirectory, RepairSpecialtyClassifier classifier,
-                        Notificaciones notificaciones, Clock clock) {
+                        RequestNotifications notifications, Clock clock) {
         this.requests = requests;
         this.propertyDirectory = propertyDirectory;
         this.classifier = classifier;
         this.mediaAttachmentService = mediaAttachmentService;
-        this.notificaciones = notificaciones;
+        this.notifications = notifications;
         this.clock = clock;
     }
 
@@ -50,18 +47,7 @@ public class CreateRepairRequest {
         requests.create(request);
 
         if (urgency == UrgencyLevel.URGENT) {
-            Notification urgentNotif = Notification.create(
-                    UUID.randomUUID(),
-                    actor.internalUserId(),
-                    NotificationType.REQUEST_CREATED_URGENT,
-                    "Solicitud urgente creada: " + request.title(),
-                    "Tu solicitud urgente fue recibida y asignada a la cola de prioridad. Recibirás propuestas de técnicos pronto. SLA máximo: 48h.",
-                    "/requests/" + request.id(),
-                    request.id(),
-                    "REQUEST",
-                    Map.of("urgency", "URGENT"),
-                    Instant.now(clock));
-            notificaciones.save(urgentNotif);
+            notifications.urgentRequestCreated(request.id(), actor.internalUserId(), request.title(), Instant.now(clock));
         }
 
         return RepairRequestSummary.of(request);

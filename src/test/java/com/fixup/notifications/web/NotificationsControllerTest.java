@@ -8,6 +8,7 @@ import com.fixup.notifications.api.NotificationType;
 import com.fixup.notifications.domain.Notification;
 import com.fixup.notifications.domain.Notificaciones;
 import com.fixup.notifications.domain.UserDevices;
+import com.fixup.shared.security.ApiSecurityTestConfiguration;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -28,6 +29,7 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.context.ActiveProfiles;
 
 import static org.hamcrest.Matchers.hasEntry;
 import static org.hamcrest.Matchers.hasSize;
@@ -44,12 +46,15 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(NotificationsController.class)
-@Import(NotificationsControllerTest.TestConfig.class)
+@ActiveProfiles("test")
+@Import({NotificationsControllerTest.TestConfig.class, ApiSecurityTestConfiguration.class,
+        com.fixup.notifications.application.ListNotifications.class})
 class NotificationsControllerTest {
 
     @Autowired MockMvc mvc;
     @MockBean Notificaciones notificaciones;
     @MockBean UserDevices userDevices;
+    @MockBean(name = "clock") Clock clock;
     @Autowired CurrentActorProvider actorProvider;
 
     private UUID userId;
@@ -60,6 +65,8 @@ class NotificationsControllerTest {
     void setUp() {
         userId = UUID.fromString("11111111-1111-1111-1111-111111111111");
         now = Instant.parse("2025-01-01T10:00:00Z");
+        when(clock.instant()).thenReturn(now);
+        when(clock.getZone()).thenReturn(ZoneOffset.UTC);
 
         Notification n1 = new Notification(
                 UUID.randomUUID(), userId, NotificationType.QUOTATION_ACCEPTED,
@@ -158,11 +165,6 @@ class NotificationsControllerTest {
 
     @TestConfiguration
     static class TestConfig {
-        @Bean
-        Clock clock() {
-            return Clock.fixed(Instant.parse("2025-01-01T10:00:00Z"), ZoneOffset.UTC);
-        }
-
         @Bean
         CurrentActorProvider currentActorProvider(Clock clock) {
             return new CurrentActorProvider() {

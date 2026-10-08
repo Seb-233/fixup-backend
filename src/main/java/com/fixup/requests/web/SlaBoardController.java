@@ -7,7 +7,9 @@ import com.fixup.requests.api.RepairRequestNotFoundException;
 import com.fixup.requests.api.RepairRequestStatus;
 import com.fixup.requests.api.SlaState;
 import com.fixup.requests.api.UrgencyLevel;
-import com.fixup.requests.application.RepairRequestSummary;
+import com.fixup.requests.application.ListSlaBoardRequests;
+import com.fixup.requests.application.Page;
+import com.fixup.requests.application.SlaBoardPageable;
 import com.fixup.requests.domain.RepairRequest;
 import com.fixup.requests.domain.RepairRequests;
 import com.fixup.shared.errors.ErrorResponse;
@@ -22,9 +24,6 @@ import jakarta.validation.constraints.NotNull;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.UUID;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -54,10 +53,13 @@ class SlaBoardController {
     private static final Duration WARNING_THRESHOLD = Duration.ofMinutes((long) (48L * 60L * 0.20));
 
     private final RepairRequests requests;
+    private final ListSlaBoardRequests listSlaBoardRequests;
     private final CurrentActorProvider currentActorProvider;
 
-    SlaBoardController(RepairRequests requests, CurrentActorProvider currentActorProvider) {
+    SlaBoardController(RepairRequests requests, CurrentActorProvider currentActorProvider,
+            ListSlaBoardRequests listSlaBoardRequests) {
         this.requests = requests;
+        this.listSlaBoardRequests = listSlaBoardRequests;
         this.currentActorProvider = currentActorProvider;
     }
 
@@ -73,10 +75,9 @@ class SlaBoardController {
             description = "Paginated list of requests in SLA_WARNING or SLA_BREACHED status, "
                     + "ordered by SLA deadline ascending.")
     @ApiResponse(responseCode = "200", description = "Paged SLA board requests")
-    @Transactional(readOnly = true)
-    Page<SlaBoardItemResponse> listRequests(@PageableDefault(size = 20) Pageable pageable) {
+    Page<SlaBoardItemResponse> listRequests(SlaBoardPageable pageable) {
         requirePlatformAdmin();
-        return requests.findSlaBoardRequests(pageable).map(SlaBoardItemResponse::of);
+        return listSlaBoardRequests.execute(pageable, SlaBoardItemResponse::of);
     }
 
     @PostMapping("/requests/{id}/reassign")

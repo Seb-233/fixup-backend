@@ -1,4 +1,4 @@
-package com.fixup.shared.demo;
+package com.fixup;
 
 import com.fixup.identityaccess.api.Role;
 import com.nimbusds.jose.JOSEException;

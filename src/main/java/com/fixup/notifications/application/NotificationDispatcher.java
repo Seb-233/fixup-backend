@@ -9,6 +9,7 @@ import com.fixup.notifications.api.PropertyPublishedEvent;
 import com.fixup.notifications.api.PushNotificationGateway;
 import com.fixup.notifications.api.PushNotificationPayload;
 import com.fixup.notifications.api.QuotationAcceptedEvent;
+import com.fixup.notifications.api.RequestNotifications;
 import com.fixup.notifications.api.SlaBreachedEvent;
 import com.fixup.notifications.api.SlaWarningRaisedEvent;
 import com.fixup.notifications.domain.Notification;
@@ -25,7 +26,7 @@ import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
 @Component
-class NotificationDispatcher {
+class NotificationDispatcher implements RequestNotifications {
 
     private static final Logger LOG = LoggerFactory.getLogger(NotificationDispatcher.class);
 
@@ -37,6 +38,17 @@ class NotificationDispatcher {
         this.notificaciones = notificaciones;
         this.pushGateway = pushGateway;
         this.clock = clock;
+    }
+
+    @Override
+    public void urgentRequestCreated(UUID requestId, UUID ownerUserId, String title, Instant occurredAt) {
+        Notification notification = Notification.create(
+                UUID.randomUUID(), ownerUserId, NotificationType.REQUEST_CREATED_URGENT,
+                "Solicitud urgente creada: " + title,
+                "Tu solicitud urgente fue recibida y asignada a la cola de prioridad. Recibirás propuestas de técnicos pronto. SLA máximo: 48h.",
+                "/requests/" + requestId, requestId, "REQUEST", Map.of("urgency", "URGENT"), occurredAt);
+        // Keep the existing synchronous save in the caller's transaction, without adding push delivery.
+        notificaciones.save(notification);
     }
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)

@@ -2,6 +2,7 @@ package com.fixup.notifications.web;
 
 import com.fixup.identityaccess.api.CurrentActorProvider;
 import com.fixup.notifications.api.NotificationType;
+import com.fixup.notifications.application.ListNotifications;
 import com.fixup.notifications.domain.Notification;
 import com.fixup.notifications.domain.Notificaciones;
 import com.fixup.notifications.domain.UserDevices;
@@ -20,9 +21,6 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -50,13 +48,15 @@ class NotificationsController {
 
     private final CurrentActorProvider actors;
     private final Notificaciones notificaciones;
+    private final ListNotifications listNotifications;
     private final UserDevices userDevices;
     private final Clock clock;
 
     NotificationsController(CurrentActorProvider actors, Notificaciones notificaciones,
-            UserDevices userDevices, Clock clock) {
+            UserDevices userDevices, Clock clock, ListNotifications listNotifications) {
         this.actors = actors;
         this.notificaciones = notificaciones;
+        this.listNotifications = listNotifications;
         this.userDevices = userDevices;
         this.clock = clock;
     }
@@ -72,24 +72,8 @@ class NotificationsController {
             @RequestParam(required = false) NotificationType type,
             @RequestParam(required = false, defaultValue = "false") boolean unreadOnly) {
 
-        int safeSize = Math.min(Math.max(1, size), 100);
-        int safePage = Math.max(0, page);
-        Pageable pageable = PageRequest.of(safePage, safeSize);
-
         UUID userId = actors.currentActor().internalUserId();
-        Page<Notification> result;
-
-        if (unreadOnly) {
-            result = (type != null)
-                    ? notificaciones.findUnreadByRecipientUserIdAndType(userId, type, pageable)
-                    : notificaciones.findUnreadByRecipientUserId(userId, pageable);
-        } else {
-            result = (type != null)
-                    ? notificaciones.findByRecipientUserIdAndTypeOrderByCreatedAtDesc(userId, type, pageable)
-                    : notificaciones.findByRecipientUserIdOrderByCreatedAtDesc(userId, pageable);
-        }
-
-        return NotificationPageResponse.from(result);
+        return NotificationPageResponse.from(listNotifications.execute(userId, page, size, type, unreadOnly));
     }
 
     @PatchMapping("/{id}/read")
@@ -175,13 +159,10 @@ class NotificationsController {
             long totalElements,
             int totalPages) {
 
-        static NotificationPageResponse from(Page<Notification> page) {
+        static NotificationPageResponse from(ListNotifications.Result page) {
             return new NotificationPageResponse(
-                    page.getContent().stream().map(NotificationResponse::from).toList(),
-                    page.getNumber(),
-                    page.getSize(),
-                    page.getTotalElements(),
-                    page.getTotalPages());
+                    page.content().stream().map(NotificationResponse::from).toList(),
+                    page.page(), page.size(), page.totalElements(), page.totalPages());
         }
     }
 }

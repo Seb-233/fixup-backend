@@ -38,6 +38,8 @@ class DemoSecurityContextTest {
         }
         assertThat(jdbc.queryForObject("SELECT count(*) FROM users WHERE auth0_subject LIKE 'auth0|demo-%'",
                 Integer.class)).isEqualTo(6);
+        assertThat(jdbc.queryForList("SELECT type FROM notifications", String.class))
+                .containsExactlyInAnyOrder("CONTRACT_EXPIRING_30D", "REQUEST_CREATED_URGENT", "PROPERTY_BULK_FINISHED");
         var response = mvc.perform(get("/demo/token/OWNER")).andExpect(status().isOk())
                 .andExpect(jsonPath("$.issuer").value("https://demo.fixup.local/"))
                 .andReturn().getResponse();

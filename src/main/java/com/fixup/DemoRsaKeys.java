@@ -1,4 +1,4 @@
-package com.fixup.shared.demo;
+package com.fixup;
 
 import com.nimbusds.jose.JOSEException;
 import com.nimbusds.jose.jwk.RSAKey;

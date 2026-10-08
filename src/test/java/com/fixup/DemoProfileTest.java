@@ -1,15 +1,12 @@
-package com.fixup.shared.demo;
+package com.fixup;
 
-import com.fixup.identityaccess.application.RoleAssignments;
-import com.fixup.identityaccess.application.UserRegistration;
-import com.fixup.notifications.domain.Notificaciones;
+import com.fixup.identityaccess.api.DemoUserBootstrap;
+import com.fixup.notifications.api.DemoNotifications;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
-import org.springframework.context.annotation.ComponentScan;
-import org.springframework.context.annotation.Configuration;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtException;
@@ -21,20 +18,15 @@ import static org.mockito.Mockito.*;
 
 class DemoProfileTest {
     private final JwtDecoder auth0 = mock(JwtDecoder.class);
-    private final UserRegistration registration = mock(UserRegistration.class);
-    private final RoleAssignments assignments = mock(RoleAssignments.class);
-    private final Notificaciones notifications = mock(Notificaciones.class);
+    private final DemoUserBootstrap users = mock(DemoUserBootstrap.class);
+    private final DemoNotifications notifications = mock(DemoNotifications.class);
     private final ApplicationContextRunner runner = new ApplicationContextRunner()
-            .withUserConfiguration(DemoScan.class)
+            .withUserConfiguration(DemoRsaKeys.class, DemoJwtConfiguration.class,
+                    DemoTokenEndpoint.class, DemoUsersBootstrapRunner.class)
             .withBean("jwtDecoder", JwtDecoder.class, () -> auth0)
-            .withBean(UserRegistration.class, () -> registration)
-            .withBean(RoleAssignments.class, () -> assignments)
-            .withBean(Notificaciones.class, () -> notifications)
+            .withBean(DemoUserBootstrap.class, () -> users)
+            .withBean(DemoNotifications.class, () -> notifications)
             .withBean(PlatformTransactionManager.class, () -> mock(PlatformTransactionManager.class));
-
-    @Configuration(proxyBeanMethods = false)
-    @ComponentScan(basePackageClasses = DemoRsaKeys.class)
-    static class DemoScan {}
 
     @ParameterizedTest
     @ValueSource(strings = {"", "dev", "test", "production"})
@@ -47,7 +39,7 @@ class DemoProfileTest {
                     .doesNotHaveBean(DemoJwtConfiguration.class)
                     .doesNotHaveBean(DemoUsersBootstrapRunner.class);
             assertThat(context.getBean(JwtDecoder.class)).isSameAs(auth0);
-            verifyNoInteractions(auth0, registration, assignments, notifications);
+            verifyNoInteractions(auth0, users, notifications);
         });
     }
 
