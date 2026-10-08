@@ -27,6 +27,11 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/demo")
 @Profile("demo")
 class DemoTokenEndpoint {
+    private final DemoRsaKeys keys;
+
+    DemoTokenEndpoint(DemoRsaKeys keys) {
+        this.keys = keys;
+    }
 
     @GetMapping("/token")
     ResponseEntity<DemoTokenResponse> token(
@@ -91,8 +96,8 @@ class DemoTokenEndpoint {
                 .claim("preferred_username", displayName.toLowerCase().replace(' ', '-'))
                 .build();
         var token = new SignedJWT(new JWSHeader.Builder(JWSAlgorithm.RS256)
-                .type(JOSEObjectType.JWT).keyID(DemoRsaKeys.KEY.getKeyID()).build(), claims);
-        token.sign(new RSASSASigner(DemoRsaKeys.KEY));
+                .type(JOSEObjectType.JWT).keyID(keys.key.getKeyID()).build(), claims);
+        token.sign(new RSASSASigner(keys.key));
         return token.serialize();
     }
 }

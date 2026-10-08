@@ -2,13 +2,12 @@ package com.fixup.shared.demo;
 
 import com.fixup.shared.security.JwtValidation;
 import com.nimbusds.jose.JOSEException;
-import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
 import org.springframework.context.annotation.Profile;
 import org.springframework.security.oauth2.core.OAuth2TokenValidatorResult;
-import org.springframework.security.oauth2.jose.jws.SignatureAlgorithm;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtException;
@@ -21,16 +20,10 @@ class DemoJwtConfiguration {
     @Bean
     @Primary
     JwtDecoder demoDualJwtDecoder(
-            @Value("${spring.security.oauth2.resourceserver.jwt.issuer-uri}") String auth0Issuer,
-            @Value("${spring.security.oauth2.resourceserver.jwt.audiences}") String realAudiences,
-            @Value("${spring.security.oauth2.resourceserver.jwt.jwk-set-uri}") String jwkSetUri) {
-        var auth0Decoder = NimbusJwtDecoder.withJwkSetUri(jwkSetUri)
-                .jwsAlgorithm(SignatureAlgorithm.RS256).build();
-        auth0Decoder.setJwtValidator(JwtValidation.validators(auth0Issuer, realAudiences));
-
+            @Qualifier("jwtDecoder") JwtDecoder auth0Decoder, DemoRsaKeys keys) {
         NimbusJwtDecoder demoDecoder;
         try {
-            demoDecoder = NimbusJwtDecoder.withPublicKey(DemoRsaKeys.KEY.toRSAPublicKey()).build();
+            demoDecoder = NimbusJwtDecoder.withPublicKey(keys.key.toRSAPublicKey()).build();
         } catch (JOSEException e) {
             throw new IllegalStateException("Cannot build demo decoder", e);
         }

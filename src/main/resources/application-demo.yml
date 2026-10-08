@@ -1,4 +1,11 @@
 spring:
+  config:
+    activate:
+      on-profile: demo
+  datasource:
+    url: ${DATABASE_URL:jdbc:h2:mem:fixup;MODE=PostgreSQL;DB_CLOSE_DELAY=-1;DATABASE_TO_LOWER=TRUE}
+    username: ${DATABASE_USERNAME:sa}
+    password: ${DATABASE_PASSWORD:}
   security:
     oauth2:
       resourceserver:
@@ -9,27 +16,14 @@ spring:
           # credentials.
           issuer-uri: ${AUTH0_ISSUER_URI:https://dev-uzssz142azr2k5hv.us.auth0.com/}
           audiences: ${AUTH0_AUDIENCE:urn:fixup:api}
-          jwk-set-uri: ${AUTH0_JWK_SET_URI:https://dev-uzssz142azr2k5hv.us.auth0.com/.well-known/jwks.json}
-management:
-  endpoints:
-    enabled-by-default: false
-    web:
-      exposure:
-        include: health,info,metrics,prometheus
-  endpoint:
-    health:
-      enabled: true
-      show-details: always
-      show-components: always
-    info:
-      enabled: true
-    metrics:
-      enabled: true
-    prometheus:
-      enabled: true
+          jwk-set-uri: ${AUTH0_JWK_SET_URI:${spring.security.oauth2.resourceserver.jwt.issuer-uri}.well-known/jwks.json}
 fixup:
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:4200}
+  storage:
+    endpoint: ${FIXUP_STORAGE_ENDPOINT:http://localhost:9000}
+    access-key: ${FIXUP_STORAGE_ACCESS_KEY:minioadmin}
+    secret-key: ${FIXUP_STORAGE_SECRET_KEY:minioadmin}
 springdoc:
   api-docs:
     enabled: true

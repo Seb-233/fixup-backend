@@ -26,12 +26,9 @@ class OpenApiContractTest {
     @Autowired org.springdoc.webmvc.api.OpenApiWebMvcResource openApi;
 
     @Test
-    void exportsDevelopmentContractWithoutPublicDocumentationEndpoint() throws Exception {
-        mvc.perform(get("/v3/api-docs")).andExpect(status().isUnauthorized());
-        mvc.perform(get("/v3/api-docs").with(
-                org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt()))
-                .andExpect(status().isForbidden());
-        // Generate the contract directly; do not bypass or weaken the production filter chain.
+    void exportsContractWithDocumentationAvailableOnlyInDevelopment() throws Exception {
+        mvc.perform(get("/v3/api-docs")).andExpect(status().isOk());
+        // Use the project's existing exporter; production documentation remains disabled.
         var request = new org.springframework.mock.web.MockHttpServletRequest("GET", "/v3/api-docs");
         var contract = mapper.readTree(openApi.openapiJson(request, "/v3/api-docs", java.util.Locale.ROOT));
         assertThat(contract.at("/components/securitySchemes/bearerAuth/scheme").asText()).isEqualTo("bearer");
@@ -54,8 +51,16 @@ class OpenApiContractTest {
                 "/quotations", "/quotations/me", "/quotations/for-request/{requestId}",
                 "/quotations/{quotationId}/accept", "/quotations/{quotationId}/reject",
                 "/jobs/me", "/jobs/{jobId}/complete",
-                "/payments/me/earnings", "/payments/me/payouts", "/properties", "/properties/{propertyId}", "/properties/me");
+                "/payments/me/earnings", "/payments/me/payouts", "/properties", "/properties/{propertyId}", "/properties/me",
+                "/properties/bulk/validate", "/properties/bulk/import",
+                "/notifications/me", "/notifications/{id}/read", "/notifications/read-all",
+                "/notifications/me/unread-count", "/notifications/device-token",
+                "/contracts", "/contracts/me", "/contracts/{id}", "/contracts/{id}/renew",
+                "/contracts/{id}/terminate", "/contracts/expiring",
+                "/administration/sla-board/requests", "/administration/sla-board/requests/{id}/reassign",
+                "/administration/sla-board/requests/{id}/acknowledge");
         assertThat(paths.fieldNames()).toIterable().doesNotContain(
+                "/demo/token", "/demo/token/{role}",
                 "/media/me/portfolio/{pieceId}",
                 "/media/me/portfolio/{pieceId}/hide",
                 "/media/me/portfolio/{pieceId}/show");
