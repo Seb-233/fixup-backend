@@ -3,9 +3,14 @@ package com.fixup.contracts;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fixup.contracts.api.ContractExpiringSoon;
 import com.fixup.contracts.application.ContractExpiryScheduler;
+import com.fixup.contracts.application.CreateContractRequest;
+import com.fixup.contracts.api.ContractStatus;
 import com.fixup.testsupport.IntegrationDatabaseCleaner;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEvent;
 import org.springframework.context.ApplicationListener;
@@ -23,9 +28,11 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import static org.hamcrest.Matchers.is;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -36,7 +43,7 @@ abstract class RentalContractHttpContract {
     @Autowired ObjectMapper mapper;
     @Autowired IntegrationDatabaseCleaner databaseCleaner;
     @Autowired ContractExpiryScheduler scheduler;
-    @Autowired(required = false) TestExpiringEventListener expiringEventListener;
+    @Autowired TestExpiringEventListener expiringEventListener;
 
     static class TestExpiringEventListener implements ApplicationListener<ApplicationEvent> {
         final List<ContractExpiringSoon> events = new CopyOnWriteArrayList<>();
@@ -54,16 +61,11 @@ abstract class RentalContractHttpContract {
         }
     }
 
+    @BeforeEach
     @AfterEach
     void clearDatabase() {
-        jdbc.update("DELETE FROM rental_contracts");
-        jdbc.update("DELETE FROM user_roles");
-        jdbc.update("DELETE FROM users");
-        jdbc.update("DELETE FROM properties");
         databaseCleaner.clean();
-        if (expiringEventListener != null) {
-            expiringEventListener.clear();
-        }
+        expiringEventListener.clear();
     }
 
     private UUID seedUser(UUID userId, String auth0Id, String role) {
@@ -77,10 +79,104 @@ abstract class RentalContractHttpContract {
 
     private UUID seedProperty(UUID propertyId, UUID ownerId) {
         jdbc.update(
-            "INSERT INTO properties (id, owner_user_id, name, address, city, area_m2, created_at, updated_at) VALUES (?, ?, 'Prop', 'Addr', 'City', 100, NOW(), NOW())",
-            propertyId, ownerId
+            "INSERT INTO properties (id, owner_user_id, name, address, city, area_m2, status, published_at, published_by_user_id, created_at, updated_at) VALUES (?, ?, 'Prop', 'Addr', 'City', 100, 'PUBLISHED', NOW(), ?, NOW(), NOW())",
+            propertyId, ownerId, ownerId
         );
         return propertyId;
+    }
+
+    protected record ContractFixture(UUID id, UUID ownerId, UUID tenantId, String subject, LocalDate end) {}
+
+    protected ContractFixture createFixture(LocalDate end) throws Exception {
+        UUID owner = UUID.randomUUID();
+        UUID tenant = UUID.randomUUID();
+        String subject = "auth0|contract-owner-" + owner;
+        seedUser(owner, subject, "OWNER");
+        seedUser(tenant, "auth0|contract-tenant-" + tenant, "TENANT");
+        return new ContractFixture(createFor(owner, tenant, subject, end), owner, tenant, subject, end);
+    }
+
+    private UUID createFor(UUID owner, UUID tenant, String subject, LocalDate end) throws Exception {
+        UUID property = seedProperty(UUID.randomUUID(), owner);
+        var request = new CreateContractRequest(property, tenant, end.minusMonths(6), end,
+                1_000_000, 2_000_000, 5, "Original notes");
+        var response = mvc.perform(post("/contracts").with(jwt().jwt(j -> j.subject(subject)))
+                        .contentType(MediaType.APPLICATION_JSON).content(mapper.writeValueAsString(request)))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        return UUID.fromString(mapper.readTree(response).get("id").asText());
+    }
+
+    @Test
+    void updatesContractAndPersistsChanges() throws Exception {
+        var fixture = createFixture(LocalDate.now().plusMonths(6));
+        var newEnd = fixture.end().plusMonths(1);
+        mvc.perform(put("/contracts/" + fixture.id()).with(jwt().jwt(j -> j.subject(fixture.subject())))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"endDate\":\"" + newEnd + "\",\"monthlyRentAmount\":1200000,\"notes\":\"Updated\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.endDate").value(newEnd.toString()));
+        mvc.perform(get("/contracts/" + fixture.id()).with(jwt().jwt(j -> j.subject(fixture.subject()))))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.monthlyRentAmount").value(1_200_000))
+                .andExpect(jsonPath("$.notes").value("Updated"));
+        assertThat(jdbc.queryForObject("SELECT end_date FROM rental_contracts WHERE id = ?", LocalDate.class, fixture.id()))
+                .isEqualTo(newEnd);
+    }
+
+    @Test
+    void terminatesContractAndPersistsReason() throws Exception {
+        var fixture = createFixture(LocalDate.now().plusDays(7));
+        mvc.perform(post("/contracts/" + fixture.id() + "/terminate").with(jwt().jwt(j -> j.subject(fixture.subject())))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"reason\":\"Mutual agreement\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("TERMINATED"));
+        mvc.perform(get("/contracts/" + fixture.id()).with(jwt().jwt(j -> j.subject(fixture.subject()))))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.notes").value("Original notes; Termination: Mutual agreement"));
+        mvc.perform(get("/contracts/expiring").param("days", "7").with(jwt().jwt(j -> j.subject(fixture.subject()))))
+                .andExpect(status().isOk()).andExpect(jsonPath("$").isEmpty());
+    }
+
+    @Test
+    void expiryQueryUsesInclusiveDateBoundsAndDatabaseIdentity() throws Exception {
+        LocalDate today = LocalDate.now();
+        var fixture = createFixture(today);
+        UUID atLimit = createFor(fixture.ownerId(), fixture.tenantId(), fixture.subject(), today.plusDays(7));
+        createFor(fixture.ownerId(), fixture.tenantId(), fixture.subject(), today.plusDays(8));
+        createFor(fixture.ownerId(), fixture.tenantId(), fixture.subject(), today.minusDays(1));
+        createFixture(today.plusDays(3)); // An unrelated owner's contract must not appear.
+        mvc.perform(get("/contracts/expiring").param("days", "7").with(jwt().jwt(j -> j.subject(fixture.subject()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[*].id", org.hamcrest.Matchers.containsInAnyOrder(fixture.id().toString(), atLimit.toString())));
+        mvc.perform(get("/contracts/me").with(jwt().jwt(j -> j.subject(fixture.subject()))))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(4));
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = ContractStatus.class, names = {"ACTIVE", "RENEWED"})
+    void schedulerExpiresPersistedContracts(ContractStatus initialStatus) throws Exception {
+        LocalDate today = LocalDate.now();
+        var fixture = createFixture(today.minusDays(1));
+        jdbc.update("UPDATE rental_contracts SET status = ? WHERE id = ?", initialStatus.name(), fixture.id());
+        scheduler.processDay(today);
+        scheduler.processDay(today);
+        assertThat(jdbc.queryForObject("SELECT status FROM rental_contracts WHERE id = ?", String.class, fixture.id()))
+                .isEqualTo("EXPIRED");
+        assertThat(jdbc.queryForObject("SELECT reminder_expired_sent FROM rental_contracts WHERE id = ?", Boolean.class, fixture.id()))
+                .isTrue();
+    }
+
+    @Test
+    void renewedContractsStillPreventOverlappingLeases() throws Exception {
+        var fixture = createFixture(LocalDate.now().plusDays(7));
+        LocalDate newEnd = fixture.end().plusMonths(6);
+        mvc.perform(post("/contracts/" + fixture.id() + "/renew").with(jwt().jwt(j -> j.subject(fixture.subject())))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"newEndDate\":\"" + newEnd + "\"}"))
+                .andExpect(status().isOk());
+        mvc.perform(get("/contracts/expiring").param("days", "365").with(jwt().jwt(j -> j.subject(fixture.subject()))))
+                .andExpect(status().isOk()).andExpect(jsonPath("$[0].id").value(fixture.id().toString()));
+        var property = jdbc.queryForObject("SELECT property_id FROM rental_contracts WHERE id = ?", UUID.class, fixture.id());
+        var overlapping = new CreateContractRequest(property, fixture.tenantId(), fixture.end(), newEnd,
+                1_000_000, 2_000_000, 5, null);
+        mvc.perform(post("/contracts").with(jwt().jwt(j -> j.subject(fixture.subject())))
+                        .contentType(MediaType.APPLICATION_JSON).content(mapper.writeValueAsString(overlapping)))
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("CONTRACT_OVERLAP"));
     }
 
     @Test

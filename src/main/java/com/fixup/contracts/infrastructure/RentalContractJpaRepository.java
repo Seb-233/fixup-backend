@@ -14,7 +14,7 @@ import java.util.UUID;
 interface RentalContractJpaRepository extends JpaRepository<RentalContractEntity, UUID> {
 
     @Query("SELECT c.id FROM RentalContractEntity c WHERE c.propertyId = :propertyId " +
-           "AND c.status = 'ACTIVE' AND c.startDate <= :end AND c.endDate >= :start")
+           "AND c.status IN ('ACTIVE', 'RENEWED') AND c.startDate <= :end AND c.endDate >= :start")
     List<UUID> findOverlappingActiveContractIds(
         @Param("propertyId") UUID propertyId,
         @Param("start") LocalDate start,
@@ -25,14 +25,14 @@ interface RentalContractJpaRepository extends JpaRepository<RentalContractEntity
         UUID ownerUserId, UUID tenantUserId
     );
 
-    @Query("SELECT c FROM RentalContractEntity c WHERE c.status = 'ACTIVE' " +
+    @Query("SELECT c FROM RentalContractEntity c WHERE c.status IN ('ACTIVE', 'RENEWED') " +
            "AND c.endDate >= :today AND c.endDate <= :limit")
     List<RentalContractEntity> findActiveExpiringBetween(
         @Param("today") LocalDate today,
         @Param("limit") LocalDate limit
     );
 
-    @Query("SELECT c FROM RentalContractEntity c WHERE c.status = 'ACTIVE' " +
+    @Query("SELECT c FROM RentalContractEntity c WHERE c.status IN ('ACTIVE', 'RENEWED') " +
            "AND c.endDate >= :from AND c.endDate <= :to")
     List<RentalContractEntity> findActiveEndingBetween(
         @Param("from") LocalDate from,
