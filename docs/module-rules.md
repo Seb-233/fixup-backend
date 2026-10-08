@@ -39,3 +39,10 @@ ModularityTest exige los 14 módulos y ejecuta ApplicationModules.verify().
 LayerRulesTest impide dependencias de shared hacia negocio y dependencias de web/api
 hacia JPA, Spring Data o infrastructure. Las pruebas funcionales se ejecutan con
 migraciones y se repiten contra PostgreSQL con el perfil Maven postgres-it.
+
+La composición local del perfil demo vive en el paquete raíz de la aplicación,
+junto a FixupApplication. Coordina el bootstrap de módulos existentes y conserva
+sus componentes internos al paquete y exclusivos de demo; no es una utilidad de
+shared ni un módulo adicional. Los módulos de negocio no dependen de ella.
+El bootstrap accede solamente a puertos de api específicos de demo; sus adaptadores
+de negocio permanecen dentro de identityaccess y notifications y bajo @Profile("demo").

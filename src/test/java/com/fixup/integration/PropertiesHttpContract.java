@@ -131,10 +131,7 @@ abstract class PropertiesHttpContract {
 
         // Insert property directly
         UUID propertyId = UUID.randomUUID();
-        jdbc.update(
-            "INSERT INTO properties (id, owner_user_id, name, address, city, area_m2, created_at, updated_at) VALUES (?, ?, 'Prop', 'Addr', 'City', 10, NOW(), NOW())",
-            propertyId, owner1Id
-        );
+        com.fixup.testsupport.PropertyFixtures.insertPublished(jdbc, propertyId, owner1Id);
 
         mvc.perform(get("/properties/" + propertyId)
                 .with(jwt().jwt(j -> j.subject("auth0|owner2").claim("roles", "OWNER"))))

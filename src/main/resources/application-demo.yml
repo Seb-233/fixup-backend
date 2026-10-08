@@ -1,0 +1,36 @@
+spring:
+  config:
+    activate:
+      on-profile: demo
+  datasource:
+    url: ${DATABASE_URL:jdbc:h2:mem:fixup;MODE=PostgreSQL;DB_CLOSE_DELAY=-1;DATABASE_TO_LOWER=TRUE}
+    username: ${DATABASE_USERNAME:sa}
+    password: ${DATABASE_PASSWORD:}
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # Demo profile keeps the real Auth0 tenant as primary issuer (for real Auth0 logins via
+          # the frontend SPA flow). The @Primary dual-decoder additionally accepts JWTs issued by
+          # /demo/token (https://demo.fixup.local/) for scripted smoke testing without Auth0 M2M
+          # credentials.
+          issuer-uri: ${AUTH0_ISSUER_URI:https://dev-uzssz142azr2k5hv.us.auth0.com/}
+          audiences: ${AUTH0_AUDIENCE:urn:fixup:api}
+          jwk-set-uri: ${AUTH0_JWK_SET_URI:${spring.security.oauth2.resourceserver.jwt.issuer-uri}.well-known/jwks.json}
+fixup:
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:4200}
+  storage:
+    endpoint: ${FIXUP_STORAGE_ENDPOINT:http://localhost:9000}
+    access-key: ${FIXUP_STORAGE_ACCESS_KEY:minioadmin}
+    secret-key: ${FIXUP_STORAGE_SECRET_KEY:minioadmin}
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    enabled: true
+    path: /swagger-ui.html
+logging:
+  level:
+    com.fixup: INFO
+    org.springframework.security: INFO

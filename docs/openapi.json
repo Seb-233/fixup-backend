@@ -9,6 +9,68 @@
     "description" : "Generated server url"
   } ],
   "paths" : {
+    "/contracts/{id}" : {
+      "get" : {
+        "tags" : [ "rental-contract-controller" ],
+        "operationId" : "get",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ContractResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put" : {
+        "tags" : [ "rental-contract-controller" ],
+        "operationId" : "update",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/UpdateContractRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ContractResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/requests" : {
       "post" : {
         "tags" : [ "repair-request-controller" ],
@@ -542,6 +604,74 @@
         }
       }
     },
+    "/properties/bulk/validate" : {
+      "post" : {
+        "tags" : [ "property-controller" ],
+        "operationId" : "bulkValidate",
+        "requestBody" : {
+          "content" : {
+            "multipart/form-data" : {
+              "schema" : {
+                "type" : "object",
+                "properties" : {
+                  "file" : {
+                    "type" : "string",
+                    "format" : "binary"
+                  }
+                },
+                "required" : [ "file" ]
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/BulkValidationResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/properties/bulk/import" : {
+      "post" : {
+        "tags" : [ "property-controller" ],
+        "operationId" : "bulkImport",
+        "requestBody" : {
+          "content" : {
+            "multipart/form-data" : {
+              "schema" : {
+                "type" : "object",
+                "properties" : {
+                  "file" : {
+                    "type" : "string",
+                    "format" : "binary"
+                  }
+                },
+                "required" : [ "file" ]
+              }
+            }
+          }
+        },
+        "responses" : {
+          "201" : {
+            "description" : "Created",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/BulkImportResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/payments/me/payouts" : {
       "get" : {
         "tags" : [ "payment-controller" ],
@@ -678,6 +808,69 @@
               "application/json" : {
                 "schema" : {
                   "$ref" : "#/components/schemas/PayoutResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/notifications/device-token" : {
+      "post" : {
+        "tags" : [ "notifications-controller" ],
+        "summary" : "Register a device token for push notifications",
+        "description" : "Associates a FCM/APNS device token with the current user for push delivery.",
+        "operationId" : "registerDeviceToken",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/DeviceTokenRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Inactive account",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "The notification does not exist or is not yours",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "201" : {
+            "description" : "Device token registered",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/DeviceTokenResponse"
                 }
               }
             }
@@ -1652,6 +1845,114 @@
         } ]
       }
     },
+    "/contracts" : {
+      "post" : {
+        "tags" : [ "rental-contract-controller" ],
+        "operationId" : "create_1",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/CreateContractRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "201" : {
+            "description" : "Created",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ContractResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/contracts/{id}/terminate" : {
+      "post" : {
+        "tags" : [ "rental-contract-controller" ],
+        "operationId" : "terminate",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "type" : "object",
+                "additionalProperties" : {
+                  "type" : "string"
+                }
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ContractResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/contracts/{id}/renew" : {
+      "post" : {
+        "tags" : [ "rental-contract-controller" ],
+        "operationId" : "renew",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "type" : "object",
+                "additionalProperties" : {
+                  "type" : "string",
+                  "format" : "date"
+                }
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ContractResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/auth/select-role" : {
       "post" : {
         "tags" : [ "current-user-controller" ],
@@ -1797,6 +2098,251 @@
               "*/*" : {
                 "schema" : {
                   "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/administration/sla-board/requests/{id}/reassign" : {
+      "post" : {
+        "tags" : [ "sla-board-controller" ],
+        "summary" : "Reassign an at-risk request to a different fixer",
+        "description" : "Updates the assignedFixerUserId of the request. Resets the SLA status if it was in SLA_WARNING (not SLA_BREACHED) so the new fixer gets a fair shot.",
+        "operationId" : "reassign",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ReassignFixerRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Missing PLATFORM_ADMIN role",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "Resource not found",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "200" : {
+            "description" : "Request reassigned successfully",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/SlaBoardItemResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/administration/sla-board/requests/{id}/acknowledge" : {
+      "post" : {
+        "tags" : [ "sla-board-controller" ],
+        "summary" : "Acknowledge an SLA escalation",
+        "description" : "Updates lastEscalationNotifiedAt so the next scheduler run does not re-trigger the same notification immediately.",
+        "operationId" : "acknowledge",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "responses" : {
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Missing PLATFORM_ADMIN role",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "Resource not found",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "200" : {
+            "description" : "Escalation acknowledged"
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/notifications/{id}/read" : {
+      "patch" : {
+        "tags" : [ "notifications-controller" ],
+        "summary" : "Mark a notification as read",
+        "description" : "Only the recipient can mark their own notification as read.",
+        "operationId" : "markAsRead",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "responses" : {
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Inactive account",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "The notification does not exist or is not yours",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "200" : {
+            "description" : "The notification was marked as read",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/NotificationResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/notifications/read-all" : {
+      "patch" : {
+        "tags" : [ "notifications-controller" ],
+        "summary" : "Mark all notifications as read for the current user",
+        "operationId" : "markAllAsRead",
+        "responses" : {
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Inactive account",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "The notification does not exist or is not yours",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "200" : {
+            "description" : "All unread notifications were marked as read",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "additionalProperties" : {
+                    "type" : "integer",
+                    "format" : "int32"
+                  }
                 }
               }
             }
@@ -2203,7 +2749,7 @@
     "/properties/{propertyId}" : {
       "get" : {
         "tags" : [ "property-controller" ],
-        "operationId" : "get",
+        "operationId" : "get_1",
         "parameters" : [ {
           "name" : "propertyId",
           "in" : "path",
@@ -2311,6 +2857,149 @@
               "application/json" : {
                 "schema" : {
                   "$ref" : "#/components/schemas/EarningsResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/notifications/me" : {
+      "get" : {
+        "tags" : [ "notifications-controller" ],
+        "summary" : "List notifications for the current user",
+        "description" : "Returns a paginated list of the current user's notifications, newest first. Optionally filtered by type and/or unread-only status.",
+        "operationId" : "mine_2",
+        "parameters" : [ {
+          "name" : "page",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "default" : 0
+          }
+        }, {
+          "name" : "size",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "default" : 20
+          }
+        }, {
+          "name" : "type",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "$ref" : "#/components/schemas/NotificationType"
+          }
+        }, {
+          "name" : "unreadOnly",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "boolean",
+            "default" : false
+          }
+        } ],
+        "responses" : {
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Inactive account",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "The notification does not exist or is not yours",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "200" : {
+            "description" : "Paginated notifications",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/NotificationPageResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/notifications/me/unread-count" : {
+      "get" : {
+        "tags" : [ "notifications-controller" ],
+        "summary" : "Get the count of unread notifications for the current user",
+        "operationId" : "unreadCount",
+        "responses" : {
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Inactive account",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "The notification does not exist or is not yours",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "200" : {
+            "description" : "The count of unread notifications",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "additionalProperties" : {
+                    "type" : "integer",
+                    "format" : "int64"
+                  }
                 }
               }
             }
@@ -2482,7 +3171,7 @@
       "get" : {
         "tags" : [ "job-controller" ],
         "summary" : "List the jobs assigned to the current fixer",
-        "operationId" : "mine_2",
+        "operationId" : "mine_3",
         "responses" : {
           "400" : {
             "description" : "Invalid identifier or unexpected client fields",
@@ -2687,6 +3376,58 @@
         } ]
       }
     },
+    "/contracts/me" : {
+      "get" : {
+        "tags" : [ "rental-contract-controller" ],
+        "operationId" : "listMe",
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/ContractResponse"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/contracts/expiring" : {
+      "get" : {
+        "tags" : [ "rental-contract-controller" ],
+        "operationId" : "expiring",
+        "parameters" : [ {
+          "name" : "days",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "default" : 30
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/ContractResponse"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/auth/me" : {
       "get" : {
         "tags" : [ "current-user-controller" ],
@@ -2822,6 +3563,67 @@
         } ]
       }
     },
+    "/administration/sla-board/requests" : {
+      "get" : {
+        "tags" : [ "sla-board-controller" ],
+        "summary" : "List SLA board requests",
+        "description" : "Paginated list of requests in SLA_WARNING or SLA_BREACHED status, ordered by SLA deadline ascending.",
+        "operationId" : "listRequests",
+        "parameters" : [ {
+          "name" : "pageable",
+          "in" : "query",
+          "required" : true,
+          "schema" : {
+            "$ref" : "#/components/schemas/Pageable"
+          }
+        } ],
+        "responses" : {
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Missing PLATFORM_ADMIN role",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "Resource not found",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "200" : {
+            "description" : "Paged SLA board requests",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PageSlaBoardItemResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
     "/media/me/portfolio/pieces/{pieceId}" : {
       "delete" : {
         "tags" : [ "portfolio-controller" ],
@@ -2918,6 +3720,109 @@
           }
         }
       },
+      "UpdateContractRequest" : {
+        "type" : "object",
+        "properties" : {
+          "propertyId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "tenantUserId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "startDate" : {
+            "type" : "string",
+            "format" : "date"
+          },
+          "endDate" : {
+            "type" : "string",
+            "format" : "date"
+          },
+          "monthlyRentAmount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "depositAmount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "paymentDayOfMonth" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "renewalNoticeDays" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "notes" : {
+            "type" : "string"
+          }
+        }
+      },
+      "ContractResponse" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "propertyId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "ownerUserId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "tenantUserId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "startDate" : {
+            "type" : "string",
+            "format" : "date"
+          },
+          "endDate" : {
+            "type" : "string",
+            "format" : "date"
+          },
+          "monthlyRentAmount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "depositAmount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "paymentDayOfMonth" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "status" : {
+            "$ref" : "#/components/schemas/ContractStatus"
+          },
+          "renewalNoticeDays" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "notes" : {
+            "type" : "string"
+          },
+          "createdAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "updatedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          }
+        }
+      },
+      "ContractStatus" : {
+        "type" : "string",
+        "enum" : [ "DRAFT", "ACTIVE", "EXPIRED", "TERMINATED", "RENEWED" ]
+      },
       "OpenRequest" : {
         "type" : "object",
         "additionalProperties" : false,
@@ -2944,9 +3849,16 @@
             },
             "maxItems" : 6,
             "minItems" : 0
+          },
+          "urgencyLevel" : {
+            "$ref" : "#/components/schemas/UrgencyLevel"
           }
         },
         "required" : [ "description", "propertyId", "title" ]
+      },
+      "UrgencyLevel" : {
+        "type" : "string",
+        "enum" : [ "LOW", "MEDIUM", "HIGH", "URGENT" ]
       },
       "PhotoResponse" : {
         "type" : "object",
@@ -2967,7 +3879,7 @@
       },
       "RepairRequestStatus" : {
         "type" : "string",
-        "enum" : [ "OPEN", "ASSIGNED" ]
+        "enum" : [ "OPEN", "ASSIGNED", "SLA_WARNING", "SLA_BREACHED", "COMPLETED", "CANCELLED" ]
       },
       "RequestDetailResponse" : {
         "type" : "object",
@@ -3005,9 +3917,16 @@
           "createdAt" : {
             "type" : "string",
             "format" : "date-time"
+          },
+          "urgencyLevel" : {
+            "$ref" : "#/components/schemas/UrgencyLevel"
+          },
+          "slaDeadline" : {
+            "type" : [ "string", "null" ],
+            "format" : "date-time"
           }
         },
-        "required" : [ "createdAt", "description", "photos", "requestId", "specialty", "status", "title" ]
+        "required" : [ "createdAt", "description", "photos", "requestId", "specialty", "status", "title", "urgencyLevel" ]
       },
       "Specialty" : {
         "type" : "string",
@@ -3160,6 +4079,77 @@
           },
           "areaM2" : {
             "type" : "number"
+          },
+          "status" : {
+            "type" : "string",
+            "enum" : [ "DRAFT", "PUBLISHED", "ARCHIVED" ]
+          },
+          "publishedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          }
+        }
+      },
+      "BulkValidationError" : {
+        "type" : "object",
+        "properties" : {
+          "rowNumber" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "field" : {
+            "type" : "string"
+          },
+          "code" : {
+            "type" : "string"
+          },
+          "message" : {
+            "type" : "string"
+          }
+        }
+      },
+      "BulkValidationResult" : {
+        "type" : "object",
+        "properties" : {
+          "total" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "validCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "errors" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/BulkValidationError"
+            }
+          }
+        }
+      },
+      "BulkImportResult" : {
+        "type" : "object",
+        "properties" : {
+          "imported" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "failed" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "importedIds" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string",
+              "format" : "uuid"
+            }
+          },
+          "errors" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/BulkValidationError"
+            }
           }
         }
       },
@@ -3191,6 +4181,32 @@
       "PayoutStatus" : {
         "type" : "string",
         "enum" : [ "REQUESTED" ]
+      },
+      "DeviceTokenRequest" : {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "deviceToken" : {
+            "type" : "string",
+            "minLength" : 1
+          },
+          "platform" : {
+            "type" : "string"
+          }
+        },
+        "required" : [ "deviceToken" ]
+      },
+      "DeviceTokenResponse" : {
+        "type" : "object",
+        "properties" : {
+          "userId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "platform" : {
+            "type" : "string"
+          }
+        }
       },
       "MediaPurpose" : {
         "type" : "string",
@@ -3364,7 +4380,7 @@
       },
       "JobStatus" : {
         "type" : "string",
-        "enum" : [ "ASSIGNED", "COMPLETED" ]
+        "enum" : [ "ASSIGNED", "IN_PROGRESS", "SLA_AT_RISK", "COMPLETED" ]
       },
       "RejectionRequest" : {
         "type" : "object",
@@ -3474,6 +4490,42 @@
         },
         "required" : [ "specialties" ]
       },
+      "CreateContractRequest" : {
+        "type" : "object",
+        "properties" : {
+          "propertyId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "tenantUserId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "startDate" : {
+            "type" : "string",
+            "format" : "date"
+          },
+          "endDate" : {
+            "type" : "string",
+            "format" : "date"
+          },
+          "monthlyRentAmount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "depositAmount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "paymentDayOfMonth" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "notes" : {
+            "type" : "string"
+          }
+        }
+      },
       "Role" : {
         "type" : "string",
         "enum" : [ "OWNER", "TENANT", "FIXER", "REAL_ESTATE_MANAGER", "PLATFORM_ADMIN" ]
@@ -3537,6 +4589,123 @@
       "UserStatus" : {
         "type" : "string",
         "enum" : [ "ACTIVE", "SUSPENDED", "DISABLED" ]
+      },
+      "ReassignFixerRequest" : {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "fixerUserId" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        },
+        "required" : [ "fixerUserId" ]
+      },
+      "SlaBoardItemResponse" : {
+        "type" : "object",
+        "properties" : {
+          "requestId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "propertyId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "propertyCity" : {
+            "type" : "string"
+          },
+          "specialty" : {
+            "$ref" : "#/components/schemas/Specialty"
+          },
+          "title" : {
+            "type" : "string"
+          },
+          "status" : {
+            "$ref" : "#/components/schemas/RepairRequestStatus"
+          },
+          "urgencyLevel" : {
+            "$ref" : "#/components/schemas/UrgencyLevel"
+          },
+          "slaDeadline" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "slaState" : {
+            "$ref" : "#/components/schemas/SlaState"
+          },
+          "remainingMinutes" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "assignedFixerUserId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "lastEscalationNotifiedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "createdAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          }
+        },
+        "required" : [ "requestId", "slaDeadline", "slaState", "status", "urgencyLevel" ]
+      },
+      "SlaState" : {
+        "type" : "string",
+        "enum" : [ "NONE", "ON_TRACK", "WARNING", "BREACHED" ]
+      },
+      "NotificationResponse" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "type" : {
+            "$ref" : "#/components/schemas/NotificationType"
+          },
+          "title" : {
+            "type" : "string"
+          },
+          "body" : {
+            "type" : "string"
+          },
+          "navigateTo" : {
+            "type" : "string"
+          },
+          "entityId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "entityType" : {
+            "type" : "string"
+          },
+          "data" : {
+            "type" : "object",
+            "additionalProperties" : {
+              "type" : "string"
+            }
+          },
+          "read" : {
+            "type" : "boolean"
+          },
+          "readAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "createdAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          }
+        },
+        "required" : [ "body", "createdAt", "id", "title", "type" ]
+      },
+      "NotificationType" : {
+        "type" : "string",
+        "enum" : [ "REQUEST_CREATED_URGENT", "REQUEST_SLA_WARNING", "REQUEST_SLA_BREACHED", "QUOTATION_RECEIVED", "QUOTATION_ACCEPTED", "JOB_ASSIGNED", "PROPERTY_PUBLISHED", "PROPERTY_BULK_FINISHED", "CONTRACT_CREATED", "CONTRACT_EXPIRING_30D", "CONTRACT_EXPIRING_7D", "CONTRACT_EXPIRED", "CHAT_MESSAGE_RECEIVED" ]
       },
       "OpenRequestSummaryResponse" : {
         "type" : "object",
@@ -3638,6 +4807,34 @@
           }
         },
         "required" : [ "availableBalance", "grossTotal", "heldBalance", "history", "paidOutTotal", "totalCommission" ]
+      },
+      "NotificationPageResponse" : {
+        "type" : "object",
+        "properties" : {
+          "content" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/NotificationResponse"
+            }
+          },
+          "page" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "size" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "totalElements" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "totalPages" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        },
+        "required" : [ "content", "page", "size", "totalElements", "totalPages" ]
       },
       "OwnPortfolioResponse" : {
         "type" : "object",
@@ -3789,6 +4986,113 @@
           }
         },
         "required" : [ "averageDaysOnMarket", "degraded", "freshness", "observedAt", "pricePerSquareMeter", "source", "synthetic", "yearOverYearVariationPercent", "zone" ]
+      },
+      "Pageable" : {
+        "type" : "object",
+        "properties" : {
+          "page" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 0
+          },
+          "size" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 1
+          },
+          "sort" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string"
+            }
+          }
+        }
+      },
+      "PageSlaBoardItemResponse" : {
+        "type" : "object",
+        "properties" : {
+          "totalPages" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "totalElements" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "size" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "content" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/SlaBoardItemResponse"
+            }
+          },
+          "number" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "sort" : {
+            "$ref" : "#/components/schemas/SortObject"
+          },
+          "numberOfElements" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "last" : {
+            "type" : "boolean"
+          },
+          "first" : {
+            "type" : "boolean"
+          },
+          "pageable" : {
+            "$ref" : "#/components/schemas/PageableObject"
+          },
+          "empty" : {
+            "type" : "boolean"
+          }
+        }
+      },
+      "PageableObject" : {
+        "type" : "object",
+        "properties" : {
+          "offset" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "sort" : {
+            "$ref" : "#/components/schemas/SortObject"
+          },
+          "pageSize" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "pageNumber" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "unpaged" : {
+            "type" : "boolean"
+          },
+          "paged" : {
+            "type" : "boolean"
+          }
+        }
+      },
+      "SortObject" : {
+        "type" : "object",
+        "properties" : {
+          "empty" : {
+            "type" : "boolean"
+          },
+          "unsorted" : {
+            "type" : "boolean"
+          },
+          "sorted" : {
+            "type" : "boolean"
+          }
+        }
       }
     },
     "securitySchemes" : {

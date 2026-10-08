@@ -124,7 +124,7 @@ abstract class QuotationHttpContract {
         String mediaArray = mapper.writeValueAsString(mediaIds);
         java.util.UUID reqPropId = java.util.UUID.randomUUID();
         java.util.UUID ownerUserId = java.util.UUID.fromString(mapper.readTree(mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/auth/me").with(org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt().jwt(j -> j.subject(ownerSubject)))).andReturn().getResponse().getContentAsString()).get("id").asText());
-        jdbc.update("INSERT INTO properties (id, owner_user_id, name, address, city, area_m2, created_at, updated_at) VALUES (?, ?, 'Prop', 'Addr', 'City', 10, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)", reqPropId, ownerUserId);
+        com.fixup.testsupport.PropertyFixtures.insertPublished(jdbc, reqPropId, ownerUserId);
         String body = "{\"propertyId\":\"" + reqPropId.toString() + "\",\"title\":\"" + title + "\",\"description\":\"" + description + "\",\"mediaIds\":" + mediaArray + "}";
         var result = mvc.perform(post("/requests").with(identity(ownerSubject)).contentType(MediaType.APPLICATION_JSON).content(body)).andExpect(status().isCreated()).andReturn();
         java.util.UUID reqId = java.util.UUID.fromString(mapper.readTree(result.getResponse().getContentAsString()).get("requestId").asText());
@@ -714,7 +714,7 @@ abstract class QuotationHttpContract {
         String otherOwnerSubject = "auth0|other-owner-media";
         UUID otherOwnerUserId = provisionOwner(otherOwnerSubject);
         java.util.UUID reqPropIdA = java.util.UUID.randomUUID();
-        jdbc.update("INSERT INTO properties (id, owner_user_id, name, address, city, area_m2, created_at, updated_at) VALUES (?, ?, 'Prop', 'Addr', 'City', 10, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)", reqPropIdA, ownerUserId);
+        com.fixup.testsupport.PropertyFixtures.insertPublished(jdbc, reqPropIdA, ownerUserId);
         UUID alienMedia = uploadAndConfirmRepairRequestMedia(otherOwnerSubject, otherOwnerUserId);
 
         // Alien media -> 404
@@ -751,7 +751,7 @@ abstract class QuotationHttpContract {
                 + "VALUES (?, ?, 'FIXER_PORTFOLIO', ?, 'image/jpeg', 100, 'READY', CURRENT_TIMESTAMP + INTERVAL '1' DAY, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
                 portfolioMedia, ownerUserId, portKey);
         java.util.UUID reqPropIdP = java.util.UUID.randomUUID();
-        jdbc.update("INSERT INTO properties (id, owner_user_id, name, address, city, area_m2, created_at, updated_at) VALUES (?, ?, 'Prop', 'Addr', 'City', 10, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)", reqPropIdP, ownerUserId);
+        com.fixup.testsupport.PropertyFixtures.insertPublished(jdbc, reqPropIdP, ownerUserId);
         String portReq = """
                 {"propertyId":"%s","title":"Tubo","description":"Desc","mediaIds":["%s"]}
                 """.formatted(reqPropIdP, portfolioMedia);
@@ -765,7 +765,7 @@ abstract class QuotationHttpContract {
 
         // Already ATTACHED media cannot be reused -> 409
         java.util.UUID reqPropIdR = java.util.UUID.randomUUID();
-        jdbc.update("INSERT INTO properties (id, owner_user_id, name, address, city, area_m2, created_at, updated_at) VALUES (?, ?, 'Prop', 'Addr', 'City', 10, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)", reqPropIdR, ownerUserId);
+        com.fixup.testsupport.PropertyFixtures.insertPublished(jdbc, reqPropIdR, ownerUserId);
         String reuseReq = """
                 {"propertyId":"%s","title":"Otro tubo","description":"Desc","mediaIds":["%s"]}
                 """.formatted(reqPropIdR, myMedia);
