@@ -223,6 +223,38 @@ abstract class IdentityHttpContract {
     }
 
     @ParameterizedTest
+    @EnumSource(value = Role.class, names = {"PLATFORM_ADMIN", "REAL_ESTATE_MANAGER"})
+    void existingPrivilegedRolesCanBeSelectedWithoutChangingAssignments(Role role) throws Exception {
+        UUID id = provision("auth0|existing-privilege");
+        jdbc.update("INSERT INTO user_roles(user_id, role) VALUES (?, 'OWNER')", id);
+        jdbc.update("INSERT INTO user_roles(user_id, role) VALUES (?, ?)", id, role.name());
+        var updatedAt = jdbc.queryForObject("SELECT updated_at FROM users WHERE id = ?", Instant.class, id);
+        for (int attempt = 0; attempt < 2; attempt++) {
+            mvc.perform(post("/auth/select-role").with(identity("auth0|existing-privilege"))
+                            .contentType(MediaType.APPLICATION_JSON).content("{\"role\":\"" + role + "\"}"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.roles", org.hamcrest.Matchers.containsInAnyOrder("OWNER", role.name())));
+        }
+        assertThat(jdbc.queryForList("SELECT role FROM user_roles WHERE user_id = ?", String.class, id))
+                .containsExactlyInAnyOrder("OWNER", role.name());
+        assertThat(jdbc.queryForObject("SELECT updated_at FROM users WHERE id = ?", Instant.class, id))
+                .isEqualTo(updatedAt);
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = Role.class, names = {"PLATFORM_ADMIN", "REAL_ESTATE_MANAGER"})
+    void forgedJwtPrivilegesCannotAuthorizeRoleSelection(Role role) throws Exception {
+        UUID id = provision("auth0|forged-selection");
+        mvc.perform(post("/auth/select-role").with(jwt().jwt(token -> token.subject("auth0|forged-selection")
+                                .claim("roles", List.of(role.name())).claim("scope", role.name()))
+                        .authorities(new SimpleGrantedAuthority("ROLE_" + role.name())))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"role\":\"" + role + "\"}"))
+                .andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM user_roles WHERE user_id = ?", Integer.class, id))
+                .isZero();
+    }
+
+    @ParameterizedTest
     @EnumSource(value = Role.class, names = {"OWNER", "TENANT", "FIXER"})
     void selfAssignableRolesAreIdempotentAndFixerStartsPending(Role role) throws Exception {
         UUID id = provision("auth0|self-role");

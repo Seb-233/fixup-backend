@@ -10,16 +10,20 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class SelectInitialRole {
     private final RoleAssignments assignments;
+    private final UserLookup lookup;
 
-    public SelectInitialRole(RoleAssignments assignments) {
+    public SelectInitialRole(RoleAssignments assignments, UserLookup lookup) {
         this.assignments = assignments;
+        this.lookup = lookup;
     }
 
     @Transactional
     public Set<Role> execute(CurrentActor actor, Role role) {
-        if (!actor.hasRole(role)) {
-            RolePolicy.requireSelfAssignable(role);
+        var user = lookup.byId(actor.internalUserId());
+        if (user.roles().contains(role)) {
+            return user.roles();
         }
+        RolePolicy.requireSelfAssignable(role);
         return assignments.grant(actor.internalUserId(), role).roles();
     }
 }
