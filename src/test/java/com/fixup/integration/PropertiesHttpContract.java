@@ -1,6 +1,10 @@
 package com.fixup.integration;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fixup.properties.api.GeocodingRateLimitExceededException;
+import com.fixup.properties.api.GeocodingUnavailableException;
+import com.fixup.properties.application.GeocodingProvider;
+import com.fixup.properties.domain.GeocodingCandidate;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -8,6 +12,7 @@ import org.junit.jupiter.params.provider.EnumSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.math.BigDecimal;
@@ -15,10 +20,14 @@ import java.util.UUID;
 
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.lessThan;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 abstract class PropertiesHttpContract {
@@ -27,6 +36,7 @@ abstract class PropertiesHttpContract {
     @Autowired JdbcTemplate jdbc;
     @Autowired ObjectMapper mapper;
     @Autowired com.fixup.testsupport.IntegrationDatabaseCleaner databaseCleaner;
+    @MockBean GeocodingProvider geocodingProvider;
 
     @AfterEach
     void clearDatabase() {
@@ -332,6 +342,102 @@ abstract class PropertiesHttpContract {
                 .queryParam("radiusKm", "5")
                 .with(jwt().jwt(j -> j.subject("auth0|inactive-search"))))
             .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void ownerCanGeocodeANormalizedAddressAndReceivesAttribution() throws Exception {
+        UUID ownerId = UUID.randomUUID();
+        String subject = "auth0|geocode-owner";
+        seedUser(ownerId, subject);
+        when(geocodingProvider.geocode("Carrera 7 # 72-41"))
+                .thenReturn(java.util.List.of(new GeocodingCandidate(
+                        "Carrera 7 # 72-41, Bogotá, Colombia",
+                        new BigDecimal("4.657"),
+                        new BigDecimal("-74.055"))));
+
+        mvc.perform(get("/locations/geocode")
+                .queryParam("query", "  Carrera   7  # 72-41 ")
+                .with(jwt().jwt(j -> j.subject(subject))))
+            .andExpect(status().isOk())
+                .andExpect(header().string("X-Data-Attribution", "\u00A9 OpenStreetMap contributors"))
+            .andExpect(jsonPath("$", hasSize(1)))
+            .andExpect(jsonPath("$[0].displayName").value("Carrera 7 # 72-41, Bogotá, Colombia"))
+            .andExpect(jsonPath("$[0].latitude").value(4.657))
+            .andExpect(jsonPath("$[0].longitude").value(-74.055))
+            .andExpect(jsonPath("$[0].placeId").doesNotExist())
+            .andExpect(jsonPath("$[0].osmType").doesNotExist());
+    }
+
+    @Test
+    void tenantCanGeocodeAndReceiveAnEmptyCandidateList() throws Exception {
+        UUID tenantId = UUID.randomUUID();
+        String subject = "auth0|geocode-tenant";
+        seedUser(tenantId, subject, "ACTIVE", SearchRole.TENANT);
+        when(geocodingProvider.geocode("Dirección inexistente")).thenReturn(java.util.List.of());
+
+        mvc.perform(get("/locations/geocode")
+                .queryParam("query", "Dirección inexistente")
+                .with(jwt().jwt(j -> j.subject(subject))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$", hasSize(0)));
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = SearchRole.class, names = {"FIXER", "REAL_ESTATE_MANAGER"})
+    void geocodingRejectsDisallowedRoles(SearchRole role) throws Exception {
+        UUID userId = UUID.randomUUID();
+        String subject = "auth0|geocode-" + role.name().toLowerCase();
+        seedUser(userId, subject, "ACTIVE", role);
+
+        mvc.perform(get("/locations/geocode")
+                .queryParam("query", "Bogotá")
+                .with(jwt().jwt(j -> j.subject(subject))))
+            .andExpect(status().isForbidden());
+        verify(geocodingProvider, never()).geocode(org.mockito.ArgumentMatchers.anyString());
+    }
+
+    @Test
+    void geocodingRequiresAuthenticationAndAValidQuery() throws Exception {
+        mvc.perform(get("/locations/geocode").queryParam("query", "Bogotá"))
+            .andExpect(status().isUnauthorized());
+
+        UUID ownerId = UUID.randomUUID();
+        String subject = "auth0|geocode-invalid";
+        seedUser(ownerId, subject);
+        for (String query : new String[]{"   ", "a".repeat(201)}) {
+            mvc.perform(get("/locations/geocode")
+                    .queryParam("query", query)
+                    .with(jwt().jwt(j -> j.subject(subject))))
+                .andExpect(status().isBadRequest());
+        }
+        mvc.perform(get("/locations/geocode")
+                .with(jwt().jwt(j -> j.subject(subject))))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void geocodingMapsProviderFailuresWithoutAffectingPropertySearch() throws Exception {
+        UUID ownerId = UUID.randomUUID();
+        String subject = "auth0|geocode-failures";
+        seedUser(ownerId, subject);
+        when(geocodingProvider.geocode("No disponible"))
+                .thenThrow(new GeocodingUnavailableException("provider details"));
+        when(geocodingProvider.geocode("Muy rápido"))
+                .thenThrow(new GeocodingRateLimitExceededException());
+
+        mvc.perform(get("/locations/geocode")
+                .queryParam("query", "No disponible")
+                .with(jwt().jwt(j -> j.subject(subject))))
+            .andExpect(status().isServiceUnavailable())
+            .andExpect(jsonPath("$.detail").value("Address geocoding is temporarily unavailable"));
+        mvc.perform(get("/locations/geocode")
+                .queryParam("query", "Muy rápido")
+                .with(jwt().jwt(j -> j.subject(subject))))
+            .andExpect(status().isTooManyRequests());
+
+        mvc.perform(geographicSearch(subject))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$", hasSize(0)));
     }
 
     private org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder geographicSearch(

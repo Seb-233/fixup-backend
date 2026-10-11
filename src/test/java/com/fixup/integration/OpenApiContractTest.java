@@ -52,7 +52,7 @@ class OpenApiContractTest {
                 "/quotations/{quotationId}/accept", "/quotations/{quotationId}/reject",
                 "/jobs/me", "/jobs/{jobId}/complete",
                 "/payments/me/earnings", "/payments/me/payouts", "/properties", "/properties/{propertyId}", "/properties/me",
-                "/properties/search",
+                "/properties/search", "/locations/geocode",
                 "/properties/bulk/validate", "/properties/bulk/import",
                 "/notifications/me", "/notifications/{id}/read", "/notifications/read-all",
                 "/notifications/me/unread-count", "/notifications/device-token",
@@ -145,6 +145,26 @@ class OpenApiContractTest {
                 .doesNotContain("ownerUserId", "publishedByUserId");
         assertThat(contract.at("/components/schemas/PropertySearchResult/required").toString())
                 .contains("ownedByCurrentUser");
+
+        var geocoding = paths.get("/locations/geocode").get("get");
+        assertThat(geocoding.get("security").toString()).contains("bearerAuth");
+        for (String code : new String[]{"200", "400", "401", "403", "429", "503"}) {
+            assertThat(geocoding.get("responses").has(code))
+                    .as("/locations/geocode status " + code).isTrue();
+        }
+        var geocodingQuery = geocoding.get("parameters").get(0);
+        assertThat(geocodingQuery.get("name").asText()).isEqualTo("query");
+        assertThat(geocodingQuery.get("required").asBoolean()).isTrue();
+        assertThat(geocodingQuery.get("schema").get("maxLength").asInt()).isEqualTo(200);
+        var geocodingResponse = geocoding.get("responses").get("200");
+        assertThat(geocodingResponse.get("headers").has("X-Data-Attribution")).isTrue();
+        assertThat(geocodingResponse.get("content").get("application/json").get("schema")
+                .get("items").get("$ref").asText()).contains("GeocodingCandidate");
+        assertThat(contract.at("/components/schemas/GeocodingCandidate/properties").toString())
+                .contains("displayName", "latitude", "longitude")
+                .doesNotContain("placeId", "osmType", "licence", "boundingbox");
+        assertThat(contract.at("/components/schemas/GeocodingCandidate/required").toString())
+                .contains("displayName", "latitude", "longitude");
 
         for (String piecePath : java.util.List.of(
                 "/media/me/portfolio/pieces/{pieceId}",

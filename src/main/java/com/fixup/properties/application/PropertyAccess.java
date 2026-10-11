@@ -29,6 +29,16 @@ final class PropertyAccess {
         throw new PropertyAccessDeniedException("Actor cannot search properties with the requested ownership scope");
     }
 
+    static void requireCanGeocode(CurrentActor actor) {
+        requireActive(actor);
+        if (actor.hasRole(Role.OWNER)
+                || actor.hasRole(Role.TENANT)
+                || actor.hasRole(Role.PLATFORM_ADMIN)) {
+            return;
+        }
+        throw new PropertyAccessDeniedException("Actor cannot geocode addresses");
+    }
+
     static void requireActiveOwner(CurrentActor actor) {
         requireActive(actor);
         if (!actor.hasRole(Role.OWNER)

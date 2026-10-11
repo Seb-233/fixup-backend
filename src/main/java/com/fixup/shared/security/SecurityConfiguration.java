@@ -97,6 +97,7 @@ class SecurityConfiguration {
                             .requestMatchers("/jobs/**").authenticated()
                             .requestMatchers("/payments/**").authenticated()
                             .requestMatchers("/properties/**").authenticated()
+                            .requestMatchers("/locations/**").authenticated()
                             .requestMatchers("/contracts/**").authenticated()
                             .requestMatchers("/notifications/**").authenticated()
                             .requestMatchers("/administration/**").authenticated()
@@ -122,6 +123,7 @@ class SecurityConfiguration {
                 .map(String::trim).filter(origin -> !origin.isEmpty()).toList());
         cors.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         cors.setAllowedHeaders(List.of("Authorization", "Content-Type", "Accept"));
+        cors.setExposedHeaders(List.of("X-Data-Attribution"));
         cors.setAllowCredentials(false);
         cors.setMaxAge(3600L);
         var source = new UrlBasedCorsConfigurationSource();

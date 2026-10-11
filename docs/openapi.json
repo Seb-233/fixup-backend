@@ -3268,6 +3268,116 @@
         } ]
       }
     },
+    "/locations/geocode" : {
+      "get" : {
+        "tags" : [ "location-controller" ],
+        "summary" : "Geocode an address in Colombia",
+        "description" : "Explicit address search backed by a configurable provider. Results require attribution to OpenStreetMap contributors; this endpoint is not autocomplete.",
+        "operationId" : "geocode",
+        "parameters" : [ {
+          "name" : "query",
+          "in" : "query",
+          "description" : "Complete address submitted explicitly; not an autocomplete query",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "maxLength" : 200
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "Zero or more location candidates",
+            "headers" : {
+              "X-Data-Attribution" : {
+                "description" : "Required data attribution",
+                "style" : "simple",
+                "schema" : {
+                  "type" : "string"
+                }
+              }
+            },
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/GeocodingCandidate"
+                  }
+                }
+              }
+            }
+          },
+          "400" : {
+            "description" : "Missing, blank or oversized query",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/GeocodingCandidate"
+                  }
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/GeocodingCandidate"
+                  }
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Role is not allowed to geocode addresses",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/GeocodingCandidate"
+                  }
+                }
+              }
+            }
+          },
+          "429" : {
+            "description" : "External geocoding request rate exceeded",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/GeocodingCandidate"
+                  }
+                }
+              }
+            }
+          },
+          "503" : {
+            "description" : "Geocoding provider is unavailable",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/GeocodingCandidate"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
     "/jobs/me" : {
       "get" : {
         "tags" : [ "job-controller" ],
@@ -4995,6 +5105,21 @@
         },
         "required" : [ "fixerUserId", "pieces", "status" ]
       },
+      "GeocodingCandidate" : {
+        "type" : "object",
+        "properties" : {
+          "displayName" : {
+            "type" : "string"
+          },
+          "latitude" : {
+            "type" : "number"
+          },
+          "longitude" : {
+            "type" : "number"
+          }
+        },
+        "required" : [ "displayName", "latitude", "longitude" ]
+      },
       "ReviewDocumentResponse" : {
         "type" : "object",
         "properties" : {
@@ -5126,11 +5251,6 @@
       "Pageable" : {
         "type" : "object",
         "properties" : {
-          "page" : {
-            "type" : "integer",
-            "format" : "int32",
-            "minimum" : 0
-          },
           "size" : {
             "type" : "integer",
             "format" : "int32",
@@ -5141,6 +5261,11 @@
             "items" : {
               "type" : "string"
             }
+          },
+          "page" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 0
           }
         }
       },
