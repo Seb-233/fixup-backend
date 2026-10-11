@@ -52,6 +52,7 @@ class OpenApiContractTest {
                 "/quotations/{quotationId}/accept", "/quotations/{quotationId}/reject",
                 "/jobs/me", "/jobs/{jobId}/complete",
                 "/payments/me/earnings", "/payments/me/payouts", "/properties", "/properties/{propertyId}", "/properties/me",
+                "/properties/search",
                 "/properties/bulk/validate", "/properties/bulk/import",
                 "/notifications/me", "/notifications/{id}/read", "/notifications/read-all",
                 "/notifications/me/unread-count", "/notifications/device-token",
@@ -112,6 +113,38 @@ class OpenApiContractTest {
                     .as("/analytics/zones/{zone}/market-indicators status " + code).isTrue();
         }
         assertThat(analyticsOp.get("responses").has("402")).isFalse();
+
+        var propertySearch = paths.get("/properties/search").get("get");
+        assertThat(propertySearch.get("security").toString()).contains("bearerAuth");
+        for (String code : new String[]{"200", "400", "401", "403"}) {
+            assertThat(propertySearch.get("responses").has(code))
+                    .as("/properties/search status " + code).isTrue();
+        }
+        var searchParameters = propertySearch.get("parameters");
+        assertThat(searchParameters.size()).isEqualTo(4);
+        for (String parameterName : new String[]{"latitude", "longitude", "radiusKm"}) {
+            var parameter = java.util.stream.StreamSupport.stream(searchParameters.spliterator(), false)
+                    .filter(candidate -> parameterName.equals(candidate.get("name").asText()))
+                    .findFirst().orElseThrow();
+            assertThat(parameter.get("required").asBoolean()).as(parameterName + " required").isTrue();
+        }
+        var ownershipScope = java.util.stream.StreamSupport.stream(searchParameters.spliterator(), false)
+                .filter(candidate -> "ownershipScope".equals(candidate.get("name").asText()))
+                .findFirst().orElseThrow();
+        assertThat(ownershipScope.get("required").asBoolean()).isFalse();
+        assertThat(ownershipScope.get("schema").get("default").asText()).isEqualTo("ALL");
+        assertThat(ownershipScope.get("schema").get("enum").toString())
+                .contains("ALL", "MINE", "OTHERS");
+        var searchResponseSchema = propertySearch.get("responses").get("200")
+                .get("content").get("application/json").get("schema");
+        assertThat(searchResponseSchema.get("type").asText()).isEqualTo("array");
+        assertThat(searchResponseSchema.get("items").get("$ref").asText()).contains("PropertySearchResult");
+        assertThat(contract.at("/components/schemas/PropertySearchResult/properties").toString())
+                .contains("id", "name", "address", "city", "areaM2", "latitude", "longitude", "distanceKm",
+                        "ownedByCurrentUser")
+                .doesNotContain("ownerUserId", "publishedByUserId");
+        assertThat(contract.at("/components/schemas/PropertySearchResult/required").toString())
+                .contains("ownedByCurrentUser");
 
         for (String piecePath : java.util.List.of(
                 "/media/me/portfolio/pieces/{pieceId}",

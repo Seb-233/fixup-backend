@@ -84,4 +84,8 @@ class PropertyEntity {
             createdAt, updatedAt
         );
     }
+
+    UUID id() {
+        return id;
+    }
 }
