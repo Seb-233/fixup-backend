@@ -44,7 +44,7 @@ class MinioStorageIT {
 
     @Container
     @SuppressWarnings("resource")
-    static final GenericContainer<?> MINIO = new GenericContainer<>("quay.io/minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e")
+    static final GenericContainer<?> MINIO = new GenericContainer<>("ghcr.io/seb-233/fixup-minio@sha256:a1a8bd4ac40ad7881a245bab97323e18f971e4d4cba2c2007ec1bedd21cbaba2")
             .withEnv("MINIO_ROOT_USER", "fixup")
             .withEnv("MINIO_ROOT_PASSWORD", "development-only-secret")
             .withCommand("server /data --console-address :9001")

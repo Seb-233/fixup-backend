@@ -15,9 +15,6 @@ spec:
     - name: api
       port: 9000
       targetPort: 9000
-    - name: console
-      port: 9001
-      targetPort: 9001
 ---
 apiVersion: apps/v1
 kind: StatefulSet
@@ -39,9 +36,11 @@ spec:
         app: minio
     spec:
       terminationGracePeriodSeconds: 30
+      imagePullSecrets:
+        - name: ghcr-pull-secret
       containers:
         - name: minio
-          image: quay.io/minio/minio:latest
+          image: ghcr.io/seb-233/fixup-minio@sha256:a1a8bd4ac40ad7881a245bab97323e18f971e4d4cba2c2007ec1bedd21cbaba2
           args:
             - server
             - /data
@@ -50,8 +49,6 @@ spec:
           ports:
             - name: api
               containerPort: 9000
-            - name: console
-              containerPort: 9001
           env:
             - name: MINIO_ROOT_USER
               valueFrom:
