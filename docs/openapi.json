@@ -9,10 +9,184 @@
     "description" : "Generated server url"
   } ],
   "paths" : {
+    "/properties/{propertyId}" : {
+      "get" : {
+        "tags" : [ "property-controller" ],
+        "operationId" : "get",
+        "parameters" : [ {
+          "name" : "propertyId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PropertySummary"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put" : {
+        "tags" : [ "property-controller" ],
+        "summary" : "Edit a property and its listing (FR-UC-02)",
+        "description" : "Only the owner, the delegated real estate manager or a platform admin may edit. photoMediaIds replaces the gallery in the given order.",
+        "operationId" : "update",
+        "parameters" : [ {
+          "name" : "propertyId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/PropertyChanges"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PropertySummary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/properties/{propertyId}/manager" : {
+      "put" : {
+        "tags" : [ "property-controller" ],
+        "summary" : "Delegate the property to a real estate manager, or revoke it with null (FR-UC-11)",
+        "operationId" : "delegate",
+        "parameters" : [ {
+          "name" : "propertyId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ManagerAssignment"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PropertySummary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/fixers/me/profile" : {
+      "get" : {
+        "tags" : [ "fixer-profile-controller" ],
+        "summary" : "The current fixer's own public profile",
+        "operationId" : "myProfile",
+        "responses" : {
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Inactive account or profile not visible to the caller",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      },
+      "put" : {
+        "tags" : [ "fixer-profile-controller" ],
+        "summary" : "Update the city, short bio and years of experience shown to clients",
+        "operationId" : "updateMyProfile",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/PresentationRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Inactive account or profile not visible to the caller",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
     "/contracts/{id}" : {
       "get" : {
         "tags" : [ "rental-contract-controller" ],
-        "operationId" : "get",
+        "operationId" : "get_1",
         "parameters" : [ {
           "name" : "id",
           "in" : "path",
@@ -37,7 +211,7 @@
       },
       "put" : {
         "tags" : [ "rental-contract-controller" ],
-        "operationId" : "update",
+        "operationId" : "update_1",
         "parameters" : [ {
           "name" : "id",
           "in" : "path",
@@ -71,11 +245,547 @@
         }
       }
     },
+    "/visits" : {
+      "get" : {
+        "tags" : [ "visit-controller" ],
+        "summary" : "Visits scheduled for one repair request",
+        "operationId" : "forRequest",
+        "parameters" : [ {
+          "name" : "requestId",
+          "in" : "query",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "responses" : {
+          "400" : {
+            "description" : "Missing field or unexpected client fields",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Not a party to the request or the visit",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "The visit does not exist",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "Invalid date, busy fixer or transition not allowed",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      },
+      "post" : {
+        "tags" : [ "visit-controller" ],
+        "summary" : "Propose a technical visit for a repair request",
+        "operationId" : "propose",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ProposeRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "400" : {
+            "description" : "Missing field or unexpected client fields",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Not a party to the request or the visit",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "The visit does not exist",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "Invalid date, busy fixer or transition not allowed",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "201" : {
+            "description" : "Created",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/VisitResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/visits/{visitId}/reschedule" : {
+      "post" : {
+        "tags" : [ "visit-controller" ],
+        "summary" : "Propose another date; the other party confirms it",
+        "operationId" : "reschedule",
+        "parameters" : [ {
+          "name" : "visitId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/RescheduleRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "400" : {
+            "description" : "Missing field or unexpected client fields",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Not a party to the request or the visit",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "The visit does not exist",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "Invalid date, busy fixer or transition not allowed",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/visits/{visitId}/no-show" : {
+      "post" : {
+        "tags" : [ "visit-controller" ],
+        "summary" : "Mark a confirmed visit as missed after its start time",
+        "operationId" : "noShow",
+        "parameters" : [ {
+          "name" : "visitId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "responses" : {
+          "400" : {
+            "description" : "Missing field or unexpected client fields",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Not a party to the request or the visit",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "The visit does not exist",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "Invalid date, busy fixer or transition not allowed",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/visits/{visitId}/confirm" : {
+      "post" : {
+        "tags" : [ "visit-controller" ],
+        "summary" : "Confirm the proposed date (the other party only)",
+        "operationId" : "confirm",
+        "parameters" : [ {
+          "name" : "visitId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "responses" : {
+          "400" : {
+            "description" : "Missing field or unexpected client fields",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Not a party to the request or the visit",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "The visit does not exist",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "Invalid date, busy fixer or transition not allowed",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/visits/{visitId}/complete" : {
+      "post" : {
+        "tags" : [ "visit-controller" ],
+        "summary" : "The fixer records what the visit found (and the kitchen checklist, FR-UC-27)",
+        "operationId" : "complete",
+        "parameters" : [ {
+          "name" : "visitId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/CompleteRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "400" : {
+            "description" : "Missing field or unexpected client fields",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Not a party to the request or the visit",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "The visit does not exist",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "Invalid date, busy fixer or transition not allowed",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/visits/{visitId}/cancel" : {
+      "post" : {
+        "tags" : [ "visit-controller" ],
+        "summary" : "Cancel the visit, telling the other party why",
+        "operationId" : "cancel",
+        "parameters" : [ {
+          "name" : "visitId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/CancelRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "400" : {
+            "description" : "Missing field or unexpected client fields",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Not a party to the request or the visit",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "The visit does not exist",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "Invalid date, busy fixer or transition not allowed",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
     "/requests" : {
       "post" : {
         "tags" : [ "repair-request-controller" ],
         "summary" : "Open a repair request",
-        "description" : "The body carries media asset IDs. No raw image binary content crosses this API.",
+        "description" : "The owner, the property's real estate manager or a tenant with an active lease may open it (FR-UC-08). The body carries media asset IDs. No raw image binary content crosses this API.",
         "operationId" : "open",
         "requestBody" : {
           "content" : {
@@ -329,6 +1039,87 @@
         } ]
       }
     },
+    "/requests/{requestId}/cancel" : {
+      "post" : {
+        "tags" : [ "repair-request-controller" ],
+        "summary" : "Withdraw an open request nobody has taken yet",
+        "operationId" : "cancel_1",
+        "parameters" : [ {
+          "name" : "requestId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "responses" : {
+          "400" : {
+            "description" : "Invalid specialty, missing field or unexpected client fields",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Inactive account, missing role or request not visible to the caller",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "The repair request does not exist",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "The transition does not apply to the current state of the request",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "200" : {
+            "description" : "The request is cancelled",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RequestDetailResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
     "/remodelings" : {
       "post" : {
         "tags" : [ "remodeling-controller" ],
@@ -402,6 +1193,150 @@
               "application/json" : {
                 "schema" : {
                   "$ref" : "#/components/schemas/ProjectResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/remodelings/{projectId}/publish-listing" : {
+      "post" : {
+        "tags" : [ "remodeling-controller" ],
+        "summary" : "Publish the property for rent at the target rent (FR-UC-26)",
+        "description" : "Only for a pre-rental remodeling whose requirements are all completed.",
+        "operationId" : "publishListing",
+        "parameters" : [ {
+          "name" : "projectId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "responses" : {
+          "400" : {
+            "description" : "Invalid project or requirement data",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Inactive account or role not allowed",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "Project or property not visible",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "Project invariant conflict",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "200" : {
+            "description" : "Listing published",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ProjectResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/ratings" : {
+      "post" : {
+        "tags" : [ "rating-controller" ],
+        "summary" : "Rate a completed job from 1 to 5 with an optional review",
+        "operationId" : "rate",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/RateRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Not the client of the job",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "Job not completed or already rated",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "201" : {
+            "description" : "Created",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RatingResponse"
                 }
               }
             }
@@ -687,6 +1622,62 @@
         }
       }
     },
+    "/properties/{propertyId}/unpublish" : {
+      "post" : {
+        "tags" : [ "property-controller" ],
+        "summary" : "Withdraw a published property from the catalog without deleting it (FR-UC-02)",
+        "operationId" : "unpublish",
+        "parameters" : [ {
+          "name" : "propertyId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PropertySummary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/properties/{propertyId}/publish" : {
+      "post" : {
+        "tags" : [ "property-controller" ],
+        "summary" : "Publish a draft or withdrawn property in the free catalog (FR-UC-02)",
+        "operationId" : "publish",
+        "parameters" : [ {
+          "name" : "propertyId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PropertySummary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/properties/bulk/validate" : {
       "post" : {
         "tags" : [ "property-controller" ],
@@ -891,6 +1882,88 @@
               "application/json" : {
                 "schema" : {
                   "$ref" : "#/components/schemas/PayoutResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/payments/charges/{chargeId}/pay" : {
+      "post" : {
+        "tags" : [ "payment-controller" ],
+        "summary" : "Pay a charge in the sandbox gateway (FR-UC-22)",
+        "description" : "Academic scope: no card, account or phone data is sent or stored. The gateway checks that the payer, the reference and the amount match the charge. scenario=DECLINE_FUNDS or DECLINE_BANK simulates a rejection.",
+        "operationId" : "pay",
+        "parameters" : [ {
+          "name" : "chargeId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/PayRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "400" : {
+            "description" : "Unexpected client fields",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Inactive account or missing FIXER role",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "The account has no payment record",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "There is no available balance to transfer",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -1320,7 +2393,7 @@
         "tags" : [ "portfolio-controller" ],
         "summary" : "Publish a piece in the fixer's own portfolio",
         "description" : "Attaches a confirmed media asset to the portfolio. Requires a verified fixer.",
-        "operationId" : "publish",
+        "operationId" : "publish_1",
         "requestBody" : {
           "content" : {
             "application/json" : {
@@ -1560,12 +2633,82 @@
         } ]
       }
     },
-    "/jobs/{jobId}/complete" : {
+    "/management/requests/{requestId}/invitations" : {
+      "post" : {
+        "tags" : [ "maintenance-management-controller" ],
+        "summary" : "Invite up to five verified fixers of the specialty to quote the request",
+        "operationId" : "invite",
+        "parameters" : [ {
+          "name" : "requestId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/InvitationRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Not the manager or owner of the property",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "The repair request does not exist",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "The request no longer accepts invitations",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/jobs/{jobId}/start" : {
       "post" : {
         "tags" : [ "job-controller" ],
-        "summary" : "Close a finished job",
-        "description" : "Releases from escrow the amount the owner committed when accepting the quotation. Only the assigned fixer can close his own job.",
-        "operationId" : "complete",
+        "summary" : "Mark the job as in progress",
+        "operationId" : "start",
         "parameters" : [ {
           "name" : "jobId",
           "in" : "path",
@@ -1575,6 +2718,259 @@
             "format" : "uuid"
           }
         } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/NoteRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "400" : {
+            "description" : "Invalid identifier or unexpected client fields",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Inactive account, unverified fixer or job assigned to someone else",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "The job does not exist",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "The transition does not apply to the current state of the job",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/jobs/{jobId}/schedule" : {
+      "post" : {
+        "tags" : [ "job-controller" ],
+        "summary" : "Set or move the date agreed with the client",
+        "operationId" : "schedule",
+        "parameters" : [ {
+          "name" : "jobId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ScheduleRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "400" : {
+            "description" : "Invalid identifier or unexpected client fields",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Inactive account, unverified fixer or job assigned to someone else",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "The job does not exist",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "The transition does not apply to the current state of the job",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/jobs/{jobId}/evidence" : {
+      "post" : {
+        "tags" : [ "job-controller" ],
+        "summary" : "Attach before, during or after photos to the job",
+        "operationId" : "evidence",
+        "parameters" : [ {
+          "name" : "jobId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/EvidenceRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "400" : {
+            "description" : "Invalid identifier or unexpected client fields",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Inactive account, unverified fixer or job assigned to someone else",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "The job does not exist",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "The transition does not apply to the current state of the job",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/jobs/{jobId}/complete" : {
+      "post" : {
+        "tags" : [ "job-controller" ],
+        "summary" : "Close a finished job",
+        "description" : "Closes the request, records the work in the property's history and releases from escrow the amount the owner paid. Only the assigned fixer can close his own job.",
+        "operationId" : "complete_1",
+        "parameters" : [ {
+          "name" : "jobId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/NoteRequest"
+              }
+            }
+          }
+        },
         "responses" : {
           "400" : {
             "description" : "Invalid identifier or unexpected client fields",
@@ -1627,7 +3023,7 @@
             }
           },
           "200" : {
-            "description" : "The job is completed and the earning released",
+            "description" : "The job is completed",
             "content" : {
               "application/json" : {
                 "schema" : {
@@ -2436,11 +3832,144 @@
         } ]
       }
     },
+    "/visits/{visitId}" : {
+      "get" : {
+        "tags" : [ "visit-controller" ],
+        "summary" : "Read one visit",
+        "operationId" : "one",
+        "parameters" : [ {
+          "name" : "visitId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "responses" : {
+          "400" : {
+            "description" : "Missing field or unexpected client fields",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Not a party to the request or the visit",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "The visit does not exist",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "Invalid date, busy fixer or transition not allowed",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/visits/me" : {
+      "get" : {
+        "tags" : [ "visit-controller" ],
+        "summary" : "Visits where the current user takes part, latest first",
+        "operationId" : "mine",
+        "responses" : {
+          "400" : {
+            "description" : "Missing field or unexpected client fields",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Not a party to the request or the visit",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "The visit does not exist",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "Invalid date, busy fixer or transition not allowed",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
     "/requests/{requestId}" : {
       "get" : {
         "tags" : [ "repair-request-controller" ],
         "summary" : "Read one repair request",
-        "description" : "The owner always reads it; a verified compatible fixer reads it while open, or afterwards only when the work was assigned to him.",
+        "description" : "The people related to the property always read it; a verified compatible fixer reads it while open, or afterwards only when the work was assigned to him.",
         "operationId" : "detail",
         "parameters" : [ {
           "name" : "requestId",
@@ -2518,11 +4047,86 @@
         } ]
       }
     },
+    "/requests/reportable-properties" : {
+      "get" : {
+        "tags" : [ "repair-request-controller" ],
+        "summary" : "Properties the current tenant rents with an active lease (FR-UC-08)",
+        "operationId" : "reportableProperties",
+        "responses" : {
+          "400" : {
+            "description" : "Invalid specialty, missing field or unexpected client fields",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Inactive account, missing role or request not visible to the caller",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "The repair request does not exist",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "The transition does not apply to the current state of the request",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/ReportablePropertyResponse"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
     "/requests/open" : {
       "get" : {
         "tags" : [ "repair-request-controller" ],
         "summary" : "List the open requests offered to fixers",
-        "description" : "FR-UC-18: the fixer's inbox. Requires active, verified FIXER and filters by fixer specialties.",
+        "description" : "FR-UC-18: the fixer's inbox. Requires active, verified FIXER and filters by fixer specialties and city. Requests a manager invited the fixer to (FR-UC-11) come first, from any city.",
         "operationId" : "open_1",
         "responses" : {
           "400" : {
@@ -2576,7 +4180,7 @@
             }
           },
           "200" : {
-            "description" : "Open requests matching fixer specialties, newest first",
+            "description" : "Open requests matching fixer specialties",
             "content" : {
               "application/json" : {
                 "schema" : {
@@ -2597,8 +4201,8 @@
     "/requests/me" : {
       "get" : {
         "tags" : [ "repair-request-controller" ],
-        "summary" : "List the repair requests opened by the current user",
-        "operationId" : "mine",
+        "summary" : "List the repair requests of the properties the user owns, rents or manages",
+        "operationId" : "mine_1",
         "responses" : {
           "400" : {
             "description" : "Invalid specialty, missing field or unexpected client fields",
@@ -2651,7 +4255,7 @@
             }
           },
           "200" : {
-            "description" : "Requests owned by the current user, newest first",
+            "description" : "Requests related to the current user, newest first",
             "content" : {
               "application/json" : {
                 "schema" : {
@@ -2755,7 +4359,7 @@
       "get" : {
         "tags" : [ "remodeling-controller" ],
         "summary" : "List remodeling projects owned by the current owner",
-        "operationId" : "mine_1",
+        "operationId" : "mine_2",
         "responses" : {
           "400" : {
             "description" : "Invalid project or requirement data",
@@ -2826,11 +4430,122 @@
         } ]
       }
     },
+    "/ratings/jobs/{jobId}" : {
+      "get" : {
+        "tags" : [ "rating-controller" ],
+        "summary" : "The rating of a job, if it was already rated",
+        "operationId" : "forJob",
+        "parameters" : [ {
+          "name" : "jobId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "responses" : {
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Not the client of the job",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "Job not completed or already rated",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/ratings/fixers/{fixerUserId}" : {
+      "get" : {
+        "tags" : [ "rating-controller" ],
+        "summary" : "Public reviews of a fixer with the score distribution",
+        "operationId" : "forFixer",
+        "parameters" : [ {
+          "name" : "fixerUserId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        }, {
+          "name" : "limit",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "default" : 20
+          }
+        } ],
+        "responses" : {
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Not the client of the job",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "Job not completed or already rated",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
     "/quotations/me" : {
       "get" : {
         "tags" : [ "quotation-controller" ],
         "summary" : "List the quotations sent by the current fixer",
-        "operationId" : "mine_2",
+        "operationId" : "mine_3",
         "responses" : {
           "400" : {
             "description" : "Invalid amount, invalid estimate or unexpected client fields",
@@ -2906,7 +4621,7 @@
         "tags" : [ "quotation-controller" ],
         "summary" : "Compare the quotations received for a repair request",
         "description" : "Only the owner of the request reads them, cheapest offer first.",
-        "operationId" : "forRequest",
+        "operationId" : "forRequest_1",
         "parameters" : [ {
           "name" : "requestId",
           "in" : "path",
@@ -2986,10 +4701,11 @@
         } ]
       }
     },
-    "/properties/{propertyId}" : {
+    "/properties/{propertyId}/listing" : {
       "get" : {
         "tags" : [ "property-controller" ],
-        "operationId" : "get_1",
+        "summary" : "Public listing with photos, Fix&Rent seal and work history (FR-UC-02, FR-UC-07)",
+        "operationId" : "listing",
         "parameters" : [ {
           "name" : "propertyId",
           "in" : "path",
@@ -3005,7 +4721,7 @@
             "content" : {
               "*/*" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/PropertySummary"
+                  "$ref" : "#/components/schemas/PublicListingView"
                 }
               }
             }
@@ -3135,6 +4851,143 @@
         }
       }
     },
+    "/properties/managers" : {
+      "get" : {
+        "tags" : [ "property-controller" ],
+        "summary" : "Active real estate managers an owner can delegate to (FR-UC-11)",
+        "operationId" : "managers",
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/ManagerOption"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/properties/catalog" : {
+      "get" : {
+        "tags" : [ "property-controller" ],
+        "summary" : "Browse published properties with filters (FR-UC-06, FR-UC-07)",
+        "operationId" : "catalog",
+        "parameters" : [ {
+          "name" : "city",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "listingType",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "$ref" : "#/components/schemas/ListingType"
+          }
+        }, {
+          "name" : "propertyType",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "$ref" : "#/components/schemas/PropertyType"
+          }
+        }, {
+          "name" : "minPrice",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        }, {
+          "name" : "maxPrice",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        }, {
+          "name" : "minBedrooms",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        }, {
+          "name" : "stratum",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        }, {
+          "name" : "sealOnly",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "boolean",
+            "default" : false
+          }
+        }, {
+          "name" : "q",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "sort",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "default" : "NEWEST",
+            "enum" : [ "NEWEST", "PRICE_ASC", "PRICE_DESC", "AREA_DESC" ]
+          }
+        }, {
+          "name" : "page",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "default" : 0
+          }
+        }, {
+          "name" : "size",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "default" : 12
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/CatalogPage"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/payments/me/earnings" : {
       "get" : {
         "tags" : [ "payment-controller" ],
@@ -3208,12 +5061,145 @@
         } ]
       }
     },
+    "/payments/charges/me" : {
+      "get" : {
+        "tags" : [ "payment-controller" ],
+        "summary" : "Charges the current owner or manager must pay or already paid (FR-UC-05)",
+        "operationId" : "myCharges",
+        "responses" : {
+          "400" : {
+            "description" : "Unexpected client fields",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Inactive account or missing FIXER role",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "The account has no payment record",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "There is no available balance to transfer",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/payments/charges/for-request/{requestId}" : {
+      "get" : {
+        "tags" : [ "payment-controller" ],
+        "summary" : "The charge of a repair request, for the payer, the fixer or a platform admin",
+        "operationId" : "chargeForRequest",
+        "parameters" : [ {
+          "name" : "requestId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "responses" : {
+          "400" : {
+            "description" : "Unexpected client fields",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Inactive account or missing FIXER role",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "The account has no payment record",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "There is no available balance to transfer",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
     "/notifications/me" : {
       "get" : {
         "tags" : [ "notifications-controller" ],
         "summary" : "List notifications for the current user",
         "description" : "Returns a paginated list of the current user's notifications, newest first. Optionally filtered by type and/or unread-only status.",
-        "operationId" : "mine_3",
+        "operationId" : "mine_4",
         "parameters" : [ {
           "name" : "page",
           "in" : "query",
@@ -3508,6 +5494,99 @@
         } ]
       }
     },
+    "/management/requests" : {
+      "get" : {
+        "tags" : [ "maintenance-management-controller" ],
+        "summary" : "Requests of every property the current manager administers, newest first",
+        "operationId" : "board",
+        "responses" : {
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Not the manager or owner of the property",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "The repair request does not exist",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "The request no longer accepts invitations",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/management/requests/{requestId}/candidates" : {
+      "get" : {
+        "tags" : [ "maintenance-candidates-controller" ],
+        "summary" : "Suggested fixers ranked by city, availability (open jobs) and rating",
+        "operationId" : "candidates",
+        "parameters" : [ {
+          "name" : "requestId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "responses" : {
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Not the owner or manager of the property",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
     "/locations/geocode" : {
       "get" : {
         "tags" : [ "location-controller" ],
@@ -3618,11 +5697,82 @@
         } ]
       }
     },
+    "/jobs/{jobId}" : {
+      "get" : {
+        "tags" : [ "job-controller" ],
+        "summary" : "Read a job with its log and evidence photos (FR-UC-19)",
+        "operationId" : "detail_2",
+        "parameters" : [ {
+          "name" : "jobId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "responses" : {
+          "400" : {
+            "description" : "Invalid identifier or unexpected client fields",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Inactive account, unverified fixer or job assigned to someone else",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "The job does not exist",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "The transition does not apply to the current state of the job",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
     "/jobs/me" : {
       "get" : {
         "tags" : [ "job-controller" ],
         "summary" : "List the jobs assigned to the current fixer",
-        "operationId" : "mine_4",
+        "operationId" : "mine_5",
         "responses" : {
           "400" : {
             "description" : "Invalid identifier or unexpected client fields",
@@ -3683,6 +5833,77 @@
                   "items" : {
                     "$ref" : "#/components/schemas/JobResponse"
                   }
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/jobs/for-request/{requestId}" : {
+      "get" : {
+        "tags" : [ "job-controller" ],
+        "summary" : "Read the job opened for a repair request (FR-UC-19)",
+        "operationId" : "forRequest_2",
+        "parameters" : [ {
+          "name" : "requestId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "responses" : {
+          "400" : {
+            "description" : "Invalid identifier or unexpected client fields",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Inactive account, unverified fixer or job assigned to someone else",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "The job does not exist",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "The transition does not apply to the current state of the job",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -3765,6 +5986,79 @@
         } ]
       }
     },
+    "/fixers/{fixerUserId}/profile" : {
+      "get" : {
+        "tags" : [ "fixer-profile-controller" ],
+        "summary" : "Public profile of one fixer: specialties, city, experience and rating",
+        "operationId" : "profile",
+        "parameters" : [ {
+          "name" : "fixerUserId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "responses" : {
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Inactive account or profile not visible to the caller",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/fixers/verification/pending" : {
+      "get" : {
+        "tags" : [ "fixer-profile-controller" ],
+        "summary" : "Review queue: fixers who submitted documents and await a decision (FR-UC-16)",
+        "operationId" : "pending",
+        "responses" : {
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Inactive account or profile not visible to the caller",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
     "/fixers/me/verification" : {
       "get" : {
         "tags" : [ "fixer-verification-controller" ],
@@ -3817,6 +6111,53 @@
               "application/json" : {
                 "schema" : {
                   "$ref" : "#/components/schemas/VerificationResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/fixers/directory" : {
+      "get" : {
+        "tags" : [ "fixer-profile-controller" ],
+        "summary" : "Verified fixers, best rated first, optionally by specialty and city",
+        "operationId" : "directory",
+        "parameters" : [ {
+          "name" : "specialty",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "$ref" : "#/components/schemas/Specialty"
+          }
+        }, {
+          "name" : "city",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Inactive account or profile not visible to the caller",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -4014,6 +6355,161 @@
         } ]
       }
     },
+    "/analytics/expenses" : {
+      "get" : {
+        "tags" : [ "expense-report-controller" ],
+        "summary" : "Paid repair expenses by property, month and specialty, against the previous period",
+        "operationId" : "report",
+        "parameters" : [ {
+          "name" : "from",
+          "in" : "query",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "date"
+          }
+        }, {
+          "name" : "to",
+          "in" : "query",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "date"
+          }
+        }, {
+          "name" : "propertyId",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "responses" : {
+          "400" : {
+            "description" : "Invalid period",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Only owners, real estate managers and platform admins",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ExpenseReport"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/analytics/expenses/csv" : {
+      "get" : {
+        "tags" : [ "expense-report-controller" ],
+        "summary" : "Download the expense detail of the period as CSV",
+        "operationId" : "csv",
+        "parameters" : [ {
+          "name" : "from",
+          "in" : "query",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "date"
+          }
+        }, {
+          "name" : "to",
+          "in" : "query",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "date"
+          }
+        }, {
+          "name" : "propertyId",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "responses" : {
+          "400" : {
+            "description" : "Invalid period",
+            "content" : {
+              "text/csv" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "text/csv" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Only owners, real estate managers and platform admins",
+            "content" : {
+              "text/csv" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "text/csv" : {
+                "schema" : {
+                  "type" : "string",
+                  "format" : "byte"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
     "/administration/sla-board/requests" : {
       "get" : {
         "tags" : [ "sla-board-controller" ],
@@ -4171,6 +6667,218 @@
           }
         }
       },
+      "ListingType" : {
+        "type" : "string",
+        "enum" : [ "RENT", "SALE" ]
+      },
+      "PropertyChanges" : {
+        "type" : "object",
+        "properties" : {
+          "name" : {
+            "type" : "string",
+            "maxLength" : 255,
+            "minLength" : 0
+          },
+          "address" : {
+            "type" : "string",
+            "maxLength" : 255,
+            "minLength" : 0
+          },
+          "city" : {
+            "type" : "string",
+            "maxLength" : 255,
+            "minLength" : 0
+          },
+          "areaM2" : {
+            "type" : "number"
+          },
+          "latitude" : {
+            "type" : "number",
+            "maximum" : 90.0,
+            "minimum" : -90.0
+          },
+          "longitude" : {
+            "type" : "number",
+            "maximum" : 180.0,
+            "minimum" : -180.0
+          },
+          "listingType" : {
+            "$ref" : "#/components/schemas/ListingType"
+          },
+          "propertyType" : {
+            "$ref" : "#/components/schemas/PropertyType"
+          },
+          "price" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "adminFee" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "bedrooms" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "bathrooms" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "parkingSpots" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "stratum" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "neighborhood" : {
+            "type" : "string",
+            "maxLength" : 120,
+            "minLength" : 0
+          },
+          "description" : {
+            "type" : "string",
+            "maxLength" : 4000,
+            "minLength" : 0
+          },
+          "photoMediaIds" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string",
+              "format" : "uuid"
+            },
+            "maxItems" : 12,
+            "minItems" : 0
+          }
+        },
+        "required" : [ "address", "areaM2", "city", "name" ]
+      },
+      "PropertyType" : {
+        "type" : "string",
+        "enum" : [ "APARTMENT", "HOUSE", "STUDIO", "OFFICE", "COMMERCIAL", "COUNTRY_HOUSE" ]
+      },
+      "PropertySummary" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "name" : {
+            "type" : "string"
+          },
+          "address" : {
+            "type" : "string"
+          },
+          "city" : {
+            "type" : "string"
+          },
+          "areaM2" : {
+            "type" : "number"
+          },
+          "status" : {
+            "type" : "string",
+            "enum" : [ "DRAFT", "PUBLISHED", "ARCHIVED" ]
+          },
+          "publishedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "ownerUserId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "managerUserId" : {
+            "type" : [ "string", "null" ],
+            "format" : "uuid"
+          },
+          "latitude" : {
+            "type" : [ "number", "null" ]
+          },
+          "longitude" : {
+            "type" : [ "number", "null" ]
+          },
+          "listingType" : {
+            "type" : [ "string", "null" ],
+            "$ref" : "#/components/schemas/ListingType"
+          },
+          "propertyType" : {
+            "type" : [ "string", "null" ],
+            "$ref" : "#/components/schemas/PropertyType"
+          },
+          "price" : {
+            "type" : [ "integer", "null" ],
+            "format" : "int64"
+          },
+          "adminFee" : {
+            "type" : [ "integer", "null" ],
+            "format" : "int64"
+          },
+          "bedrooms" : {
+            "type" : [ "integer", "null" ],
+            "format" : "int32"
+          },
+          "bathrooms" : {
+            "type" : [ "integer", "null" ],
+            "format" : "int32"
+          },
+          "parkingSpots" : {
+            "type" : [ "integer", "null" ],
+            "format" : "int32"
+          },
+          "stratum" : {
+            "type" : [ "integer", "null" ],
+            "format" : "int32"
+          },
+          "neighborhood" : {
+            "type" : [ "string", "null" ]
+          },
+          "description" : {
+            "type" : [ "string", "null" ]
+          },
+          "photoMediaIds" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string",
+              "format" : "uuid"
+            }
+          }
+        },
+        "required" : [ "address", "areaM2", "city", "id", "name", "photoMediaIds", "status" ]
+      },
+      "ManagerAssignment" : {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "managerUserId" : {
+            "type" : [ "string", "null" ],
+            "format" : "uuid"
+          }
+        }
+      },
+      "PresentationRequest" : {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "city" : {
+            "type" : "string",
+            "maxLength" : 100,
+            "minLength" : 0
+          },
+          "bio" : {
+            "type" : "string",
+            "maxLength" : 600,
+            "minLength" : 0
+          },
+          "yearsExperience" : {
+            "type" : "integer",
+            "format" : "int32",
+            "maximum" : 70,
+            "minimum" : 0
+          }
+        }
+      },
       "UpdateContractRequest" : {
         "type" : "object",
         "properties" : {
@@ -4267,12 +6975,239 @@
           "updatedAt" : {
             "type" : "string",
             "format" : "date-time"
+          },
+          "propertyName" : {
+            "type" : "string"
+          },
+          "propertyAddress" : {
+            "type" : "string"
+          },
+          "propertyCity" : {
+            "type" : "string"
+          },
+          "ownerName" : {
+            "type" : "string"
+          },
+          "tenantName" : {
+            "type" : "string"
           }
         }
       },
       "ContractStatus" : {
         "type" : "string",
         "enum" : [ "DRAFT", "ACTIVE", "EXPIRED", "TERMINATED", "RENEWED" ]
+      },
+      "ProposeRequest" : {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "requestId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "fixerUserId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "kind" : {
+            "$ref" : "#/components/schemas/VisitKind"
+          },
+          "scheduledAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "durationMinutes" : {
+            "type" : "integer",
+            "format" : "int32",
+            "maximum" : 240,
+            "minimum" : 30
+          },
+          "notes" : {
+            "type" : "string",
+            "maxLength" : 1000,
+            "minLength" : 0
+          }
+        },
+        "required" : [ "kind", "requestId", "scheduledAt" ]
+      },
+      "VisitKind" : {
+        "type" : "string",
+        "enum" : [ "DIAGNOSTIC", "EXECUTION", "KITCHEN_ASSESSMENT" ]
+      },
+      "ChecklistItemResponse" : {
+        "type" : "object",
+        "properties" : {
+          "position" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "label" : {
+            "type" : "string"
+          },
+          "result" : {
+            "type" : [ "string", "null" ],
+            "$ref" : "#/components/schemas/ChecklistResult"
+          },
+          "note" : {
+            "type" : [ "string", "null" ]
+          }
+        },
+        "required" : [ "label", "position" ]
+      },
+      "ChecklistResult" : {
+        "type" : "string",
+        "enum" : [ "OK", "NEEDS_WORK", "NOT_APPLICABLE" ]
+      },
+      "VisitResponse" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "requestId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "propertyId" : {
+            "type" : [ "string", "null" ],
+            "format" : "uuid"
+          },
+          "fixerUserId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "fixerName" : {
+            "type" : [ "string", "null" ]
+          },
+          "ownerUserId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "ownerName" : {
+            "type" : [ "string", "null" ]
+          },
+          "proposedByUserId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "proposedByName" : {
+            "type" : [ "string", "null" ]
+          },
+          "kind" : {
+            "$ref" : "#/components/schemas/VisitKind"
+          },
+          "status" : {
+            "$ref" : "#/components/schemas/VisitStatus"
+          },
+          "scheduledAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "durationMinutes" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "address" : {
+            "type" : [ "string", "null" ]
+          },
+          "notes" : {
+            "type" : [ "string", "null" ]
+          },
+          "cancelReason" : {
+            "type" : [ "string", "null" ]
+          },
+          "outcome" : {
+            "type" : [ "string", "null" ]
+          },
+          "checklist" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/ChecklistItemResponse"
+            }
+          },
+          "completedAt" : {
+            "type" : [ "string", "null" ],
+            "format" : "date-time"
+          },
+          "createdAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          }
+        },
+        "required" : [ "checklist", "createdAt", "durationMinutes", "fixerUserId", "id", "kind", "ownerUserId", "proposedByUserId", "requestId", "scheduledAt", "status" ]
+      },
+      "VisitStatus" : {
+        "type" : "string",
+        "enum" : [ "PROPOSED", "CONFIRMED", "COMPLETED", "CANCELLED", "NO_SHOW" ]
+      },
+      "RescheduleRequest" : {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "scheduledAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "durationMinutes" : {
+            "type" : "integer",
+            "format" : "int32",
+            "maximum" : 240,
+            "minimum" : 30
+          }
+        },
+        "required" : [ "scheduledAt" ]
+      },
+      "ChecklistAnswer" : {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "position" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "result" : {
+            "$ref" : "#/components/schemas/ChecklistResult"
+          },
+          "note" : {
+            "type" : "string",
+            "maxLength" : 500,
+            "minLength" : 0
+          }
+        },
+        "required" : [ "position", "result" ]
+      },
+      "CompleteRequest" : {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "outcome" : {
+            "type" : "string",
+            "maxLength" : 2000,
+            "minLength" : 0
+          },
+          "checklist" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/ChecklistAnswer"
+            },
+            "maxItems" : 20,
+            "minItems" : 0
+          }
+        },
+        "required" : [ "outcome" ]
+      },
+      "CancelRequest" : {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "reason" : {
+            "type" : "string",
+            "maxLength" : 500,
+            "minLength" : 0
+          }
+        },
+        "required" : [ "reason" ]
       },
       "OpenRequest" : {
         "type" : "object",
@@ -4375,9 +7310,50 @@
           "slaDeadline" : {
             "type" : [ "string", "null" ],
             "format" : "date-time"
+          },
+          "slaState" : {
+            "$ref" : "#/components/schemas/SlaState"
+          },
+          "ownerUserId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "ownerName" : {
+            "type" : [ "string", "null" ]
+          },
+          "requestedByUserId" : {
+            "type" : [ "string", "null" ],
+            "format" : "uuid"
+          },
+          "requestedByName" : {
+            "type" : [ "string", "null" ]
+          },
+          "managerUserId" : {
+            "type" : [ "string", "null" ],
+            "format" : "uuid"
+          },
+          "assignedFixerName" : {
+            "type" : [ "string", "null" ]
+          },
+          "propertyName" : {
+            "type" : [ "string", "null" ]
+          },
+          "propertyAddress" : {
+            "type" : [ "string", "null" ]
+          },
+          "propertyCity" : {
+            "type" : [ "string", "null" ]
+          },
+          "completedAt" : {
+            "type" : [ "string", "null" ],
+            "format" : "date-time"
           }
         },
-        "required" : [ "createdAt", "description", "photos", "requestId", "specialty", "status", "title", "urgencyLevel" ]
+        "required" : [ "createdAt", "description", "ownerUserId", "photos", "requestId", "slaState", "specialty", "status", "title", "urgencyLevel" ]
+      },
+      "SlaState" : {
+        "type" : "string",
+        "enum" : [ "NONE", "ON_TRACK", "WARNING", "BREACHED" ]
       },
       "Specialty" : {
         "type" : "string",
@@ -4451,9 +7427,24 @@
               "$ref" : "#/components/schemas/RequirementRequest"
             },
             "minItems" : 1
+          },
+          "goal" : {
+            "$ref" : "#/components/schemas/RemodelingGoal"
+          },
+          "targetRent" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "targetReadyDate" : {
+            "type" : "string",
+            "format" : "date"
           }
         },
         "required" : [ "propertyId", "requirements", "title" ]
+      },
+      "RemodelingGoal" : {
+        "type" : "string",
+        "enum" : [ "IMPROVEMENT", "PRE_RENTAL" ]
       },
       "RequirementRequest" : {
         "type" : "object",
@@ -4486,7 +7477,7 @@
       },
       "JobStatus" : {
         "type" : "string",
-        "enum" : [ "ASSIGNED", "IN_PROGRESS", "SLA_AT_RISK", "COMPLETED" ]
+        "enum" : [ "ASSIGNED", "SCHEDULED", "IN_PROGRESS", "SLA_AT_RISK", "COMPLETED" ]
       },
       "ProjectResponse" : {
         "type" : "object",
@@ -4537,6 +7528,24 @@
           "updatedAt" : {
             "type" : "string",
             "format" : "date-time"
+          },
+          "goal" : {
+            "$ref" : "#/components/schemas/RemodelingGoal"
+          },
+          "targetRent" : {
+            "type" : [ "integer", "null" ],
+            "format" : "int64"
+          },
+          "targetReadyDate" : {
+            "type" : [ "string", "null" ],
+            "format" : "date"
+          },
+          "listingPublishedAt" : {
+            "type" : [ "string", "null" ],
+            "format" : "date-time"
+          },
+          "readyToPublish" : {
+            "type" : "boolean"
           }
         },
         "required" : [ "assignedCount", "completedCount", "createdAt", "id", "ownerUserId", "propertyId", "requirementCount", "requirements", "status", "title", "updatedAt" ]
@@ -4580,6 +7589,90 @@
           }
         },
         "required" : [ "position", "requestId", "requestStatus", "requirementId", "specialty" ]
+      },
+      "RateRequest" : {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "jobId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "score" : {
+            "type" : "integer",
+            "format" : "int32",
+            "maximum" : 5,
+            "minimum" : 1
+          },
+          "punctuality" : {
+            "type" : "integer",
+            "format" : "int32",
+            "maximum" : 5,
+            "minimum" : 1
+          },
+          "quality" : {
+            "type" : "integer",
+            "format" : "int32",
+            "maximum" : 5,
+            "minimum" : 1
+          },
+          "cleanliness" : {
+            "type" : "integer",
+            "format" : "int32",
+            "maximum" : 5,
+            "minimum" : 1
+          },
+          "comment" : {
+            "type" : "string",
+            "maxLength" : 1000,
+            "minLength" : 0
+          }
+        },
+        "required" : [ "jobId", "score" ]
+      },
+      "RatingResponse" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "jobId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "fixerUserId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "score" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "punctuality" : {
+            "type" : [ "integer", "null" ],
+            "format" : "int32"
+          },
+          "quality" : {
+            "type" : [ "integer", "null" ],
+            "format" : "int32"
+          },
+          "cleanliness" : {
+            "type" : [ "integer", "null" ],
+            "format" : "int32"
+          },
+          "comment" : {
+            "type" : [ "string", "null" ]
+          },
+          "raterName" : {
+            "type" : [ "string", "null" ]
+          },
+          "createdAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          }
+        },
+        "required" : [ "createdAt", "fixerUserId", "id", "jobId", "score" ]
       },
       "QuotationRequest" : {
         "type" : "object",
@@ -4641,6 +7734,22 @@
           "createdAt" : {
             "type" : "string",
             "format" : "date-time"
+          },
+          "fixerName" : {
+            "type" : [ "string", "null" ]
+          },
+          "fixerRatingAverage" : {
+            "type" : [ "number", "null" ]
+          },
+          "fixerRatingCount" : {
+            "type" : [ "integer", "null" ],
+            "format" : "int32"
+          },
+          "fixerCity" : {
+            "type" : [ "string", "null" ]
+          },
+          "requestTitle" : {
+            "type" : [ "string", "null" ]
           }
         },
         "required" : [ "amount", "createdAt", "estimatedDays", "fixerUserId", "id", "requestId", "status" ]
@@ -4673,38 +7782,61 @@
             "type" : "number",
             "maximum" : 180.0,
             "minimum" : -180.0
+          },
+          "listingType" : {
+            "$ref" : "#/components/schemas/ListingType"
+          },
+          "propertyType" : {
+            "$ref" : "#/components/schemas/PropertyType"
+          },
+          "price" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "adminFee" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "bedrooms" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "bathrooms" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "parkingSpots" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "stratum" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "neighborhood" : {
+            "type" : "string",
+            "maxLength" : 120,
+            "minLength" : 0
+          },
+          "description" : {
+            "type" : "string",
+            "maxLength" : 4000,
+            "minLength" : 0
+          },
+          "photoMediaIds" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string",
+              "format" : "uuid"
+            },
+            "maxItems" : 12,
+            "minItems" : 0
+          },
+          "publish" : {
+            "type" : "boolean"
           }
         },
         "required" : [ "latitude", "longitude" ]
-      },
-      "PropertySummary" : {
-        "type" : "object",
-        "properties" : {
-          "id" : {
-            "type" : "string",
-            "format" : "uuid"
-          },
-          "name" : {
-            "type" : "string"
-          },
-          "address" : {
-            "type" : "string"
-          },
-          "city" : {
-            "type" : "string"
-          },
-          "areaM2" : {
-            "type" : "number"
-          },
-          "status" : {
-            "type" : "string",
-            "enum" : [ "DRAFT", "PUBLISHED", "ARCHIVED" ]
-          },
-          "publishedAt" : {
-            "type" : "string",
-            "format" : "date-time"
-          }
-        }
       },
       "BulkValidationError" : {
         "type" : "object",
@@ -4798,6 +7930,34 @@
         "type" : "string",
         "enum" : [ "REQUESTED" ]
       },
+      "PayRequest" : {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "reference" : {
+            "type" : "string",
+            "maxLength" : 32,
+            "minLength" : 0
+          },
+          "amount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "method" : {
+            "$ref" : "#/components/schemas/PaymentMethod"
+          },
+          "scenario" : {
+            "type" : "string",
+            "maxLength" : 20,
+            "minLength" : 0
+          }
+        },
+        "required" : [ "amount", "method", "reference" ]
+      },
+      "PaymentMethod" : {
+        "type" : "string",
+        "enum" : [ "SANDBOX_CARD", "SANDBOX_PSE", "SANDBOX_NEQUI" ]
+      },
       "DeviceTokenRequest" : {
         "type" : "object",
         "additionalProperties" : false,
@@ -4826,7 +7986,7 @@
       },
       "MediaPurpose" : {
         "type" : "string",
-        "enum" : [ "FIXER_PORTFOLIO", "REPAIR_REQUEST", "FIXER_VERIFICATION" ]
+        "enum" : [ "FIXER_PORTFOLIO", "REPAIR_REQUEST", "FIXER_VERIFICATION", "PROPERTY_PHOTO", "JOB_EVIDENCE" ]
       },
       "UploadRequestDto" : {
         "type" : "object",
@@ -4961,6 +8121,79 @@
         },
         "required" : [ "id", "mediaId", "position", "readUrl", "readUrlExpiresAt", "title", "visibility" ]
       },
+      "InvitationRequest" : {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "fixerUserIds" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string",
+              "format" : "uuid"
+            },
+            "maxItems" : 5,
+            "minItems" : 0
+          },
+          "note" : {
+            "type" : "string",
+            "maxLength" : 500,
+            "minLength" : 0
+          }
+        },
+        "required" : [ "fixerUserIds" ]
+      },
+      "NoteRequest" : {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "note" : {
+            "type" : "string",
+            "maxLength" : 1000,
+            "minLength" : 0
+          }
+        }
+      },
+      "ScheduleRequest" : {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "scheduledFor" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "note" : {
+            "type" : "string",
+            "maxLength" : 1000,
+            "minLength" : 0
+          }
+        },
+        "required" : [ "scheduledFor" ]
+      },
+      "EvidenceRequest" : {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "mediaIds" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string",
+              "format" : "uuid"
+            },
+            "maxItems" : 8,
+            "minItems" : 0
+          },
+          "stage" : {
+            "type" : "string",
+            "enum" : [ "BEFORE", "DURING", "AFTER" ]
+          },
+          "caption" : {
+            "type" : "string",
+            "maxLength" : 200,
+            "minLength" : 0
+          }
+        },
+        "required" : [ "mediaIds", "stage" ]
+      },
       "JobResponse" : {
         "type" : "object",
         "properties" : {
@@ -4990,6 +8223,35 @@
           "completedAt" : {
             "type" : [ "string", "null" ],
             "format" : "date-time"
+          },
+          "scheduledFor" : {
+            "type" : [ "string", "null" ],
+            "format" : "date-time"
+          },
+          "startedAt" : {
+            "type" : [ "string", "null" ],
+            "format" : "date-time"
+          },
+          "progressNote" : {
+            "type" : [ "string", "null" ]
+          },
+          "requestTitle" : {
+            "type" : [ "string", "null" ]
+          },
+          "specialty" : {
+            "type" : [ "string", "null" ]
+          },
+          "propertyName" : {
+            "type" : [ "string", "null" ]
+          },
+          "propertyAddress" : {
+            "type" : [ "string", "null" ]
+          },
+          "propertyCity" : {
+            "type" : [ "string", "null" ]
+          },
+          "ownerName" : {
+            "type" : [ "string", "null" ]
           }
         },
         "required" : [ "createdAt", "id", "ownerUserId", "quotationId", "requestId", "status" ]
@@ -5265,10 +8527,6 @@
         },
         "required" : [ "requestId", "slaDeadline", "slaState", "status", "urgencyLevel" ]
       },
-      "SlaState" : {
-        "type" : "string",
-        "enum" : [ "NONE", "ON_TRACK", "WARNING", "BREACHED" ]
-      },
       "NotificationResponse" : {
         "type" : "object",
         "properties" : {
@@ -5317,7 +8575,26 @@
       },
       "NotificationType" : {
         "type" : "string",
-        "enum" : [ "REQUEST_CREATED_URGENT", "REQUEST_SLA_WARNING", "REQUEST_SLA_BREACHED", "QUOTATION_RECEIVED", "QUOTATION_ACCEPTED", "JOB_ASSIGNED", "PROPERTY_PUBLISHED", "PROPERTY_BULK_FINISHED", "CONTRACT_CREATED", "CONTRACT_EXPIRING_30D", "CONTRACT_EXPIRING_7D", "CONTRACT_EXPIRED", "CHAT_MESSAGE_RECEIVED" ]
+        "enum" : [ "REQUEST_CREATED_URGENT", "REQUEST_REPORTED", "REQUEST_SLA_WARNING", "REQUEST_SLA_BREACHED", "REQUEST_INVITATION", "QUOTATION_RECEIVED", "QUOTATION_ACCEPTED", "QUOTATION_REJECTED", "JOB_ASSIGNED", "JOB_STATUS_CHANGED", "JOB_COMPLETED", "VISIT_PROPOSED", "VISIT_CONFIRMED", "VISIT_RESCHEDULED", "VISIT_CANCELLED", "VISIT_REMINDER", "PAYMENT_APPROVED", "PAYMENT_DECLINED", "RATING_RECEIVED", "FIXER_VERIFICATION_DECIDED", "PROPERTY_PUBLISHED", "PROPERTY_BULK_FINISHED", "REMODELING_READY_TO_RENT", "CONTRACT_CREATED", "CONTRACT_EXPIRING_30D", "CONTRACT_EXPIRING_7D", "CONTRACT_EXPIRED", "CHAT_MESSAGE_RECEIVED" ]
+      },
+      "ReportablePropertyResponse" : {
+        "type" : "object",
+        "properties" : {
+          "propertyId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "name" : {
+            "type" : "string"
+          },
+          "address" : {
+            "type" : "string"
+          },
+          "city" : {
+            "type" : "string"
+          }
+        },
+        "required" : [ "address", "city", "name", "propertyId" ]
       },
       "OpenRequestSummaryResponse" : {
         "type" : "object",
@@ -5335,9 +8612,22 @@
           "createdAt" : {
             "type" : "string",
             "format" : "date-time"
+          },
+          "propertyCity" : {
+            "type" : [ "string", "null" ]
+          },
+          "urgencyLevel" : {
+            "$ref" : "#/components/schemas/UrgencyLevel"
+          },
+          "slaDeadline" : {
+            "type" : [ "string", "null" ],
+            "format" : "date-time"
+          },
+          "invited" : {
+            "type" : "boolean"
           }
         },
-        "required" : [ "createdAt", "requestId", "specialty", "title" ]
+        "required" : [ "createdAt", "invited", "requestId", "specialty", "title", "urgencyLevel" ]
       },
       "ProjectSummaryResponse" : {
         "type" : "object",
@@ -5371,9 +8661,180 @@
           "createdAt" : {
             "type" : "string",
             "format" : "date-time"
+          },
+          "goal" : {
+            "$ref" : "#/components/schemas/RemodelingGoal"
+          },
+          "targetRent" : {
+            "type" : [ "integer", "null" ],
+            "format" : "int64"
+          },
+          "listingPublishedAt" : {
+            "type" : [ "string", "null" ],
+            "format" : "date-time"
           }
         },
         "required" : [ "assignedCount", "completedCount", "createdAt", "id", "progressStatus", "propertyId", "requirementCount", "title" ]
+      },
+      "Photo" : {
+        "type" : "object",
+        "properties" : {
+          "mediaId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "url" : {
+            "type" : "string"
+          }
+        },
+        "required" : [ "mediaId", "url" ]
+      },
+      "PublicListingView" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "name" : {
+            "type" : "string"
+          },
+          "address" : {
+            "type" : "string"
+          },
+          "city" : {
+            "type" : "string"
+          },
+          "neighborhood" : {
+            "type" : [ "string", "null" ]
+          },
+          "areaM2" : {
+            "type" : "number"
+          },
+          "status" : {
+            "type" : "string",
+            "enum" : [ "DRAFT", "PUBLISHED", "ARCHIVED" ]
+          },
+          "listingType" : {
+            "type" : [ "string", "null" ],
+            "$ref" : "#/components/schemas/ListingType"
+          },
+          "propertyType" : {
+            "type" : [ "string", "null" ],
+            "$ref" : "#/components/schemas/PropertyType"
+          },
+          "price" : {
+            "type" : [ "integer", "null" ],
+            "format" : "int64"
+          },
+          "adminFee" : {
+            "type" : [ "integer", "null" ],
+            "format" : "int64"
+          },
+          "bedrooms" : {
+            "type" : [ "integer", "null" ],
+            "format" : "int32"
+          },
+          "bathrooms" : {
+            "type" : [ "integer", "null" ],
+            "format" : "int32"
+          },
+          "parkingSpots" : {
+            "type" : [ "integer", "null" ],
+            "format" : "int32"
+          },
+          "stratum" : {
+            "type" : [ "integer", "null" ],
+            "format" : "int32"
+          },
+          "description" : {
+            "type" : [ "string", "null" ]
+          },
+          "latitude" : {
+            "type" : [ "number", "null" ]
+          },
+          "longitude" : {
+            "type" : [ "number", "null" ]
+          },
+          "publishedAt" : {
+            "type" : [ "string", "null" ],
+            "format" : "date-time"
+          },
+          "ownerDisplayName" : {
+            "type" : [ "string", "null" ]
+          },
+          "photos" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/Photo"
+            }
+          },
+          "seal" : {
+            "$ref" : "#/components/schemas/Seal"
+          },
+          "workHistory" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/Work"
+            }
+          },
+          "ownedByCurrentUser" : {
+            "type" : "boolean"
+          }
+        },
+        "required" : [ "address", "areaM2", "city", "id", "name", "ownedByCurrentUser", "photos", "seal", "status", "workHistory" ]
+      },
+      "Seal" : {
+        "type" : "object",
+        "properties" : {
+          "granted" : {
+            "type" : "boolean"
+          },
+          "recentCompletedWorks" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "averageRating" : {
+            "type" : [ "number", "null" ],
+            "format" : "double"
+          },
+          "lastWorkAt" : {
+            "type" : [ "string", "null" ],
+            "format" : "date-time"
+          }
+        },
+        "required" : [ "granted", "recentCompletedWorks" ]
+      },
+      "Work" : {
+        "type" : "object",
+        "properties" : {
+          "jobId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "specialty" : {
+            "type" : "string"
+          },
+          "title" : {
+            "type" : "string"
+          },
+          "fixerUserId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "fixerDisplayName" : {
+            "type" : [ "string", "null" ]
+          },
+          "completedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "rating" : {
+            "type" : [ "integer", "null" ],
+            "format" : "int32"
+          }
+        },
+        "required" : [ "completedAt", "fixerUserId", "jobId", "specialty", "title" ]
       },
       "PropertySearchResult" : {
         "type" : "object",
@@ -5406,9 +8867,160 @@
           },
           "ownedByCurrentUser" : {
             "type" : "boolean"
+          },
+          "neighborhood" : {
+            "type" : [ "string", "null" ]
+          },
+          "listingType" : {
+            "type" : [ "string", "null" ],
+            "$ref" : "#/components/schemas/ListingType"
+          },
+          "propertyType" : {
+            "type" : [ "string", "null" ],
+            "$ref" : "#/components/schemas/PropertyType"
+          },
+          "price" : {
+            "type" : [ "integer", "null" ],
+            "format" : "int64"
+          },
+          "bedrooms" : {
+            "type" : [ "integer", "null" ],
+            "format" : "int32"
+          },
+          "bathrooms" : {
+            "type" : [ "integer", "null" ],
+            "format" : "int32"
+          },
+          "coverPhotoUrl" : {
+            "type" : [ "string", "null" ]
+          },
+          "seal" : {
+            "type" : "boolean"
           }
         },
-        "required" : [ "address", "areaM2", "city", "distanceKm", "id", "latitude", "longitude", "name", "ownedByCurrentUser" ]
+        "required" : [ "address", "areaM2", "city", "distanceKm", "id", "latitude", "longitude", "name", "ownedByCurrentUser", "seal" ]
+      },
+      "ManagerOption" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "displayName" : {
+            "type" : "string"
+          }
+        },
+        "required" : [ "displayName", "id" ]
+      },
+      "CatalogItem" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "name" : {
+            "type" : "string"
+          },
+          "city" : {
+            "type" : "string"
+          },
+          "neighborhood" : {
+            "type" : [ "string", "null" ]
+          },
+          "listingType" : {
+            "type" : [ "string", "null" ],
+            "$ref" : "#/components/schemas/ListingType"
+          },
+          "propertyType" : {
+            "type" : [ "string", "null" ],
+            "$ref" : "#/components/schemas/PropertyType"
+          },
+          "price" : {
+            "type" : [ "integer", "null" ],
+            "format" : "int64"
+          },
+          "adminFee" : {
+            "type" : [ "integer", "null" ],
+            "format" : "int64"
+          },
+          "bedrooms" : {
+            "type" : [ "integer", "null" ],
+            "format" : "int32"
+          },
+          "bathrooms" : {
+            "type" : [ "integer", "null" ],
+            "format" : "int32"
+          },
+          "areaM2" : {
+            "type" : "number"
+          },
+          "stratum" : {
+            "type" : [ "integer", "null" ],
+            "format" : "int32"
+          },
+          "latitude" : {
+            "type" : [ "number", "null" ]
+          },
+          "longitude" : {
+            "type" : [ "number", "null" ]
+          },
+          "coverPhotoUrl" : {
+            "type" : [ "string", "null" ]
+          },
+          "photoCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "seal" : {
+            "type" : "boolean"
+          },
+          "completedWorks" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "averageRating" : {
+            "type" : [ "number", "null" ],
+            "format" : "double"
+          },
+          "ownedByCurrentUser" : {
+            "type" : "boolean"
+          },
+          "publishedAt" : {
+            "type" : [ "string", "null" ],
+            "format" : "date-time"
+          }
+        },
+        "required" : [ "areaM2", "city", "completedWorks", "id", "name", "ownedByCurrentUser", "photoCount", "seal" ]
+      },
+      "CatalogPage" : {
+        "type" : "object",
+        "properties" : {
+          "items" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/CatalogItem"
+            }
+          },
+          "page" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "size" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "totalItems" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "totalPages" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        },
+        "required" : [ "items", "page", "size", "totalItems", "totalPages" ]
       },
       "EarningResponse" : {
         "type" : "object",
@@ -5449,6 +9061,14 @@
             "format" : "date-time"
           },
           "paidOutAt" : {
+            "type" : [ "string", "null" ],
+            "format" : "date-time"
+          },
+          "fundedAt" : {
+            "type" : [ "string", "null" ],
+            "format" : "date-time"
+          },
+          "jobCompletedAt" : {
             "type" : [ "string", "null" ],
             "format" : "date-time"
           }
@@ -5684,6 +9304,137 @@
           }
         },
         "required" : [ "averageDaysOnMarket", "degraded", "freshness", "observedAt", "pricePerSquareMeter", "source", "synthetic", "yearOverYearVariationPercent", "zone" ]
+      },
+      "ExpenseReport" : {
+        "type" : "object",
+        "properties" : {
+          "from" : {
+            "type" : "string",
+            "format" : "date"
+          },
+          "to" : {
+            "type" : "string",
+            "format" : "date"
+          },
+          "total" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "count" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "previousPeriodTotal" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "previousPeriodCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "byProperty" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/PropertyTotal"
+            }
+          },
+          "byMonth" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/MonthTotal"
+            }
+          },
+          "bySpecialty" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/SpecialtyTotal"
+            }
+          },
+          "lines" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/Line"
+            }
+          }
+        }
+      },
+      "Line" : {
+        "type" : "object",
+        "properties" : {
+          "chargeId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "propertyId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "propertyName" : {
+            "type" : "string"
+          },
+          "requestId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "specialty" : {
+            "type" : "string"
+          },
+          "concept" : {
+            "type" : "string"
+          },
+          "amount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "paidAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          }
+        }
+      },
+      "MonthTotal" : {
+        "type" : "object",
+        "properties" : {
+          "month" : {
+            "type" : "string"
+          },
+          "total" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        }
+      },
+      "PropertyTotal" : {
+        "type" : "object",
+        "properties" : {
+          "propertyId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "propertyName" : {
+            "type" : "string"
+          },
+          "total" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "count" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        }
+      },
+      "SpecialtyTotal" : {
+        "type" : "object",
+        "properties" : {
+          "specialty" : {
+            "type" : "string"
+          },
+          "total" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        }
       },
       "Pageable" : {
         "type" : "object",
