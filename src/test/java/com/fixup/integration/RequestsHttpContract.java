@@ -139,7 +139,8 @@ abstract class RequestsHttpContract {
     }
 
     @Test
-    void tenantCannotCreateRequest() throws Exception {
+    void tenantWithoutAnActiveLeaseCannotCreateRequest() throws Exception {
+        // FR-UC-08: a tenant reports failures only on the property they rent; any other property is 404.
         provisionWithRole("auth0|tenant-1", "TENANT");
         String body = """
                 {"propertyId":"%s","title":"Fuga","description":"Gotera","mediaIds":[]}
@@ -147,11 +148,12 @@ abstract class RequestsHttpContract {
 
         mvc.perform(post("/requests").with(identity("auth0|tenant-1"))
                 .contentType(MediaType.APPLICATION_JSON).content(body))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isNotFound());
     }
 
     @Test
-    void realEstateManagerCannotCreateRequest() throws Exception {
+    void realEstateManagerCannotCreateRequestForAPropertyTheyDoNotManage() throws Exception {
+        // FR-UC-11: a manager opens requests only on delegated properties; any other property is 404.
         provisionWithRole("auth0|rem-1", "REAL_ESTATE_MANAGER");
         String body = """
                 {"propertyId":"%s","title":"Fuga","description":"Gotera","mediaIds":[]}
@@ -159,7 +161,7 @@ abstract class RequestsHttpContract {
 
         mvc.perform(post("/requests").with(identity("auth0|rem-1"))
                 .contentType(MediaType.APPLICATION_JSON).content(body))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isNotFound());
     }
 
     @Test
