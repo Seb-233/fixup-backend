@@ -58,7 +58,7 @@ class OpenApiContractTest {
                 "/notifications/me", "/notifications/{id}/read", "/notifications/read-all",
                 "/notifications/me/unread-count", "/notifications/device-token",
                 "/contracts", "/contracts/me", "/contracts/{id}", "/contracts/{id}/renew",
-                "/contracts/{id}/terminate", "/contracts/expiring",
+                "/contracts/{id}/terminate", "/contracts/expiring", "/contracts/tenant-lookup",
                 "/administration/sla-board/requests", "/administration/sla-board/requests/{id}/reassign",
                 "/administration/sla-board/requests/{id}/acknowledge",
                 "/properties/{propertyId}/publish", "/properties/{propertyId}/unpublish",

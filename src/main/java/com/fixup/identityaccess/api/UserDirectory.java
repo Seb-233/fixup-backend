@@ -3,6 +3,7 @@ package com.fixup.identityaccess.api;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -30,6 +31,13 @@ public interface UserDirectory {
 
     /** Cuentas activas con el rol, ordenadas por nombre. Lo usa, p. ej., quien delega en un administrador. */
     List<UserCard> activeUsersWithRole(Role role);
+
+    /**
+     * Cuenta activa con el rol cuyo correo coincide exactamente (sin distinguir mayúsculas). Sirve
+     * para que quien ya conoce el correo de la contraparte la encuentre sin listar a nadie más; el
+     * correo entra como llave de búsqueda y nunca sale en la respuesta.
+     */
+    Optional<UserCard> activeUserByEmail(String email, Role role);
 
     record UserCard(UUID id, String displayName) {
     }

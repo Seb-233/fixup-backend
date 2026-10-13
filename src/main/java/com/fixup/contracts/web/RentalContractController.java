@@ -10,6 +10,7 @@ import com.fixup.contracts.application.RenewContract;
 import com.fixup.contracts.application.TerminateContract;
 import com.fixup.contracts.application.UpdateContract;
 import com.fixup.contracts.application.UpdateContractRequest;
+import com.fixup.contracts.application.FindTenant;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 import java.time.LocalDate;
@@ -28,12 +29,14 @@ class RentalContractController {
     private final RenewContract renewContract;
     private final TerminateContract terminateContract;
     private final ContractContext context;
+    private final FindTenant findTenant;
 
     RentalContractController(CreateContract createContract, ListMyContracts listMyContracts,
                              GetContract getContract, UpdateContract updateContract,
                              RenewContract renewContract, TerminateContract terminateContract,
-                             ContractContext context) {
+                             ContractContext context, FindTenant findTenant) {
         this.context = context;
+        this.findTenant = findTenant;
         this.createContract = createContract;
         this.listMyContracts = listMyContracts;
         this.getContract = getContract;
@@ -46,6 +49,12 @@ class RentalContractController {
     @ResponseStatus(HttpStatus.CREATED)
     public ContractResponse create(@RequestBody CreateContractRequest request) {
         return context.decorate(createContract.execute(request));
+    }
+
+    // Quien redacta el contrato escribe el correo del arrendatario; solo vuelven su id y su nombre.
+    @GetMapping("/tenant-lookup")
+    public FindTenant.TenantCard tenantLookup(@RequestParam String email) {
+        return findTenant.byEmail(email);
     }
 
     @GetMapping("/me")

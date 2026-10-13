@@ -11,6 +11,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -68,6 +69,19 @@ class UserDirectoryService implements UserDirectory {
                 .map(user -> new UserCard(user.id(), nameOf(user)))
                 .sorted(Comparator.comparing(UserCard::displayName, String.CASE_INSENSITIVE_ORDER))
                 .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<UserCard> activeUserByEmail(String email, Role role) {
+        if (email == null || email.isBlank() || role == null) {
+            return Optional.empty();
+        }
+        var wanted = email.trim();
+        return accounts.findActiveWithRole(role).stream()
+                .filter(user -> user.email() != null && user.email().trim().equalsIgnoreCase(wanted))
+                .findFirst()
+                .map(user -> new UserCard(user.id(), nameOf(user)));
     }
 
     private static String nameOf(UserAccount user) {

@@ -6168,6 +6168,32 @@
         } ]
       }
     },
+    "/contracts/tenant-lookup" : {
+      "get" : {
+        "tags" : [ "rental-contract-controller" ],
+        "operationId" : "tenantLookup",
+        "parameters" : [ {
+          "name" : "email",
+          "in" : "query",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/TenantCard"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/contracts/me" : {
       "get" : {
         "tags" : [ "rental-contract-controller" ],
@@ -9242,6 +9268,18 @@
         },
         "required" : [ "documents", "fixerUserId", "specialties", "status", "underReview" ]
       },
+      "TenantCard" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "displayName" : {
+            "type" : "string"
+          }
+        }
+      },
       "UserResponse" : {
         "type" : "object",
         "properties" : {
@@ -9439,6 +9477,11 @@
       "Pageable" : {
         "type" : "object",
         "properties" : {
+          "page" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 0
+          },
           "size" : {
             "type" : "integer",
             "format" : "int32",
@@ -9449,11 +9492,6 @@
             "items" : {
               "type" : "string"
             }
-          },
-          "page" : {
-            "type" : "integer",
-            "format" : "int32",
-            "minimum" : 0
           }
         }
       },
