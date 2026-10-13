@@ -9,6 +9,7 @@ Marcadores que reemplaza DemoDataSeedRunner al ejecutar el script:
   {{U:owner}} {{U:tenant}} {{U:fixer}} {{U:manager}} {{U:admin}}  -> UUID de las cuentas protagonistas
   {{T:-3600}}  -> TIMESTAMP WITH TIME ZONE de "ahora" más N segundos (negativo = pasado)
   {{D:-30}}    -> DATE de "hoy" más N días
+  {{W:3:540}}  -> TIMESTAMP de "hoy" más N días a esa hora de reloj en Colombia (minutos desde medianoche)
 Así los datos siempre se ven recientes, sin importar cuándo se cargue la base.
 
 Uso: python3 scripts/seed/generar_seed_colombia.py
@@ -48,7 +49,23 @@ class Raw:
         self.sql = sql
 
 
+class BizTime(float):
+    """Un instante relativo que debe caer en una hora de reloj de Colombia (visitas, citas de trabajo).
+
+    Se comporta como segundos relativos a "ahora" para comparar y restar, suponiendo que la carga ocurre
+    hacia el mediodía, pero se escribe como {{W:día:minuto}} para que la hora sea exacta al cargar.
+    """
+
+    def __new__(cls, day, minute):
+        value = super().__new__(cls, day * DAY + minute * 60 - 12 * HOUR)
+        value.day = day
+        value.minute = minute
+        return value
+
+
 def T(seconds):
+    if isinstance(seconds, BizTime):
+        return Raw("{{W:%d:%d}}" % (seconds.day, seconds.minute))
     return Raw("{{T:%d}}" % int(seconds))
 
 
@@ -319,6 +336,9 @@ for index, (city, specs) in enumerate(FIXER_PLAN):
         submitted = -rng.randint(1, 6) * DAY - rng.randint(0, 20) * HOUR
         row.update({"submitted_at": T(submitted), "consent_accepted_at": T(submitted), "consent_version": "2026-09"})
     elif status in ("VERIFIED", "REJECTED") or index in (41, 42, 43):
+        if status == "PENDING":
+            # Siguen en revisión: enviaron hace un par de semanas, no hace meses.
+            submitted = -rng.randint(7, 16) * DAY - rng.randint(0, 20) * HOUR
         row.update({"submitted_at": T(submitted), "consent_accepted_at": T(submitted), "consent_version": "2026-09"})
         if status != "PENDING":
             row.update({"decided_at": T(decided), "decided_by": admins[index % 2]["id"]})
@@ -567,9 +587,8 @@ def tenant_of(prop):
 
 
 def business_time(base):
-    """Rounds a relative time to a working hour (7:00-17:00 Colombia time, UTC-5)."""
-    day = math.floor((base + 5 * HOUR) / DAY)
-    return day * DAY - 5 * HOUR + rng.choice([7, 8, 9, 10, 11, 14, 15, 16]) * HOUR
+    """Lleva un instante relativo al día más cercano y a una hora hábil de Colombia (7:00 a 16:00)."""
+    return BizTime(round(base / DAY), rng.choice([7, 8, 9, 10, 11, 14, 15, 16]) * 60)
 
 
 def create_request(prop, status, created, specialty=None, reporter=None, urgency=None, title_desc=None,
@@ -584,10 +603,17 @@ def create_request(prop, status, created, specialty=None, reporter=None, urgency
     record = {"id": request_id, "property": prop, "owner": owner, "reporter": reporter, "specialty": specialty,
               "title": title, "status": status, "created": created, "manager": prop["manager"]}
     candidates = [f for f in fixers_for(specialty, prop["city"]) if f["id"] != owner["id"]]
-    quoted = []
-    if status != "OPEN" or rng.random() < 0.75:
-        count = rng.choice([1, 2, 2, 3, 3, 4]) if status != "OPEN" else rng.choice([0, 1, 2, 3])
-        quoted = rng.sample(candidates, min(count, len(candidates)))
+    # Una solicitud abierta de menos de 12 horas aún no tiene ofertas; las de las cuentas protagonistas
+    # tienen varias para poder comparar en la demostración.
+    if status != "OPEN":
+        count = rng.choice([1, 2, 2, 3, 3, 4])
+    elif created > -12 * HOUR:
+        count = 0
+    elif owner.get("protagonist") or (prop["manager"] and prop["manager"].get("protagonist")):
+        count = rng.choice([2, 3, 3, 4])
+    else:
+        count = rng.choice([0, 1, 2, 2, 3])
+    quoted = rng.sample(candidates, min(count, len(candidates)))
     if fixer is not None:
         if fixer in quoted:
             quoted.remove(fixer)

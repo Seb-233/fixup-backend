@@ -38,8 +38,9 @@ class DemoSecurityContextTest {
         }
         assertThat(jdbc.queryForObject("SELECT count(*) FROM users WHERE auth0_subject LIKE 'auth0|demo-%'",
                 Integer.class)).isEqualTo(6);
-        assertThat(jdbc.queryForList("SELECT type FROM notifications", String.class))
-                .containsExactlyInAnyOrder("CONTRACT_EXPIRING_30D", "REQUEST_CREATED_URGENT", "PROPERTY_BULK_FINISHED");
+        // El perfil demo carga los datos de Colombia: sus avisos reales reemplazan a los tres de muestra.
+        assertThat(jdbc.queryForList("SELECT DISTINCT type FROM notifications", String.class))
+                .contains("CONTRACT_EXPIRING_30D", "QUOTATION_RECEIVED", "PAYMENT_APPROVED", "JOB_COMPLETED");
         var response = mvc.perform(get("/demo/token/OWNER")).andExpect(status().isOk())
                 .andExpect(jsonPath("$.issuer").value("https://demo.fixup.local/"))
                 .andReturn().getResponse();

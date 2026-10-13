@@ -58,6 +58,7 @@ class DemoDataSeedRunner implements ApplicationRunner {
     private static final Logger log = LoggerFactory.getLogger(DemoDataSeedRunner.class);
     private static final Pattern TIME = Pattern.compile("\\{\\{T:(-?\\d+)\\}\\}");
     private static final Pattern DATE = Pattern.compile("\\{\\{D:(-?\\d+)\\}\\}");
+    private static final Pattern WALL = Pattern.compile("\\{\\{W:(-?\\d+):(\\d+)\\}\\}");
     private static final Pattern USER = Pattern.compile("\\{\\{U:(\\w+)\\}\\}");
     private static final DateTimeFormatter TIMESTAMP = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
             .withZone(ZoneOffset.UTC);
@@ -165,7 +166,14 @@ class DemoDataSeedRunner implements ApplicationRunner {
         var withTimes = replace(TIME, script, match -> "TIMESTAMP WITH TIME ZONE '"
                 + TIMESTAMP.format(now.plusSeconds(Long.parseLong(match.group(1)))) + "+00:00'");
         var withDates = replace(DATE, withTimes, match -> "DATE '" + today.plusDays(Long.parseLong(match.group(1))) + "'");
-        return replace(USER, withDates, match -> {
+        // Visitas y citas: un día relativo a hoy a una hora de reloj de Colombia, para que respeten el horario hábil.
+        var withWallTimes = replace(WALL, withDates, match -> {
+            var minute = Integer.parseInt(match.group(2));
+            var instant = today.plusDays(Long.parseLong(match.group(1))).atTime(minute / 60, minute % 60)
+                    .atZone(COLOMBIA).toInstant();
+            return "TIMESTAMP WITH TIME ZONE '" + TIMESTAMP.format(instant) + "+00:00'";
+        });
+        return replace(USER, withWallTimes, match -> {
             var id = ids.get(match.group(1));
             if (id == null) {
                 throw new IllegalStateException("Unknown seed protagonist: " + match.group(1));
@@ -214,8 +222,10 @@ class DemoDataSeedRunner implements ApplicationRunner {
         return new String(readBytes(path), StandardCharsets.UTF_8);
     }
 
+    // Las fotos se suben en paralelo: los hilos del pool común no heredan el classloader del jar de
+    // Spring Boot, así que el recurso se busca con el de esta clase y no con el del hilo.
     private static byte[] readBytes(String path) {
-        try (InputStream input = new ClassPathResource(path).getInputStream()) {
+        try (InputStream input = new ClassPathResource(path, DemoDataSeedRunner.class.getClassLoader()).getInputStream()) {
             return input.readAllBytes();
         } catch (IOException exception) {
             throw new IllegalStateException("Missing seed resource " + path, exception);

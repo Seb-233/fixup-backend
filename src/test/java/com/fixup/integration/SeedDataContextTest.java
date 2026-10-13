@@ -63,6 +63,22 @@ class SeedDataContextTest {
         assertThat(count("SELECT count(*) FROM rental_contracts c JOIN users u ON u.id = c.tenant_user_id "
                 + "WHERE u.auth0_subject = 'auth0|demo-tenant' AND c.status = 'ACTIVE'")).isEqualTo(1);
 
+        // Visits respect the business rule the app enforces: 7:00 to 19:00 Colombia time, and the open ones are ahead.
+        var bogota = java.time.ZoneId.of("America/Bogota");
+        var visitStarts = jdbc.query("SELECT scheduled_at, duration_minutes FROM technical_visits", (rs, row) ->
+                new java.time.ZonedDateTime[] {
+                    rs.getObject("scheduled_at", java.time.OffsetDateTime.class).atZoneSameInstant(bogota),
+                    rs.getObject("scheduled_at", java.time.OffsetDateTime.class).atZoneSameInstant(bogota)
+                            .plusMinutes(rs.getInt("duration_minutes"))});
+        assertThat(visitStarts).isNotEmpty().allSatisfy(window -> {
+            assertThat(window[0].getHour()).isBetween(7, 18);
+            assertThat(window[1].toLocalTime()).isBeforeOrEqualTo(java.time.LocalTime.of(19, 0));
+        });
+        assertThat(count("SELECT count(*) FROM technical_visits WHERE status IN ('PROPOSED', 'CONFIRMED') "
+                + "AND scheduled_at < CURRENT_TIMESTAMP")).isZero();
+        assertThat(count("SELECT count(*) FROM technical_visits v JOIN repair_requests r ON r.id = v.request_id "
+                + "WHERE v.status IN ('PROPOSED', 'CONFIRMED') AND r.status IN ('COMPLETED', 'CANCELLED')")).isZero();
+
         // Every seeded photo reached the storage.
         var keys = jdbc.queryForList("SELECT object_key FROM media_assets WHERE object_key LIKE 'seed/%'", String.class);
         assertThat(keys).hasSizeGreaterThan(500);
