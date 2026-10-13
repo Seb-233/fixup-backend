@@ -40,6 +40,8 @@ public class IntegrationDatabaseCleaner {
             jdbc.update("DELETE FROM fixer_earnings");
             jdbc.update("DELETE FROM jobs");
             jdbc.update("DELETE FROM quotations");
+            jdbc.update("DELETE FROM remodeling_requirements");
+            jdbc.update("DELETE FROM remodeling_projects");
             jdbc.update("DELETE FROM repair_request_photos");
             jdbc.update("DELETE FROM repair_requests");
             jdbc.update("DELETE FROM media_deletion_jobs");

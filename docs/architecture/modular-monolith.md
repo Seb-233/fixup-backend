@@ -1,7 +1,7 @@
 # Arquitectura del monolito modular
 
 FixUp es una aplicación Spring Boot bajo com.fixup. Cada subpaquete directo constituye
-un módulo cerrado. Se conservan 14 módulos; no hay microservicios ni propagación de JWT
+un módulo cerrado. Se conservan 15 módulos; no hay microservicios ni propagación de JWT
 entre módulos internos.
 
 ## Identidad y permisos
@@ -21,6 +21,7 @@ Ningún rol del frontend o del token sustituye los permisos almacenados.
 | shared | Ningún dato de negocio | Ninguno de negocio |
 | identityaccess | users y user_roles | shared.errors |
 | fixers | fixer_profiles | identityaccess.api y shared.errors |
+| remodelings | remodeling_projects y remodeling_requirements | identityaccess.api, properties.api, requests.api y jobs.api |
 
 identityaccess publica RoleGranted en la transacción. fixers lo consume síncronamente
 para crear un perfil PENDING cuando se concede FIXER. Así mantiene la propiedad de

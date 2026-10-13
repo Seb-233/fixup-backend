@@ -36,6 +36,14 @@ class JpaRepairRequests implements RepairRequests {
     }
 
     @Override
+    public List<RepairRequest> findAllByIds(Collection<UUID> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return List.of();
+        }
+        return repository.findByIdIn(ids).stream().map(RepairRequestEntity::toDomain).toList();
+    }
+
+    @Override
     public Optional<RepairRequest> findByIdForUpdate(UUID id) {
         return repository.findAndLockById(id).map(RepairRequestEntity::toDomain);
     }

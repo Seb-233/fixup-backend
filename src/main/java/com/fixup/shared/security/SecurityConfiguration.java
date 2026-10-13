@@ -93,6 +93,7 @@ class SecurityConfiguration {
                             .requestMatchers("/media/**").authenticated()
                             .requestMatchers("/analytics/**").authenticated()
                             .requestMatchers("/requests/**").authenticated()
+                            .requestMatchers("/remodelings/**").authenticated()
                             .requestMatchers("/quotations/**").authenticated()
                             .requestMatchers("/jobs/**").authenticated()
                             .requestMatchers("/payments/**").authenticated()

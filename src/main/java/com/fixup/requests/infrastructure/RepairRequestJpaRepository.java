@@ -21,6 +21,8 @@ interface RepairRequestJpaRepository extends JpaRepository<RepairRequestEntity, 
     @Query("select request from RepairRequestEntity request where request.id = :id")
     Optional<RepairRequestEntity> findAndLockById(@Param("id") UUID id);
 
+    List<RepairRequestEntity> findByIdIn(Collection<UUID> ids);
+
     List<RepairRequestEntity> findByOwnerUserIdOrderByCreatedAtDesc(UUID ownerUserId);
 
     List<RepairRequestEntity> findByStatusOrderByCreatedAtDesc(RepairRequestStatus status);

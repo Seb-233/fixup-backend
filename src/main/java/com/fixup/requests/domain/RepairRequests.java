@@ -12,6 +12,8 @@ import org.springframework.data.domain.Pageable;
 public interface RepairRequests {
     Optional<RepairRequest> findById(UUID id);
 
+    List<RepairRequest> findAllByIds(Collection<UUID> ids);
+
     /** Reads the request for a decision, holding the row until the transaction ends. */
     Optional<RepairRequest> findByIdForUpdate(UUID id);
 

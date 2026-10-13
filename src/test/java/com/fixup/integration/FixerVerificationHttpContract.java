@@ -293,8 +293,6 @@ abstract class FixerVerificationHttpContract {
     void submittingAMediaAssetWithTheWrongPurposeIsRejected() throws Exception {
         String subject = "auth0|wrong-purpose";
         provisionFixer(subject);
-        String body = "{\"purpose\":\"FIXER_PORTFOLIO\",\"contentType\":\"image/jpeg\",\"sizeBytes\":"
-                + TestStorageConfiguration.JPEG_MAGIC.length + "}";
         // FIXER_PORTFOLIO requires an already-verified fixer, which this one is not yet -> use an
         // admin-inserted portfolio-purpose asset directly to isolate the purpose check itself.
         UUID mediaId = UUID.randomUUID();

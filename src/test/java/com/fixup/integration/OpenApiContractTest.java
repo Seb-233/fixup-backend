@@ -48,6 +48,7 @@ class OpenApiContractTest {
                 "/analytics/zones/{zone}/market-indicators",
                 "/requests", "/requests/me", "/requests/open", "/requests/{requestId}",
                 "/requests/{requestId}/messages",
+                "/remodelings", "/remodelings/me", "/remodelings/{projectId}",
                 "/quotations", "/quotations/me", "/quotations/for-request/{requestId}",
                 "/quotations/{quotationId}/accept", "/quotations/{quotationId}/reject",
                 "/jobs/me", "/jobs/{jobId}/complete",
@@ -113,6 +114,33 @@ class OpenApiContractTest {
                     .as("/analytics/zones/{zone}/market-indicators status " + code).isTrue();
         }
         assertThat(analyticsOp.get("responses").has("402")).isFalse();
+
+        for (var endpoint : new String[][]{
+                {"/remodelings", "post", "201"},
+                {"/remodelings/me", "get", "200"},
+                {"/remodelings/{projectId}", "get", "200"}}) {
+            var operation = paths.get(endpoint[0]).get(endpoint[1]);
+            assertThat(operation.get("security").toString()).contains("bearerAuth");
+            for (String code : new String[]{endpoint[2], "400", "401", "403", "404", "409"}) {
+                assertThat(operation.get("responses").has(code))
+                        .as(endpoint[0] + " status " + code).isTrue();
+            }
+        }
+        assertThat(contract.at("/components/schemas/CreateProjectRequest/properties").toString())
+                .contains("propertyId", "title", "description", "requirements")
+                .doesNotContain("ownerUserId", "status");
+        assertThat(contract.at("/components/schemas/RequirementRequest/properties").toString())
+                .contains("title", "description", "mediaIds", "urgencyLevel")
+                .doesNotContain("requestId", "specialty", "assignedFixerUserId");
+        assertThat(contract.at("/components/schemas/ProjectResponse/properties").toString())
+                .contains("id", "propertyId", "ownerUserId", "status", "requirements",
+                        "requirementCount", "assignedCount", "completedCount");
+        assertThat(contract.at("/components/schemas/RequirementResponse/properties").toString())
+                .contains("requirementId", "requestId", "position", "specialty",
+                        "requestStatus", "assignedFixerUserId", "jobId", "jobStatus");
+        assertThat(contract.at("/components/schemas/RemodelingProgressStatus/enum").toString())
+                .contains("OPEN", "PARTIALLY_ASSIGNED", "FULLY_ASSIGNED",
+                        "PARTIALLY_COMPLETED", "COMPLETED");
 
         var propertySearch = paths.get("/properties/search").get("get");
         assertThat(propertySearch.get("security").toString()).contains("bearerAuth");
