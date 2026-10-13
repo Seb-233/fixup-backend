@@ -192,4 +192,10 @@ public class S3ObjectStorage implements ObjectStorage {
     public void delete(String objectKey) {
         s3Client.deleteObject(DeleteObjectRequest.builder().bucket(bucket).key(objectKey).build());
     }
+
+    @Override
+    public void putObject(String objectKey, String contentType, byte[] bytes) {
+        s3Client.putObject(PutObjectRequest.builder().bucket(bucket).key(objectKey).contentType(contentType)
+                .contentLength((long) bytes.length).build(), software.amazon.awssdk.core.sync.RequestBody.fromBytes(bytes));
+    }
 }
