@@ -127,10 +127,32 @@ jobs:
             --dry-run=client -o yaml | kubectl apply -f -
 
       # ── 6. Apply infrastructure manifests ────────────────────
-      - name: Apply infrastructure
+      - name: Apply PostgreSQL and MinIO
         run: |
           kubectl apply -f k8s/postgres-statefulset.yml
           kubectl apply -f k8s/minio-statefulset.yml
+
+      - name: Wait for MinIO
+        run: |
+          kubectl rollout status statefulset/minio \
+            --namespace=fixup \
+            --timeout=120s
+
+      - name: Bootstrap private MinIO bucket
+        run: |
+          kubectl delete job minio-bootstrap \
+            --namespace=fixup \
+            --ignore-not-found
+          kubectl apply -f k8s/minio-bootstrap-job.yml
+          if ! kubectl wait --for=condition=complete job/minio-bootstrap \
+            --namespace=fixup \
+            --timeout=120s; then
+            kubectl logs job/minio-bootstrap --namespace=fixup || true
+            exit 1
+          fi
+
+      - name: Apply backend networking
+        run: |
           kubectl apply -f k8s/backend-service.yml
           kubectl apply -f k8s/backend-ingress.yml
 
