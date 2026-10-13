@@ -45,11 +45,19 @@ public class Property {
     }
 
     public static Property create(UUID ownerUserId, String name, String address, String city, BigDecimal areaM2) {
-        return create(ownerUserId, name, address, city, areaM2, null, null);
+        Instant now = Instant.now();
+        return new Property(
+            UUID.randomUUID(), ownerUserId, name, address, city, areaM2,
+            null, null,
+            PropertyStatus.PUBLISHED, now, ownerUserId,
+            now, now
+        );
     }
 
     public static Property create(UUID ownerUserId, String name, String address, String city, BigDecimal areaM2,
                                   BigDecimal latitude, BigDecimal longitude) {
+        requireCoordinate(latitude, "latitude", "-90", "90");
+        requireCoordinate(longitude, "longitude", "-180", "180");
         Instant now = Instant.now();
         return new Property(
             UUID.randomUUID(), ownerUserId, name, address, city, areaM2,
@@ -57,6 +65,14 @@ public class Property {
             PropertyStatus.PUBLISHED, now, ownerUserId,
             now, now
         );
+    }
+
+    private static void requireCoordinate(BigDecimal value, String fieldName, String minimum, String maximum) {
+        var min = new BigDecimal(minimum);
+        var max = new BigDecimal(maximum);
+        if (value == null || value.compareTo(min) < 0 || value.compareTo(max) > 0) {
+            throw new IllegalArgumentException(fieldName + " must be between " + minimum + " and " + maximum);
+        }
     }
 
     private String requireNonBlank(String value, String fieldName) {
