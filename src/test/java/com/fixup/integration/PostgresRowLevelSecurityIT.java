@@ -434,10 +434,15 @@ class PostgresRowLevelSecurityIT {
     // ---------- FR-UC-25: properties ----------
 
     private UUID createProperty(UUID ownerId, String name) {
+        return createProperty(ownerId, name, "PUBLISHED");
+    }
+
+    private UUID createProperty(UUID ownerId, String name, String status) {
         UUID id = UUID.randomUUID();
-        jdbc.update("INSERT INTO properties (id, owner_user_id, name, address, city, area_m2, created_at, updated_at) "
-                + "VALUES (?, ?, ?, 'Addr', 'City', 10, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
-                id, ownerId, name);
+        jdbc.update("INSERT INTO properties "
+                        + "(id, owner_user_id, name, address, city, area_m2, status, created_at, updated_at) "
+                        + "VALUES (?, ?, ?, 'Addr', 'City', 10, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
+                id, ownerId, name, status);
         return id;
     }
 
@@ -446,27 +451,32 @@ class PostgresRowLevelSecurityIT {
     }
 
     @Test
-    void ownersSeeOnlyTheirOwnProperties() throws Exception {
+    void ownersAndTenantsSeePublishedCatalogWhileDraftsStayOwnerPrivate() throws Exception {
         UUID ownerA = provisionWithRole("auth0|rls-prop-owner-a", "OWNER");
         UUID ownerB = provisionWithRole("auth0|rls-prop-owner-b", "OWNER");
 
         UUID propA = createProperty(ownerA, "Prop A");
         UUID propB = createProperty(ownerB, "Prop B");
+        UUID draftA = createProperty(ownerA, "Draft A", "DRAFT");
+        UUID draftB = createProperty(ownerB, "Draft B", "DRAFT");
 
-        assertThat(visiblePropertyIds(ownerA, "OWNER")).containsExactly(propA);
-        assertThat(visiblePropertyIds(ownerB, "OWNER")).containsExactly(propB);
+        assertThat(visiblePropertyIds(ownerA, "OWNER"))
+                .containsExactlyInAnyOrder(propA, propB, draftA);
+        assertThat(visiblePropertyIds(ownerB, "OWNER"))
+                .containsExactlyInAnyOrder(propA, propB, draftB);
 
         UUID fixer = provisionVerifiedFixer("auth0|rls-prop-fixer", "PLUMBING");
         assertThat(visiblePropertyIds(fixer, "FIXER")).isEmpty();
 
         UUID tenant = provisionWithRole("auth0|rls-prop-tenant", "TENANT");
-        assertThat(visiblePropertyIds(tenant, "TENANT")).isEmpty();
+        assertThat(visiblePropertyIds(tenant, "TENANT")).containsExactlyInAnyOrder(propA, propB);
 
         UUID manager = provisionWithRole("auth0|rls-prop-manager", "REAL_ESTATE_MANAGER");
         assertThat(visiblePropertyIds(manager, "REAL_ESTATE_MANAGER")).isEmpty();
 
         UUID admin = provisionAdmin("auth0|rls-prop-admin");
-        assertThat(visiblePropertyIds(admin, "PLATFORM_ADMIN")).contains(propA, propB);
+        assertThat(visiblePropertyIds(admin, "PLATFORM_ADMIN"))
+                .containsExactlyInAnyOrder(propA, propB, draftA, draftB);
     }
 
     @Test

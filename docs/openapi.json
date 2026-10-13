@@ -2773,6 +2773,107 @@
         }
       }
     },
+    "/properties/search" : {
+      "get" : {
+        "tags" : [ "property-controller" ],
+        "summary" : "Search published properties by geographic radius",
+        "operationId" : "search",
+        "parameters" : [ {
+          "name" : "latitude",
+          "in" : "query",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "maximum" : 90,
+            "minimum" : -90
+          }
+        }, {
+          "name" : "longitude",
+          "in" : "query",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "maximum" : 180,
+            "minimum" : -180
+          }
+        }, {
+          "name" : "radiusKm",
+          "in" : "query",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "minimum" : 0
+          }
+        }, {
+          "name" : "ownershipScope",
+          "in" : "query",
+          "description" : "Ownership filter. TENANT and PLATFORM_ADMIN may only use ALL",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "default" : "ALL",
+            "enum" : [ "ALL", "MINE", "OTHERS" ]
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "Published properties ordered by distance",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/PropertySearchResult"
+                  }
+                }
+              }
+            }
+          },
+          "400" : {
+            "description" : "Missing, malformed or out-of-range parameter",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/PropertySearchResult"
+                  }
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/PropertySearchResult"
+                  }
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Role or ownership scope is not allowed",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/PropertySearchResult"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
     "/properties/me" : {
       "get" : {
         "tags" : [ "property-controller" ],
@@ -3156,6 +3257,116 @@
                   "type" : "array",
                   "items" : {
                     "$ref" : "#/components/schemas/PieceResponse"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/locations/geocode" : {
+      "get" : {
+        "tags" : [ "location-controller" ],
+        "summary" : "Geocode an address in Colombia",
+        "description" : "Explicit address search backed by a configurable provider. Results require attribution to OpenStreetMap contributors; this endpoint is not autocomplete.",
+        "operationId" : "geocode",
+        "parameters" : [ {
+          "name" : "query",
+          "in" : "query",
+          "description" : "Complete address submitted explicitly; not an autocomplete query",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "maxLength" : 200
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "Zero or more location candidates",
+            "headers" : {
+              "X-Data-Attribution" : {
+                "description" : "Required data attribution",
+                "style" : "simple",
+                "schema" : {
+                  "type" : "string"
+                }
+              }
+            },
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/GeocodingCandidate"
+                  }
+                }
+              }
+            }
+          },
+          "400" : {
+            "description" : "Missing, blank or oversized query",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/GeocodingCandidate"
+                  }
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/GeocodingCandidate"
+                  }
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Role is not allowed to geocode addresses",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/GeocodingCandidate"
+                  }
+                }
+              }
+            }
+          },
+          "429" : {
+            "description" : "External geocoding request rate exceeded",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/GeocodingCandidate"
+                  }
+                }
+              }
+            }
+          },
+          "503" : {
+            "description" : "Geocoding provider is unavailable",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/GeocodingCandidate"
                   }
                 }
               }
@@ -4727,6 +4938,41 @@
         },
         "required" : [ "createdAt", "requestId", "specialty", "title" ]
       },
+      "PropertySearchResult" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "name" : {
+            "type" : "string"
+          },
+          "address" : {
+            "type" : "string"
+          },
+          "city" : {
+            "type" : "string"
+          },
+          "areaM2" : {
+            "type" : "number"
+          },
+          "latitude" : {
+            "type" : "number"
+          },
+          "longitude" : {
+            "type" : "number"
+          },
+          "distanceKm" : {
+            "type" : "number",
+            "format" : "double"
+          },
+          "ownedByCurrentUser" : {
+            "type" : "boolean"
+          }
+        },
+        "required" : [ "address", "areaM2", "city", "distanceKm", "id", "latitude", "longitude", "name", "ownedByCurrentUser" ]
+      },
       "EarningResponse" : {
         "type" : "object",
         "properties" : {
@@ -4858,6 +5104,21 @@
           }
         },
         "required" : [ "fixerUserId", "pieces", "status" ]
+      },
+      "GeocodingCandidate" : {
+        "type" : "object",
+        "properties" : {
+          "displayName" : {
+            "type" : "string"
+          },
+          "latitude" : {
+            "type" : "number"
+          },
+          "longitude" : {
+            "type" : "number"
+          }
+        },
+        "required" : [ "displayName", "latitude", "longitude" ]
       },
       "ReviewDocumentResponse" : {
         "type" : "object",

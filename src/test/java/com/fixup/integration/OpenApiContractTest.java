@@ -52,6 +52,7 @@ class OpenApiContractTest {
                 "/quotations/{quotationId}/accept", "/quotations/{quotationId}/reject",
                 "/jobs/me", "/jobs/{jobId}/complete",
                 "/payments/me/earnings", "/payments/me/payouts", "/properties", "/properties/{propertyId}", "/properties/me",
+                "/properties/search", "/locations/geocode",
                 "/properties/bulk/validate", "/properties/bulk/import",
                 "/notifications/me", "/notifications/{id}/read", "/notifications/read-all",
                 "/notifications/me/unread-count", "/notifications/device-token",
@@ -112,6 +113,58 @@ class OpenApiContractTest {
                     .as("/analytics/zones/{zone}/market-indicators status " + code).isTrue();
         }
         assertThat(analyticsOp.get("responses").has("402")).isFalse();
+
+        var propertySearch = paths.get("/properties/search").get("get");
+        assertThat(propertySearch.get("security").toString()).contains("bearerAuth");
+        for (String code : new String[]{"200", "400", "401", "403"}) {
+            assertThat(propertySearch.get("responses").has(code))
+                    .as("/properties/search status " + code).isTrue();
+        }
+        var searchParameters = propertySearch.get("parameters");
+        assertThat(searchParameters.size()).isEqualTo(4);
+        for (String parameterName : new String[]{"latitude", "longitude", "radiusKm"}) {
+            var parameter = java.util.stream.StreamSupport.stream(searchParameters.spliterator(), false)
+                    .filter(candidate -> parameterName.equals(candidate.get("name").asText()))
+                    .findFirst().orElseThrow();
+            assertThat(parameter.get("required").asBoolean()).as(parameterName + " required").isTrue();
+        }
+        var ownershipScope = java.util.stream.StreamSupport.stream(searchParameters.spliterator(), false)
+                .filter(candidate -> "ownershipScope".equals(candidate.get("name").asText()))
+                .findFirst().orElseThrow();
+        assertThat(ownershipScope.get("required").asBoolean()).isFalse();
+        assertThat(ownershipScope.get("schema").get("default").asText()).isEqualTo("ALL");
+        assertThat(ownershipScope.get("schema").get("enum").toString())
+                .contains("ALL", "MINE", "OTHERS");
+        var searchResponseSchema = propertySearch.get("responses").get("200")
+                .get("content").get("application/json").get("schema");
+        assertThat(searchResponseSchema.get("type").asText()).isEqualTo("array");
+        assertThat(searchResponseSchema.get("items").get("$ref").asText()).contains("PropertySearchResult");
+        assertThat(contract.at("/components/schemas/PropertySearchResult/properties").toString())
+                .contains("id", "name", "address", "city", "areaM2", "latitude", "longitude", "distanceKm",
+                        "ownedByCurrentUser")
+                .doesNotContain("ownerUserId", "publishedByUserId");
+        assertThat(contract.at("/components/schemas/PropertySearchResult/required").toString())
+                .contains("ownedByCurrentUser");
+
+        var geocoding = paths.get("/locations/geocode").get("get");
+        assertThat(geocoding.get("security").toString()).contains("bearerAuth");
+        for (String code : new String[]{"200", "400", "401", "403", "429", "503"}) {
+            assertThat(geocoding.get("responses").has(code))
+                    .as("/locations/geocode status " + code).isTrue();
+        }
+        var geocodingQuery = geocoding.get("parameters").get(0);
+        assertThat(geocodingQuery.get("name").asText()).isEqualTo("query");
+        assertThat(geocodingQuery.get("required").asBoolean()).isTrue();
+        assertThat(geocodingQuery.get("schema").get("maxLength").asInt()).isEqualTo(200);
+        var geocodingResponse = geocoding.get("responses").get("200");
+        assertThat(geocodingResponse.get("headers").has("X-Data-Attribution")).isTrue();
+        assertThat(geocodingResponse.get("content").get("application/json").get("schema")
+                .get("items").get("$ref").asText()).contains("GeocodingCandidate");
+        assertThat(contract.at("/components/schemas/GeocodingCandidate/properties").toString())
+                .contains("displayName", "latitude", "longitude")
+                .doesNotContain("placeId", "osmType", "licence", "boundingbox");
+        assertThat(contract.at("/components/schemas/GeocodingCandidate/required").toString())
+                .contains("displayName", "latitude", "longitude");
 
         for (String piecePath : java.util.List.of(
                 "/media/me/portfolio/pieces/{pieceId}",
