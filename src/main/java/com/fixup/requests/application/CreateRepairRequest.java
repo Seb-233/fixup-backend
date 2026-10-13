@@ -4,6 +4,9 @@ import com.fixup.identityaccess.api.CurrentActor;
 import com.fixup.media.api.MediaAttachmentService;
 import com.fixup.notifications.api.RequestNotifications;
 import com.fixup.requests.api.UrgencyLevel;
+import com.fixup.requests.api.NewProjectRepairRequest;
+import com.fixup.requests.api.ProjectRepairRequestSnapshot;
+import com.fixup.requests.api.RepairRequestCreation;
 import com.fixup.requests.domain.RepairRequest;
 import com.fixup.requests.domain.RepairRequests;
 import com.fixup.properties.api.PropertyDirectory;
@@ -16,7 +19,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-public class CreateRepairRequest {
+public class CreateRepairRequest implements RepairRequestCreation {
     private final RepairRequests requests;
     private final PropertyDirectory propertyDirectory;
     private final RepairSpecialtyClassifier classifier;
@@ -51,5 +54,13 @@ public class CreateRepairRequest {
         }
 
         return RepairRequestSummary.of(request);
+    }
+
+    @Override
+    public ProjectRepairRequestSnapshot open(CurrentActor actor, NewProjectRepairRequest draft) {
+        var summary = execute(actor, new NewRepairRequest(draft.propertyId(), draft.title(),
+                draft.description(), draft.mediaIds(), draft.urgencyLevel()));
+        return new ProjectRepairRequestSnapshot(summary.id(), summary.specialty(), summary.status(),
+                summary.assignedFixerUserId());
     }
 }
