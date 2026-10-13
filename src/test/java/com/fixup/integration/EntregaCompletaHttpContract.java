@@ -351,6 +351,11 @@ abstract class EntregaCompletaHttpContract {
         mvc.perform(post("/jobs/" + jobId + "/start").with(as(fixer)).contentType(MediaType.APPLICATION_JSON)
                 .content("{\"note\":\"Cerré el registro\"}"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("IN_PROGRESS"));
+        // Una visita de ejecución que seguía propuesta se cancela sola cuando el trabajo termina.
+        UUID pendingVisit = UUID.fromString(json(mvc.perform(post("/visits").with(as(fixer))
+                        .contentType(MediaType.APPLICATION_JSON).content("""
+                        {"requestId":"%s","kind":"EXECUTION","scheduledAt":"%s"}""".formatted(requestId, tomorrowAt(15))))
+                .andExpect(status().isCreated())).get("id").asText());
 
         var upload = json(mvc.perform(post("/media/uploads").with(as(fixer)).contentType(MediaType.APPLICATION_JSON)
                 .content("{\"purpose\":\"JOB_EVIDENCE\",\"contentType\":\"image/jpeg\",\"sizeBytes\":6}"))
@@ -369,6 +374,10 @@ abstract class EntregaCompletaHttpContract {
 
         var detail = json(mvc.perform(get("/jobs/" + jobId).with(as(owner))).andExpect(status().isOk()));
         assertThat(detail.at("/job/status").asText()).isEqualTo("COMPLETED");
+        assertThat(detail.at("/job/specialty").asText()).isNotBlank();
+        mvc.perform(get("/visits/" + pendingVisit).with(as(owner)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("CANCELLED"))
+                .andExpect(jsonPath("$.cancelReason").value("El trabajo de esta solicitud ya terminó."));
         assertThat(detail.get("log")).hasSize(4);
         assertThat(detail.get("evidence")).hasSize(1);
         mvc.perform(get("/requests/" + requestId).with(as(owner)))

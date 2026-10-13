@@ -89,6 +89,15 @@ public record Visit(UUID id, UUID requestId, UUID propertyId, UUID ownerUserId, 
                 checklist, now);
     }
 
+    /** Cuando el trabajo de la solicitud termina, una visita que seguía abierta ya no tiene objeto. */
+    public Visit closeBecauseWorkEnded(Instant now) {
+        if (status != VisitStatus.PROPOSED && status != VisitStatus.CONFIRMED) {
+            return this;
+        }
+        return with(VisitStatus.CANCELLED, proposedByUserId, scheduledAt, durationMinutes,
+                "El trabajo de esta solicitud ya terminó.", outcome, null, checklist, now);
+    }
+
     /** El técnico registra el resultado; en la variante cocina, el resultado de cada frente. */
     public Visit complete(UUID actor, String outcomeText, Map<Integer, ChecklistEntry> answers, Instant now) {
         if (!fixerUserId.equals(actor)) {

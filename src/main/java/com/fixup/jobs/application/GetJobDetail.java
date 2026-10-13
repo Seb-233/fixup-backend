@@ -58,7 +58,9 @@ public class GetJobDetail {
         people.add(job.ownerUserId());
         log.forEach(entry -> people.add(entry.changedByUserId()));
         var names = users.displayNames(people);
-        return new JobDetail(JobSummary.of(job), request.title(), request.propertyName(), request.propertyAddress(),
+        return new JobDetail(JobSummary.of(job), request.title(),
+                request.specialty() == null ? null : request.specialty().name(), request.propertyName(),
+                request.propertyAddress(),
                 request.propertyCity(), names.get(job.fixerUserId()), names.get(job.ownerUserId()),
                 evidence.stream().map(item -> new JobDetail.Evidence(item.id(), item.mediaId(), urls.get(item.mediaId()),
                         item.stage(), item.caption(), item.createdAt())).toList(),
@@ -66,7 +68,8 @@ public class GetJobDetail {
                         names.get(entry.changedByUserId()), entry.changedAt())).toList());
     }
 
-    public record JobDetail(JobSummary job, String requestTitle, String propertyName, String propertyAddress,
+    public record JobDetail(JobSummary job, String requestTitle, String specialty, String propertyName,
+            String propertyAddress,
             String propertyCity, String fixerName, String ownerName, List<Evidence> evidence, List<LogEntry> log) {
 
         public record Evidence(UUID id, UUID mediaId, String url, JobEvidence.Stage stage, String caption,

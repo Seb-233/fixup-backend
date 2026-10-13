@@ -175,7 +175,7 @@ class JobController {
 
         static JobDetailResponse of(GetJobDetail.JobDetail detail) {
             return new JobDetailResponse(
-                    JobResponse.of(detail.job(), detail.requestTitle(), null, detail.propertyName(),
+                    JobResponse.of(detail.job(), detail.requestTitle(), detail.specialty(), detail.propertyName(),
                             detail.propertyAddress(), detail.propertyCity(), detail.ownerName()),
                     detail.fixerName(),
                     detail.evidence().stream().map(item -> new EvidenceResponse(item.id(), item.mediaId(), item.url(),
