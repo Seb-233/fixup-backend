@@ -10,9 +10,9 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * FR-UC-20: cerrar el trabajo libera el escrow. El ingreso pasa a disponible dentro de la misma
- * transacción que cierra el trabajo, de modo que no puede quedar un trabajo terminado cuyo dinero
- * siga retenido.
+ * FR-UC-20: cerrar el trabajo libera el escrow si el propietario ya pagó (FR-UC-05). El ingreso
+ * pasa a disponible dentro de la misma transacción que cierra el trabajo; si el pago llega
+ * después, lo libera {@link PayCharge} en la transacción del pago.
  *
  * <p>Solo se intenta liberar un ingreso en estado {@code HELD}: ese es el único estado desde el
  * que la transición a {@code AVAILABLE} es válida. Un ingreso {@code AVAILABLE} o {@code PAID_OUT}
@@ -31,8 +31,10 @@ class ReleaseEarningOnCompletedJob {
     @EventListener
     @Transactional(propagation = Propagation.MANDATORY)
     public void on(JobCompleted event) {
+        var now = Instant.now();
         earnings.findByQuotationForUpdate(event.quotationId())
                 .filter(earning -> earning.status() == EarningStatus.HELD)
-                .ifPresent(earning -> earnings.update(earning.release(Instant.now())));
+                .map(earning -> earning.markJobCompleted(now))
+                .ifPresent(earning -> earnings.update(earning.isReleasable() ? earning.release(now) : earning));
     }
 }

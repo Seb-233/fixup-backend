@@ -1,14 +1,19 @@
 package com.fixup.payments.web;
 
 import com.fixup.identityaccess.api.CurrentActorProvider;
+import com.fixup.payments.api.ChargeStatus;
 import com.fixup.payments.api.EarningStatus;
+import com.fixup.payments.api.PaymentMethod;
 import com.fixup.payments.api.PayoutStatus;
 import com.fixup.payments.application.EarningLine;
 import com.fixup.payments.application.EarningsSummary;
 import com.fixup.payments.application.GetEarningsSummary;
 import com.fixup.payments.application.ListOwnPayouts;
+import com.fixup.payments.application.ListOwnerCharges;
+import com.fixup.payments.application.PayCharge;
 import com.fixup.payments.application.PayoutSummary;
 import com.fixup.payments.application.RequestPayout;
+import com.fixup.payments.domain.OwnerCharge;
 import com.fixup.shared.errors.ErrorResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -17,16 +22,23 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.servlet.http.HttpServletRequest;
-import java.time.Instant;
-import java.util.List;
-import java.util.UUID;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.Size;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import java.time.Instant;
+import java.util.List;
+import java.util.UUID;
 
 /** FR-UC-20: monitoreo de ingresos del técnico. Controllers stay thin and never touch JPA. */
 @RestController
@@ -49,13 +61,64 @@ class PaymentController {
     private final GetEarningsSummary getEarnings;
     private final RequestPayout requestPayout;
     private final ListOwnPayouts listPayouts;
+    private final ListOwnerCharges listCharges;
+    private final PayCharge payCharge;
 
     PaymentController(CurrentActorProvider actors, GetEarningsSummary getEarnings,
-            RequestPayout requestPayout, ListOwnPayouts listPayouts) {
+            RequestPayout requestPayout, ListOwnPayouts listPayouts, ListOwnerCharges listCharges,
+            PayCharge payCharge) {
         this.actors = actors;
         this.getEarnings = getEarnings;
         this.requestPayout = requestPayout;
         this.listPayouts = listPayouts;
+        this.listCharges = listCharges;
+        this.payCharge = payCharge;
+    }
+
+    @GetMapping("/charges/me")
+    @Operation(summary = "Charges the current owner or manager must pay or already paid (FR-UC-05)")
+    List<ChargeResponse> myCharges() {
+        return listCharges.mine(actors.currentActor()).stream().map(ChargeResponse::of).toList();
+    }
+
+    @GetMapping("/charges/for-request/{requestId}")
+    @Operation(summary = "The charge of a repair request, for the payer, the fixer or a platform admin")
+    ChargeResponse chargeForRequest(@PathVariable UUID requestId) {
+        return ChargeResponse.of(listCharges.forRequest(actors.currentActor(), requestId));
+    }
+
+    @PostMapping(value = "/charges/{chargeId}/pay", consumes = MediaType.APPLICATION_JSON_VALUE)
+    @Operation(summary = "Pay a charge in the sandbox gateway (FR-UC-22)",
+            description = "Academic scope: no card, account or phone data is sent or stored. The gateway checks "
+                    + "that the payer, the reference and the amount match the charge. scenario=DECLINE_FUNDS or "
+                    + "DECLINE_BANK simulates a rejection.")
+    ChargeResponse pay(@PathVariable UUID chargeId, @Valid @RequestBody PayRequest body) {
+        return ChargeResponse.of(payCharge.execute(actors.currentActor(), chargeId, body.reference(), body.amount(),
+                body.method(), body.scenario()));
+    }
+
+    @Schema(additionalProperties = Schema.AdditionalPropertiesValue.FALSE)
+    @com.fasterxml.jackson.annotation.JsonIgnoreProperties(ignoreUnknown = false)
+    record PayRequest(@NotBlank @Size(max = 32) String reference, @NotNull @Positive Long amount,
+            @NotNull PaymentMethod method, @Size(max = 20) String scenario) {
+    }
+
+    @Schema(requiredProperties = {"id", "quotationId", "requestId", "amount", "reference", "status", "attempts",
+        "createdAt"})
+    record ChargeResponse(UUID id, UUID quotationId, UUID requestId, @Schema(types = {"string", "null"}) UUID propertyId,
+            UUID fixerUserId, @Schema(types = {"string", "null"}) String specialty,
+            @Schema(types = {"string", "null"}) String concept, long amount, String reference, ChargeStatus status,
+            @Schema(types = {"string", "null"}) PaymentMethod method,
+            @Schema(types = {"string", "null"}) String gatewayTransactionId,
+            @Schema(types = {"string", "null"}) String failureReason, int attempts, Instant createdAt,
+            @Schema(types = {"string", "null"}) Instant approvedAt) {
+
+        static ChargeResponse of(OwnerCharge charge) {
+            return new ChargeResponse(charge.id(), charge.quotationId(), charge.requestId(), charge.propertyId(),
+                    charge.fixerUserId(), charge.specialty(), charge.concept(), charge.amount(), charge.reference(),
+                    charge.status(), charge.method(), charge.gatewayTransactionId(), charge.failureReason(),
+                    charge.attempts(), charge.createdAt(), charge.approvedAt());
+        }
     }
 
     @GetMapping("/me/earnings")
@@ -106,12 +169,15 @@ class PaymentController {
     record EarningResponse(UUID id, UUID quotationId, long grossAmount, long commissionAmount,
             long netAmount, int commissionRateBasisPoints, EarningStatus status, Instant createdAt,
             @Schema(types = {"string", "null"}) Instant releasedAt,
-            @Schema(types = {"string", "null"}) Instant paidOutAt) {
+            @Schema(types = {"string", "null"}) Instant paidOutAt,
+            @Schema(types = {"string", "null"}) Instant fundedAt,
+            @Schema(types = {"string", "null"}) Instant jobCompletedAt) {
 
         static EarningResponse of(EarningLine line) {
             return new EarningResponse(line.id(), line.quotationId(), line.grossAmount(),
                     line.commissionAmount(), line.netAmount(), line.commissionRateBasisPoints(),
-                    line.status(), line.createdAt(), line.releasedAt(), line.paidOutAt());
+                    line.status(), line.createdAt(), line.releasedAt(), line.paidOutAt(), line.fundedAt(),
+                    line.jobCompletedAt());
         }
     }
 

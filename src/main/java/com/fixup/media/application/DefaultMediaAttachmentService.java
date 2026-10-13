@@ -23,6 +23,8 @@ class DefaultMediaAttachmentService implements MediaAttachmentService {
     private static final Duration READ_EXPIRATION = Duration.ofMinutes(15);
     private static final int MAX_PHOTOS = 6;
     private static final int MAX_VERIFICATION_DOCUMENTS = 4;
+    private static final int MAX_PROPERTY_PHOTOS = 12;
+    private static final int MAX_JOB_EVIDENCE = 8;
 
     private final MediaAssets mediaAssets;
     private final ObjectStorage objectStorage;
@@ -42,6 +44,18 @@ class DefaultMediaAttachmentService implements MediaAttachmentService {
     @Transactional
     public void attachFixerVerificationDocuments(UUID ownerUserId, List<UUID> mediaIds) {
         attach(ownerUserId, mediaIds, MediaPurpose.FIXER_VERIFICATION, MAX_VERIFICATION_DOCUMENTS);
+    }
+
+    @Override
+    @Transactional
+    public void attachPropertyPhotos(UUID uploaderUserId, List<UUID> mediaIds) {
+        attach(uploaderUserId, mediaIds, MediaPurpose.PROPERTY_PHOTO, MAX_PROPERTY_PHOTOS);
+    }
+
+    @Override
+    @Transactional
+    public void attachJobEvidence(UUID fixerUserId, List<UUID> mediaIds) {
+        attach(fixerUserId, mediaIds, MediaPurpose.JOB_EVIDENCE, MAX_JOB_EVIDENCE);
     }
 
     private void attach(UUID ownerUserId, List<UUID> mediaIds, MediaPurpose expectedPurpose, int maxCount) {

@@ -40,6 +40,10 @@ class FixerEarningEntity {
     private Instant paidOutAt;
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
+    @Column(name = "funded_at")
+    private Instant fundedAt;
+    @Column(name = "job_completed_at")
+    private Instant jobCompletedAt;
 
     protected FixerEarningEntity() {
     }
@@ -64,11 +68,13 @@ class FixerEarningEntity {
         releasedAt = earning.releasedAt();
         paidOutAt = earning.paidOutAt();
         updatedAt = earning.updatedAt();
+        fundedAt = earning.fundedAt();
+        jobCompletedAt = earning.jobCompletedAt();
     }
 
     FixerEarning toDomain() {
         return new FixerEarning(id, quotationId, fixerUserId, grossAmount, commissionAmount,
                 netAmount, commissionRateBasisPoints, status, createdAt, releasedAt, paidOutAt,
-                updatedAt);
+                updatedAt, fundedAt, jobCompletedAt);
     }
 }

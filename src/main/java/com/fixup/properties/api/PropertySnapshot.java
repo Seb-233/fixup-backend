@@ -11,5 +11,13 @@ public record PropertySnapshot(
     String city,
     BigDecimal areaM2,
     BigDecimal latitude,
-    BigDecimal longitude
-) {}
+    BigDecimal longitude,
+    UUID managerUserId,
+    String neighborhood,
+    PropertyStatus status
+) {
+    /** FR-UC-11: quien decide sobre el inmueble es su propietario o el administrador que lo gestiona. */
+    public boolean isManagedBy(UUID userId) {
+        return userId != null && userId.equals(managerUserId);
+    }
+}

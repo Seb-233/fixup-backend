@@ -55,6 +55,16 @@ class RepairRequestEntity {
     private Instant slaDeadline;
     @Column(name = "last_escalation_notified_at")
     private Instant lastEscalationNotifiedAt;
+    @Column(name = "requested_by_user_id", updatable = false)
+    private UUID requestedByUserId;
+    @Column(name = "manager_user_id")
+    private UUID managerUserId;
+    @Column(name = "property_name", length = 255, updatable = false)
+    private String propertyName;
+    @Column(name = "property_address", length = 255, updatable = false)
+    private String propertyAddress;
+    @Column(name = "completed_at")
+    private Instant completedAt;
 
     @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(name = "repair_request_photos", joinColumns = @JoinColumn(name = "request_id"))
@@ -79,6 +89,10 @@ class RepairRequestEntity {
         entity.urgencyLevel = request.urgencyLevel();
         entity.slaDeadline = request.slaDeadline();
         entity.lastEscalationNotifiedAt = request.lastEscalationNotifiedAt();
+        entity.requestedByUserId = request.requestedByUserId();
+        entity.managerUserId = request.managerUserId();
+        entity.propertyName = request.propertyName();
+        entity.propertyAddress = request.propertyAddress();
         entity.apply(request);
         return entity;
     }
@@ -90,11 +104,13 @@ class RepairRequestEntity {
         urgencyLevel = request.urgencyLevel();
         slaDeadline = request.slaDeadline();
         lastEscalationNotifiedAt = request.lastEscalationNotifiedAt();
+        completedAt = request.completedAt();
     }
 
     RepairRequest toDomain() {
         return new RepairRequest(id, propertyId, propertyCity, ownerUserId, specialty, title, description, List.copyOf(mediaIds),
                 status, assignedFixerUserId, createdAt, updatedAt,
-                urgencyLevel, slaDeadline, lastEscalationNotifiedAt);
+                urgencyLevel, slaDeadline, lastEscalationNotifiedAt,
+                requestedByUserId, managerUserId, propertyName, propertyAddress, completedAt);
     }
 }

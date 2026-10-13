@@ -17,14 +17,14 @@ final class ChatAccess {
     }
 
     /**
-     * The only two people who ever belong in this chat: the request's owner and its assigned fixer.
-     * A PLATFORM_ADMIN can still read the request snapshot (and, under RLS, the messages themselves,
-     * for moderation) but is deliberately never treated as a participant here -- an admin moderates
-     * a conversation, it does not speak inside it.
+     * The people who belong in this chat: the request's owner, the tenant who reported it (FR-UC-08),
+     * the property's real estate manager (FR-UC-11) and the assigned fixer. A PLATFORM_ADMIN can
+     * still read the request snapshot (and, under RLS, the messages themselves, for moderation) but
+     * is deliberately never treated as a participant here -- an admin moderates a conversation, it
+     * does not speak inside it.
      */
     static void requireParticipant(CurrentActor actor, RepairRequestSnapshot request) {
-        var userId = actor.internalUserId();
-        if (!userId.equals(request.ownerUserId()) && !userId.equals(request.assignedFixerUserId())) {
+        if (!request.isParticipant(actor.internalUserId())) {
             throw new ChatAccessDeniedException();
         }
     }

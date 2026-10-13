@@ -57,6 +57,13 @@ public class RequestUploadTicket {
             if (actor.status() != UserStatus.ACTIVE || !actor.hasRole(Role.FIXER)) {
                 throw new MediaException(403, "ACCESS_DENIED", "You do not have permission to perform this action");
             }
+        } else if (request.purpose() == MediaPurpose.PROPERTY_PHOTO) {
+            if (actor.status() != UserStatus.ACTIVE || (!actor.hasRole(Role.OWNER)
+                    && !actor.hasRole(Role.REAL_ESTATE_MANAGER) && !actor.hasRole(Role.PLATFORM_ADMIN))) {
+                throw new MediaException(403, "ACCESS_DENIED", "You do not have permission to perform this action");
+            }
+        } else if (request.purpose() == MediaPurpose.JOB_EVIDENCE) {
+            eligibility.requireVerified(actor);
         } else {
             throw new MediaException(400, "INVALID_PURPOSE", "Unsupported media purpose");
         }
@@ -77,6 +84,8 @@ public class RequestUploadTicket {
             case FIXER_PORTFOLIO -> "portfolio";
             case FIXER_VERIFICATION -> "verification";
             case REPAIR_REQUEST -> "requests";
+            case PROPERTY_PHOTO -> "properties";
+            case JOB_EVIDENCE -> "jobs";
         };
         String objectKey = prefix + "/" + actor.internalUserId() + "/" + mediaId + "." + extension;
 

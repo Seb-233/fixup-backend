@@ -3,16 +3,19 @@ package com.fixup.fixers.application;
 import com.fixup.fixers.api.FixerReview;
 import com.fixup.fixers.api.FixerVerificationConflictException;
 import com.fixup.fixers.api.FixerVerificationDecided;
+import com.fixup.fixers.api.FixerVerificationStatus;
 import com.fixup.fixers.domain.FixerProfile;
 import com.fixup.fixers.domain.FixerProfiles;
 import com.fixup.identityaccess.api.CurrentActor;
-import java.time.Instant;
-import java.util.UUID;
-import java.util.function.BiFunction;
+import com.fixup.notifications.api.NotificationRequested;
+import com.fixup.notifications.api.NotificationType;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import java.time.Instant;
+import java.util.UUID;
+import java.util.function.BiFunction;
 
 /** FR-UC-16: only a PLATFORM_ADMIN still valid in PostgreSQL decides a verification. */
 @Service
@@ -52,5 +55,11 @@ public class ReviewFixerVerification implements FixerReview {
         var decided = decision.apply(profile, Instant.now());
         profiles.update(decided);
         events.publishEvent(new FixerVerificationDecided(fixerUserId, decided.verificationStatus()));
+        boolean approved = decided.verificationStatus() == FixerVerificationStatus.VERIFIED;
+        events.publishEvent(NotificationRequested.of(fixerUserId, NotificationType.FIXER_VERIFICATION_DECIDED,
+                approved ? "Ya eres técnico verificado" : "Tu verificación fue rechazada",
+                approved ? "Desde ahora ves solicitudes de tus especialidades y puedes cotizar."
+                        : "Motivo: " + decided.rejectionReason() + ". Puedes corregir tus documentos y volver a enviarlos.",
+                "/fixers/verification", fixerUserId, "FIXER"));
     }
 }
