@@ -30,29 +30,10 @@ spec:
               mc mb --ignore-existing "fixup/$FIXUP_STORAGE_BUCKET"
               mc anonymous set none "fixup/$FIXUP_STORAGE_BUCKET"
 
-              cat > /tmp/cors.json <<'EOF'
-              [
-                {
-                  "AllowedOrigins": [
-                    "http://localhost:4200",
-                    "http://127.0.0.1:4200",
-                    "capacitor://localhost"
-                  ],
-                  "AllowedMethods": ["GET", "PUT", "HEAD"],
-                  "AllowedHeaders": ["*"],
-                  "ExposeHeaders": ["ETag"],
-                  "MaxAgeSeconds": 3600
-                }
-              ]
-              EOF
-
-              mc cors set "fixup/$FIXUP_STORAGE_BUCKET" /tmp/cors.json
               mc stat "fixup/$FIXUP_STORAGE_BUCKET" >/dev/null
-              mc anonymous get "fixup/$FIXUP_STORAGE_BUCKET" | grep -q "private"
-              mc cors get "fixup/$FIXUP_STORAGE_BUCKET" > /tmp/applied-cors.json
-              for expected in localhost:4200 127.0.0.1:4200 capacitor://localhost '"GET"' '"PUT"' '"HEAD"'; do
-                grep -Fq "$expected" /tmp/applied-cors.json
-              done
+              mc anonymous get "fixup/$FIXUP_STORAGE_BUCKET" | grep -qi "private"
+
+              echo "MinIO bootstrap completed successfully."
           env:
             - name: MINIO_ROOT_USER
               valueFrom:

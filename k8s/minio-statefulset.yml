@@ -60,6 +60,8 @@ spec:
                 secretKeyRef:
                   name: minio-secret
                   key: MINIO_ROOT_PASSWORD
+            - name: MINIO_API_CORS_ALLOW_ORIGIN
+              value: "http://localhost:4200,http://127.0.0.1:4200,capacitor://localhost"
           volumeMounts:
             - name: minio-data
               mountPath: /data

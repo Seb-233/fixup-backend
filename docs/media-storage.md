@@ -48,7 +48,7 @@ El bucket de almacenamiento es **estrictamente privado** y rechaza cualquier acc
 
 ### 3.1 Proveedores y configuración
 - **Desarrollo, pruebas y K3s:** Servicio S3-compatible provisto por MinIO, fijado en `ghcr.io/seb-233/fixup-minio@sha256:a1a8bd4ac40ad7881a245bab97323e18f971e4d4cba2c2007ec1bedd21cbaba2`. Compose, Testcontainers y el StatefulSet usan la misma referencia.
-- **K3s:** El backend accede internamente mediante `FIXUP_STORAGE_ENDPOINT=http://minio:9000`. El Job `minio-bootstrap` crea el bucket configurado, lo mantiene privado y aplica el CORS requerido antes del despliegue del backend.
+- **K3s:** El backend accede internamente mediante `FIXUP_STORAGE_ENDPOINT=http://minio:9000`. El Job `minio-bootstrap` crea el bucket configurado y lo mantiene privado. La edición Community de MinIO usada por FixUp no soporta CORS por bucket; los orígenes permitidos se configuran globalmente en el StatefulSet mediante `MINIO_API_CORS_ALLOW_ORIGIN`.
 - **Credenciales:**
   - En producción, las variables de entorno `FIXUP_STORAGE_ACCESS_KEY` y `FIXUP_STORAGE_SECRET_KEY` son obligatorias (no existen valores predeterminados en `application.yml`).
   - En desarrollo, las credenciales se configuran mediante `.env.example`, `compose.development.yml` y `application-dev.yml`.
