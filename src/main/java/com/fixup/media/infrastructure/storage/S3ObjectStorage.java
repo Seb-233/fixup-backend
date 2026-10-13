@@ -8,7 +8,9 @@ import java.io.UncheckedIOException;
 import java.net.URI;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
+import java.util.stream.Stream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -38,8 +40,12 @@ import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignReques
 public class S3ObjectStorage implements ObjectStorage {
     private static final Logger log = LoggerFactory.getLogger(S3ObjectStorage.class);
 
+    // La app nativa (Capacitor) sube desde estos orígenes además de los del navegador.
+    private static final List<String> NATIVE_ORIGINS = List.of("http://localhost", "capacitor://localhost");
+
     private final String bucket;
     private final boolean autoCreateBucket;
+    private final List<String> uploadOrigins;
     private final S3Client s3Client;
     private final S3Presigner s3Presigner;
 
@@ -51,8 +57,15 @@ public class S3ObjectStorage implements ObjectStorage {
             @Value("${fixup.storage.bucket:fixup-private}") String bucket,
             @Value("${fixup.storage.region:us-east-1}") String region,
             @Value("${fixup.storage.auto-create-bucket:false}") boolean autoCreateBucket) {
+        this(endpoint, publicEndpoint, accessKey, secretKey, bucket, region, autoCreateBucket, List.of("http://localhost:4200"));
+    }
+
+    /** browserOrigins son los mismos orígenes del CORS de la API: el navegador sube directo con URL firmada. */
+    public S3ObjectStorage(String endpoint, String publicEndpoint, String accessKey, String secretKey, String bucket,
+            String region, boolean autoCreateBucket, List<String> browserOrigins) {
         this.bucket = bucket;
         this.autoCreateBucket = autoCreateBucket;
+        this.uploadOrigins = Stream.concat(browserOrigins.stream(), NATIVE_ORIGINS.stream()).distinct().toList();
 
         var credentials = StaticCredentialsProvider.create(AwsBasicCredentials.create(accessKey, secretKey));
         var s3Config = S3Configuration.builder().pathStyleAccessEnabled(true).build();
@@ -91,7 +104,7 @@ public class S3ObjectStorage implements ObjectStorage {
             // Configure CORS on bucket for allowed origins
             CORSRule corsRule = CORSRule.builder()
                     .allowedMethods("PUT", "GET", "HEAD")
-                    .allowedOrigins("http://localhost:4200", "http://localhost", "capacitor://localhost")
+                    .allowedOrigins(uploadOrigins)
                     .allowedHeaders("*")
                     .maxAgeSeconds(3600)
                     .build();
