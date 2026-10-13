@@ -1,6 +1,7 @@
 package com.fixup.jobs.infrastructure;
 
 import jakarta.persistence.LockModeType;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -16,6 +17,8 @@ interface JobJpaRepository extends JpaRepository<JobEntity, UUID> {
     Optional<JobEntity> findAndLockById(@Param("id") UUID id);
 
     List<JobEntity> findByFixerUserIdOrderByCreatedAtDesc(UUID fixerUserId);
+
+    List<JobEntity> findByRequestIdIn(Collection<UUID> requestIds);
 
     boolean existsByQuotationId(UUID quotationId);
 }
