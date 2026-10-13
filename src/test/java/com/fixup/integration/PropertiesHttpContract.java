@@ -16,6 +16,7 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.UUID;
 
 import static org.hamcrest.Matchers.hasSize;
@@ -67,7 +68,9 @@ abstract class PropertiesHttpContract {
               "name": "My Property",
               "address": "123 Main St",
               "city": "Bogota",
-              "areaM2": 150.50
+              "areaM2": 150.50,
+              "latitude": 4.711,
+              "longitude": -74.072
             }
             """;
 
@@ -83,6 +86,10 @@ abstract class PropertiesHttpContract {
 
         // Extract ID
         String idStr = mapper.readTree(response).get("id").asText();
+        Boolean coordinatesPersisted = jdbc.queryForObject(
+                "SELECT latitude = 4.711000 AND longitude = -74.072000 FROM properties WHERE id = ?",
+                Boolean.class, UUID.fromString(idStr));
+        org.assertj.core.api.Assertions.assertThat(coordinatesPersisted).isTrue();
 
         // Read (me)
         mvc.perform(get("/properties/me")
@@ -126,7 +133,9 @@ abstract class PropertiesHttpContract {
               "name": "T Property",
               "address": "123 Main St",
               "city": "Bogota",
-              "areaM2": 150.50
+              "areaM2": 150.50,
+              "latitude": 4.711,
+              "longitude": -74.072
             }
             """;
 
@@ -135,6 +144,81 @@ abstract class PropertiesHttpContract {
                 .content(json)
                 .with(jwt().jwt(j -> j.subject(auth0Id).claim("roles", "TENANT"))))
             .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void rejectsMissingAndOutOfRangeCoordinatesOnCreation() throws Exception {
+        UUID ownerId = UUID.randomUUID();
+        String subject = "auth0|invalid-property-location";
+        seedUser(ownerId, subject);
+
+        for (String coordinates : List.of(
+                "\"longitude\": -74.072",
+                "\"latitude\": 4.711",
+                "\"latitude\": -90.000001, \"longitude\": -74.072",
+                "\"latitude\": 90.000001, \"longitude\": -74.072",
+                "\"latitude\": 4.711, \"longitude\": -180.000001",
+                "\"latitude\": 4.711, \"longitude\": 180.000001",
+                "\"latitude\": \"NaN\", \"longitude\": -74.072")) {
+            String json = """
+                    {
+                      "name": "Invalid location",
+                      "address": "123 Main St",
+                      "city": "Bogota",
+                      "areaM2": 150.50,
+                      %s
+                    }
+                    """.formatted(coordinates);
+
+            mvc.perform(post("/properties")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(json)
+                    .with(jwt().jwt(j -> j.subject(subject))))
+                .andExpect(status().isBadRequest());
+        }
+
+        org.assertj.core.api.Assertions.assertThat(
+                jdbc.queryForObject("SELECT count(*) FROM properties", Integer.class)).isZero();
+    }
+
+    @Test
+    void anotherOwnerFindsAPropertyCreatedThroughThePublishedFlowInAllAndOthers() throws Exception {
+        UUID ownerA = UUID.randomUUID();
+        UUID ownerB = UUID.randomUUID();
+        String ownerASubject = "auth0|published-location-owner-a";
+        String ownerBSubject = "auth0|published-location-owner-b";
+        seedUser(ownerA, ownerASubject);
+        seedUser(ownerB, ownerBSubject);
+
+        String response = mvc.perform(post("/properties")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {
+                          "name": "Cross-owner published property",
+                          "address": "Carrera 7 # 72-41",
+                          "city": "Bogotá",
+                          "areaM2": 85.50,
+                          "latitude": 4.711,
+                          "longitude": -74.072
+                        }
+                        """)
+                .with(jwt().jwt(j -> j.subject(ownerASubject))))
+            .andExpect(status().isCreated())
+            .andReturn().getResponse().getContentAsString();
+        String propertyId = mapper.readTree(response).get("id").asText();
+
+        for (String scope : List.of("ALL", "OTHERS")) {
+            mvc.perform(get("/properties/search")
+                    .queryParam("latitude", "4.711")
+                    .queryParam("longitude", "-74.072")
+                    .queryParam("radiusKm", "1")
+                    .queryParam("ownershipScope", scope)
+                    .with(jwt().jwt(j -> j.subject(ownerBSubject))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(1)))
+                .andExpect(jsonPath("$[0].id").value(propertyId))
+                .andExpect(jsonPath("$[0].ownedByCurrentUser").value(false));
+        }
     }
 
     @Test

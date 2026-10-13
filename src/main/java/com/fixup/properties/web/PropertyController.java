@@ -19,6 +19,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
@@ -53,7 +54,7 @@ class PropertyController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public PropertySummary create(@RequestBody NewProperty command) {
+    public PropertySummary create(@Valid @RequestBody NewProperty command) {
         return createProperty.execute(command);
     }
 
