@@ -329,6 +329,89 @@
         } ]
       }
     },
+    "/remodelings" : {
+      "post" : {
+        "tags" : [ "remodeling-controller" ],
+        "summary" : "Create a multi-professional remodeling project",
+        "description" : "Requires an active OWNER who directly owns the property. Every need opens an ordinary repair request in the same transaction.",
+        "operationId" : "create",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/CreateProjectRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "400" : {
+            "description" : "Invalid project or requirement data",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Inactive account or role not allowed",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "Project or property not visible",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "Project invariant conflict",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "201" : {
+            "description" : "Project and all repair requests created",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ProjectResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
     "/quotations" : {
       "post" : {
         "tags" : [ "quotation-controller" ],
@@ -579,7 +662,7 @@
     "/properties" : {
       "post" : {
         "tags" : [ "property-controller" ],
-        "operationId" : "create",
+        "operationId" : "create_1",
         "requestBody" : {
           "content" : {
             "application/json" : {
@@ -1848,7 +1931,7 @@
     "/contracts" : {
       "post" : {
         "tags" : [ "rental-contract-controller" ],
-        "operationId" : "create_1",
+        "operationId" : "create_2",
         "requestBody" : {
           "content" : {
             "application/json" : {
@@ -2586,11 +2669,168 @@
         } ]
       }
     },
+    "/remodelings/{projectId}" : {
+      "get" : {
+        "tags" : [ "remodeling-controller" ],
+        "summary" : "Read a remodeling project",
+        "description" : "Visible to its owner and, for read-only support, PLATFORM_ADMIN. Fixers continue using the individual request and job APIs.",
+        "operationId" : "detail_1",
+        "parameters" : [ {
+          "name" : "projectId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "responses" : {
+          "400" : {
+            "description" : "Invalid project or requirement data",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Inactive account or role not allowed",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "Project or property not visible",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "Project invariant conflict",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "200" : {
+            "description" : "Project with requirements and derived progress",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ProjectResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/remodelings/me" : {
+      "get" : {
+        "tags" : [ "remodeling-controller" ],
+        "summary" : "List remodeling projects owned by the current owner",
+        "operationId" : "mine_1",
+        "responses" : {
+          "400" : {
+            "description" : "Invalid project or requirement data",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Inactive account or role not allowed",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "Project or property not visible",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "Project invariant conflict",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "200" : {
+            "description" : "Projects newest first with derived progress",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/ProjectSummaryResponse"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
     "/quotations/me" : {
       "get" : {
         "tags" : [ "quotation-controller" ],
         "summary" : "List the quotations sent by the current fixer",
-        "operationId" : "mine_1",
+        "operationId" : "mine_2",
         "responses" : {
           "400" : {
             "description" : "Invalid amount, invalid estimate or unexpected client fields",
@@ -2973,7 +3213,7 @@
         "tags" : [ "notifications-controller" ],
         "summary" : "List notifications for the current user",
         "description" : "Returns a paginated list of the current user's notifications, newest first. Optionally filtered by type and/or unread-only status.",
-        "operationId" : "mine_2",
+        "operationId" : "mine_3",
         "parameters" : [ {
           "name" : "page",
           "in" : "query",
@@ -3382,7 +3622,7 @@
       "get" : {
         "tags" : [ "job-controller" ],
         "summary" : "List the jobs assigned to the current fixer",
-        "operationId" : "mine_3",
+        "operationId" : "mine_4",
         "responses" : {
           "400" : {
             "description" : "Invalid identifier or unexpected client fields",
@@ -4187,6 +4427,160 @@
         "type" : "string",
         "enum" : [ "SENT", "SKIPPED", "FAILED" ]
       },
+      "CreateProjectRequest" : {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "propertyId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "title" : {
+            "type" : "string",
+            "maxLength" : 150,
+            "minLength" : 0
+          },
+          "description" : {
+            "type" : "string",
+            "maxLength" : 2000,
+            "minLength" : 0
+          },
+          "requirements" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/RequirementRequest"
+            },
+            "minItems" : 1
+          }
+        },
+        "required" : [ "propertyId", "requirements", "title" ]
+      },
+      "RequirementRequest" : {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "title" : {
+            "type" : "string",
+            "maxLength" : 150,
+            "minLength" : 0
+          },
+          "description" : {
+            "type" : "string",
+            "maxLength" : 2000,
+            "minLength" : 0
+          },
+          "mediaIds" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string",
+              "format" : "uuid"
+            },
+            "maxItems" : 6,
+            "minItems" : 0
+          },
+          "urgencyLevel" : {
+            "$ref" : "#/components/schemas/UrgencyLevel"
+          }
+        },
+        "required" : [ "description", "title" ]
+      },
+      "JobStatus" : {
+        "type" : "string",
+        "enum" : [ "ASSIGNED", "IN_PROGRESS", "SLA_AT_RISK", "COMPLETED" ]
+      },
+      "ProjectResponse" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "propertyId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "ownerUserId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "title" : {
+            "type" : "string"
+          },
+          "description" : {
+            "type" : [ "string", "null" ]
+          },
+          "status" : {
+            "$ref" : "#/components/schemas/RemodelingProgressStatus"
+          },
+          "requirementCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "assignedCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "completedCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "requirements" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/RequirementResponse"
+            }
+          },
+          "createdAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "updatedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          }
+        },
+        "required" : [ "assignedCount", "completedCount", "createdAt", "id", "ownerUserId", "propertyId", "requirementCount", "requirements", "status", "title", "updatedAt" ]
+      },
+      "RemodelingProgressStatus" : {
+        "type" : "string",
+        "enum" : [ "OPEN", "PARTIALLY_ASSIGNED", "FULLY_ASSIGNED", "PARTIALLY_COMPLETED", "COMPLETED" ]
+      },
+      "RequirementResponse" : {
+        "type" : "object",
+        "properties" : {
+          "requirementId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "requestId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "position" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "specialty" : {
+            "$ref" : "#/components/schemas/Specialty"
+          },
+          "requestStatus" : {
+            "$ref" : "#/components/schemas/RepairRequestStatus"
+          },
+          "assignedFixerUserId" : {
+            "type" : [ "string", "null" ],
+            "format" : "uuid"
+          },
+          "jobId" : {
+            "type" : [ "string", "null" ],
+            "format" : "uuid"
+          },
+          "jobStatus" : {
+            "type" : [ "string", "null" ],
+            "$ref" : "#/components/schemas/JobStatus"
+          }
+        },
+        "required" : [ "position", "requestId", "requestStatus", "requirementId", "specialty" ]
+      },
       "QuotationRequest" : {
         "type" : "object",
         "additionalProperties" : false,
@@ -4589,10 +4983,6 @@
         },
         "required" : [ "createdAt", "id", "ownerUserId", "quotationId", "requestId", "status" ]
       },
-      "JobStatus" : {
-        "type" : "string",
-        "enum" : [ "ASSIGNED", "IN_PROGRESS", "SLA_AT_RISK", "COMPLETED" ]
-      },
       "RejectionRequest" : {
         "type" : "object",
         "additionalProperties" : false,
@@ -4937,6 +5327,42 @@
           }
         },
         "required" : [ "createdAt", "requestId", "specialty", "title" ]
+      },
+      "ProjectSummaryResponse" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "propertyId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "title" : {
+            "type" : "string"
+          },
+          "progressStatus" : {
+            "$ref" : "#/components/schemas/RemodelingProgressStatus"
+          },
+          "requirementCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "assignedCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "completedCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "createdAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          }
+        },
+        "required" : [ "assignedCount", "completedCount", "createdAt", "id", "progressStatus", "propertyId", "requirementCount", "title" ]
       },
       "PropertySearchResult" : {
         "type" : "object",
