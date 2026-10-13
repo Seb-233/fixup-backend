@@ -117,6 +117,7 @@ jobs:
             --from-literal=DATABASE_PASSWORD=${{ secrets.POSTGRES_PASSWORD }} \
             --from-literal=AUTH0_ISSUER_URI=${{ secrets.AUTH0_ISSUER_URI }} \
             --from-literal=AUTH0_AUDIENCE=${{ secrets.AUTH0_AUDIENCE }} \
+            --from-literal=AUTH0_JWK_SET_URI=${{ secrets.AUTH0_ISSUER_URI }}.well-known/jwks.json \
             --from-literal=CORS_ALLOWED_ORIGINS=${{ secrets.CORS_ALLOWED_ORIGINS }} \
             --from-literal=FIXUP_STORAGE_ENDPOINT=http://minio:9000 \
             --from-literal=FIXUP_STORAGE_PUBLIC_ENDPOINT=${{ secrets.FIXUP_STORAGE_PUBLIC_ENDPOINT }} \
@@ -127,10 +128,32 @@ jobs:
             --dry-run=client -o yaml | kubectl apply -f -
 
       # ── 6. Apply infrastructure manifests ────────────────────
-      - name: Apply infrastructure
+      - name: Apply PostgreSQL and MinIO
         run: |
           kubectl apply -f k8s/postgres-statefulset.yml
           kubectl apply -f k8s/minio-statefulset.yml
+
+      - name: Wait for MinIO
+        run: |
+          kubectl rollout status statefulset/minio \
+            --namespace=fixup \
+            --timeout=120s
+
+      - name: Bootstrap private MinIO bucket
+        run: |
+          kubectl delete job minio-bootstrap \
+            --namespace=fixup \
+            --ignore-not-found
+          kubectl apply -f k8s/minio-bootstrap-job.yml
+          if ! kubectl wait --for=condition=complete job/minio-bootstrap \
+            --namespace=fixup \
+            --timeout=120s; then
+            kubectl logs job/minio-bootstrap --namespace=fixup || true
+            exit 1
+          fi
+
+      - name: Apply backend networking
+        run: |
           kubectl apply -f k8s/backend-service.yml
           kubectl apply -f k8s/backend-ingress.yml
 
