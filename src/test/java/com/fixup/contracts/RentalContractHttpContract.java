@@ -107,6 +107,33 @@ abstract class RentalContractHttpContract {
     }
 
     @Test
+    void ownerFindsTenantByExactEmailWithoutSeeingOtherData() throws Exception {
+        UUID owner = seedUser(UUID.randomUUID(), "auth0|lookup-owner", "OWNER");
+        UUID tenant = UUID.randomUUID();
+        jdbc.update("INSERT INTO users (id, auth0_subject, email, display_name, status, created_at, updated_at) "
+                + "VALUES (?, 'auth0|lookup-tenant', 'Laura.Gomez@correo.test', 'Laura Gómez', 'ACTIVE', NOW(), NOW())", tenant);
+        jdbc.update("INSERT INTO user_roles (user_id, role) VALUES (?, 'TENANT')", tenant);
+        UUID fixer = UUID.randomUUID();
+        jdbc.update("INSERT INTO users (id, auth0_subject, email, display_name, status, created_at, updated_at) "
+                + "VALUES (?, 'auth0|lookup-fixer', 'tecnico@correo.test', 'Técnico', 'ACTIVE', NOW(), NOW())", fixer);
+        jdbc.update("INSERT INTO user_roles (user_id, role) VALUES (?, 'FIXER')", fixer);
+
+        mvc.perform(get("/contracts/tenant-lookup").param("email", " laura.gomez@correo.test ")
+                        .with(jwt().jwt(j -> j.subject("auth0|lookup-owner"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(tenant.toString()))
+                .andExpect(jsonPath("$.displayName").value("Laura Gómez"))
+                .andExpect(jsonPath("$.email").doesNotExist());
+        mvc.perform(get("/contracts/tenant-lookup").param("email", "tecnico@correo.test")
+                        .with(jwt().jwt(j -> j.subject("auth0|lookup-owner"))))
+                .andExpect(status().isNotFound());
+        mvc.perform(get("/contracts/tenant-lookup").param("email", "laura.gomez@correo.test")
+                        .with(jwt().jwt(j -> j.subject("auth0|lookup-fixer"))))
+                .andExpect(status().isForbidden());
+        assertThat(owner).isNotNull();
+    }
+
+    @Test
     void updatesContractAndPersistsChanges() throws Exception {
         var fixture = createFixture(LocalDate.now().plusMonths(6));
         var newEnd = fixture.end().plusMonths(1);

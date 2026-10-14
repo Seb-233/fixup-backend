@@ -5,6 +5,7 @@ import com.fixup.quotations.api.QuotationStatus;
 import com.fixup.quotations.application.AcceptQuotation;
 import com.fixup.quotations.application.ListOwnQuotations;
 import com.fixup.quotations.application.ListQuotationsForRequest;
+import com.fixup.quotations.application.QuotationContext;
 import com.fixup.quotations.application.NewQuotation;
 import com.fixup.quotations.application.QuotationSummary;
 import com.fixup.quotations.application.SubmitQuotation;
@@ -57,17 +58,19 @@ class QuotationController {
     private final ListQuotationsForRequest listForRequest;
     private final AcceptQuotation acceptQuotation;
     private final com.fixup.quotations.application.RejectQuotation rejectQuotation;
+    private final QuotationContext context;
 
     QuotationController(CurrentActorProvider actors, SubmitQuotation submitQuotation,
             ListOwnQuotations listOwn, ListQuotationsForRequest listForRequest,
             AcceptQuotation acceptQuotation,
-            com.fixup.quotations.application.RejectQuotation rejectQuotation) {
+            com.fixup.quotations.application.RejectQuotation rejectQuotation, QuotationContext context) {
         this.actors = actors;
         this.submitQuotation = submitQuotation;
         this.listOwn = listOwn;
         this.listForRequest = listForRequest;
         this.acceptQuotation = acceptQuotation;
         this.rejectQuotation = rejectQuotation;
+        this.context = context;
     }
 
     @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
@@ -85,7 +88,11 @@ class QuotationController {
     @Operation(summary = "List the quotations sent by the current fixer")
     @ApiResponse(responseCode = "200", description = "Quotations of the current fixer, newest first")
     List<QuotationResponse> mine() {
-        return listOwn.execute(actors.currentActor()).stream().map(QuotationResponse::of).toList();
+        var own = listOwn.execute(actors.currentActor());
+        var titles = context.requestTitles(own.stream().map(QuotationSummary::requestId).distinct().toList());
+        return own.stream()
+                .map(summary -> QuotationResponse.of(summary).withRequestTitle(titles.get(summary.requestId())))
+                .toList();
     }
 
     @GetMapping("/for-request/{requestId}")
@@ -93,8 +100,11 @@ class QuotationController {
             description = "Only the owner of the request reads them, cheapest offer first.")
     @ApiResponse(responseCode = "200", description = "Quotations received, cheapest first")
     List<QuotationResponse> forRequest(@PathVariable UUID requestId) {
-        return listForRequest.execute(actors.currentActor(), requestId).stream()
-                .map(QuotationResponse::of).toList();
+        var offers = listForRequest.execute(actors.currentActor(), requestId);
+        var facts = context.fixers(offers.stream().map(QuotationSummary::fixerUserId).distinct().toList());
+        return offers.stream()
+                .map(summary -> QuotationResponse.of(summary).withFixer(facts.get(summary.fixerUserId())))
+                .toList();
     }
 
     @PostMapping("/{quotationId}/accept")
@@ -122,12 +132,30 @@ class QuotationController {
     @Schema(requiredProperties = {"id", "requestId", "fixerUserId", "amount", "estimatedDays", "status",
         "createdAt"})
     record QuotationResponse(UUID id, UUID requestId, UUID fixerUserId, long amount, int estimatedDays,
-            @Schema(types = {"string", "null"}) String message, QuotationStatus status, Instant createdAt) {
+            @Schema(types = {"string", "null"}) String message, QuotationStatus status, Instant createdAt,
+            @Schema(types = {"string", "null"}) String fixerName,
+            @Schema(types = {"number", "null"}) java.math.BigDecimal fixerRatingAverage,
+            @Schema(types = {"integer", "null"}) Integer fixerRatingCount,
+            @Schema(types = {"string", "null"}) String fixerCity,
+            @Schema(types = {"string", "null"}) String requestTitle) {
 
         static QuotationResponse of(QuotationSummary summary) {
             return new QuotationResponse(summary.id(), summary.requestId(), summary.fixerUserId(),
                     summary.amount(), summary.estimatedDays(), summary.message(), summary.status(),
-                    summary.createdAt());
+                    summary.createdAt(), null, null, null, null, null);
+        }
+
+        QuotationResponse withFixer(QuotationContext.FixerFacts facts) {
+            if (facts == null) {
+                return this;
+            }
+            return new QuotationResponse(id, requestId, fixerUserId, amount, estimatedDays, message, status, createdAt,
+                    facts.displayName(), facts.ratingAverage(), facts.ratingCount(), facts.city(), requestTitle);
+        }
+
+        QuotationResponse withRequestTitle(String title) {
+            return new QuotationResponse(id, requestId, fixerUserId, amount, estimatedDays, message, status, createdAt,
+                    fixerName, fixerRatingAverage, fixerRatingCount, fixerCity, title);
         }
     }
 }

@@ -10,6 +10,15 @@ final class PaymentAccess {
     private PaymentAccess() {
     }
 
+    /** FR-UC-05: paga el propietario del inmueble o el administrador inmobiliario que lo gestiona. */
+    static void requireActivePayer(CurrentActor actor) {
+        if (actor.status() != UserStatus.ACTIVE
+                || (!actor.hasRole(Role.OWNER) && !actor.hasRole(Role.REAL_ESTATE_MANAGER)
+                    && !actor.hasRole(Role.PLATFORM_ADMIN))) {
+            throw new PaymentAccessDeniedException();
+        }
+    }
+
     static void requireActiveFixer(CurrentActor actor) {
         if (actor.status() != UserStatus.ACTIVE || !actor.hasRole(Role.FIXER)) {
             throw new PaymentAccessDeniedException();

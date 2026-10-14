@@ -4,6 +4,10 @@ import com.fixup.identityaccess.api.CurrentActorProvider;
 import com.fixup.properties.domain.GeographicBoundingBox;
 import com.fixup.properties.domain.OwnershipScope;
 import com.fixup.properties.domain.Properties;
+import com.fixup.properties.domain.Property;
+import com.fixup.properties.domain.PropertySearchMatch;
+import com.fixup.properties.domain.SealSummary;
+import com.fixup.properties.domain.WorkRecords;
 import java.math.BigDecimal;
 import java.util.List;
 import org.springframework.stereotype.Service;
@@ -15,10 +19,15 @@ public class SearchPublishedProperties {
 
     private final Properties properties;
     private final CurrentActorProvider currentActorProvider;
+    private final WorkRecords workRecords;
+    private final PropertyCovers covers;
 
-    public SearchPublishedProperties(Properties properties, CurrentActorProvider currentActorProvider) {
+    public SearchPublishedProperties(Properties properties, CurrentActorProvider currentActorProvider,
+            WorkRecords workRecords, PropertyCovers covers) {
         this.properties = properties;
         this.currentActorProvider = currentActorProvider;
+        this.workRecords = workRecords;
+        this.covers = covers;
     }
 
     @Transactional(readOnly = true)
@@ -33,15 +42,20 @@ public class SearchPublishedProperties {
         PropertyAccess.requireCanSearch(actor, effectiveScope);
 
         var boundingBox = boundingBox(latitude.doubleValue(), longitude.doubleValue(), radiusKm.doubleValue());
-        return properties.searchPublished(
+        var matches = properties.searchPublished(
                         latitude,
                         longitude,
                         radiusKm,
                         actor.internalUserId(),
                         effectiveScope,
-                        boundingBox)
-                .stream()
-                .map(match -> PropertySearchResult.from(match, actor))
+                        boundingBox);
+        var found = matches.stream().map(PropertySearchMatch::property).toList();
+        var seals = workRecords.sealSummaries(found.stream().map(Property::id).toList());
+        var coverUrls = covers.of(found);
+        return matches.stream()
+                .map(match -> PropertySearchResult.from(match, actor,
+                        coverUrls.get(match.property().id()),
+                        seals.getOrDefault(match.property().id(), SealSummary.NONE).granted()))
                 .toList();
     }
 

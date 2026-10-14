@@ -39,9 +39,9 @@ abstract class PropertiesHttpContract {
     @Autowired com.fixup.testsupport.IntegrationDatabaseCleaner databaseCleaner;
     @MockBean GeocodingProvider geocodingProvider;
 
+    @org.junit.jupiter.api.BeforeEach
     @AfterEach
     void clearDatabase() {
-        jdbc.update("DELETE FROM properties");
         databaseCleaner.clean();
     }
 
@@ -340,7 +340,7 @@ abstract class PropertiesHttpContract {
     }
 
     @ParameterizedTest
-    @EnumSource(value = SearchRole.class, names = {"FIXER", "REAL_ESTATE_MANAGER"})
+    @EnumSource(value = SearchRole.class, names = {"FIXER"})
     void geographicSearchRejectsDisallowedRoles(SearchRole role) throws Exception {
         UUID userId = UUID.randomUUID();
         String subject = "auth0|search-" + role.name().toLowerCase();
@@ -467,7 +467,7 @@ abstract class PropertiesHttpContract {
     }
 
     @ParameterizedTest
-    @EnumSource(value = SearchRole.class, names = {"FIXER", "REAL_ESTATE_MANAGER"})
+    @EnumSource(value = SearchRole.class, names = {"FIXER"})
     void geocodingRejectsDisallowedRoles(SearchRole role) throws Exception {
         UUID userId = UUID.randomUUID();
         String subject = "auth0|geocode-" + role.name().toLowerCase();

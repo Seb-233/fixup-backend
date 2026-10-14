@@ -7,10 +7,12 @@ import java.util.UUID;
 
 /** Read model of a job as the fixer executing it sees it. */
 public record JobSummary(UUID id, UUID requestId, UUID quotationId, UUID ownerUserId, JobStatus status,
-        Instant createdAt, Instant completedAt) {
+        Instant createdAt, Instant completedAt, UUID fixerUserId, Instant scheduledFor, Instant startedAt,
+        String progressNote) {
 
     static JobSummary of(Job job) {
         return new JobSummary(job.id(), job.requestId(), job.quotationId(), job.ownerUserId(),
-                job.status(), job.createdAt(), job.completedAt());
+                job.status(), job.createdAt(), job.completedAt(), job.fixerUserId(), job.scheduledFor(),
+                job.startedAt(), job.progressNote());
     }
 }

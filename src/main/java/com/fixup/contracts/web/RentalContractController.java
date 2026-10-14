@@ -1,5 +1,6 @@
 package com.fixup.contracts.web;
 
+import com.fixup.contracts.application.ContractContext;
 import com.fixup.contracts.application.ContractResponse;
 import com.fixup.contracts.application.CreateContract;
 import com.fixup.contracts.application.CreateContractRequest;
@@ -9,9 +10,9 @@ import com.fixup.contracts.application.RenewContract;
 import com.fixup.contracts.application.TerminateContract;
 import com.fixup.contracts.application.UpdateContract;
 import com.fixup.contracts.application.UpdateContractRequest;
+import com.fixup.contracts.application.FindTenant;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
-
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
@@ -27,10 +28,15 @@ class RentalContractController {
     private final UpdateContract updateContract;
     private final RenewContract renewContract;
     private final TerminateContract terminateContract;
+    private final ContractContext context;
+    private final FindTenant findTenant;
 
     RentalContractController(CreateContract createContract, ListMyContracts listMyContracts,
                              GetContract getContract, UpdateContract updateContract,
-                             RenewContract renewContract, TerminateContract terminateContract) {
+                             RenewContract renewContract, TerminateContract terminateContract,
+                             ContractContext context, FindTenant findTenant) {
+        this.context = context;
+        this.findTenant = findTenant;
         this.createContract = createContract;
         this.listMyContracts = listMyContracts;
         this.getContract = getContract;
@@ -42,22 +48,28 @@ class RentalContractController {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public ContractResponse create(@RequestBody CreateContractRequest request) {
-        return createContract.execute(request);
+        return context.decorate(createContract.execute(request));
+    }
+
+    // Quien redacta el contrato escribe el correo del arrendatario; solo vuelven su id y su nombre.
+    @GetMapping("/tenant-lookup")
+    public FindTenant.TenantCard tenantLookup(@RequestParam String email) {
+        return findTenant.byEmail(email);
     }
 
     @GetMapping("/me")
     public List<ContractResponse> listMe() {
-        return listMyContracts.execute();
+        return context.decorate(listMyContracts.execute());
     }
 
     @GetMapping("/{id}")
     public ContractResponse get(@PathVariable UUID id) {
-        return getContract.execute(id);
+        return context.decorate(getContract.execute(id));
     }
 
     @PutMapping("/{id}")
     public ContractResponse update(@PathVariable UUID id, @RequestBody UpdateContractRequest request) {
-        return updateContract.execute(id, request);
+        return context.decorate(updateContract.execute(id, request));
     }
 
     @PostMapping("/{id}/renew")
@@ -66,17 +78,17 @@ class RentalContractController {
         if (newEndDate == null) {
             throw new IllegalArgumentException("newEndDate is required");
         }
-        return renewContract.execute(id, newEndDate);
+        return context.decorate(renewContract.execute(id, newEndDate));
     }
 
     @PostMapping("/{id}/terminate")
     public ContractResponse terminate(@PathVariable UUID id, @RequestBody(required = false) Map<String, String> body) {
         String reason = (body != null) ? body.getOrDefault("reason", "No reason provided") : "No reason provided";
-        return terminateContract.execute(id, reason);
+        return context.decorate(terminateContract.execute(id, reason));
     }
 
     @GetMapping("/expiring")
     public List<ContractResponse> expiring(@RequestParam(defaultValue = "30") int days) {
-        return listMyContracts.executeExpiring(days);
+        return context.decorate(listMyContracts.executeExpiring(days));
     }
 }

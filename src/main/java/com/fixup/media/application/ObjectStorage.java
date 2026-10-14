@@ -15,6 +15,9 @@ public interface ObjectStorage {
 
     void delete(String objectKey);
 
+    /** Writes the object directly. Only trusted server-side content uses it (the demo data loader). */
+    void putObject(String objectKey, String contentType, byte[] bytes);
+
     record UploadTicket(String uploadUrl, String method, Map<String, String> headers, Instant expiresAt) {
     }
 

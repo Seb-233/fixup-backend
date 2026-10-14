@@ -7,6 +7,8 @@ import java.util.UUID;
 public interface RemodelingProjects {
     void create(RemodelingProject project);
 
+    void updatePlan(RemodelingProject project);
+
     Optional<RemodelingProject> findById(UUID id);
 
     List<RemodelingProject> findByOwner(UUID ownerUserId);

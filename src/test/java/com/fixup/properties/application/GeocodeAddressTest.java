@@ -55,7 +55,7 @@ class GeocodeAddressTest {
     }
 
     @ParameterizedTest
-    @EnumSource(value = Role.class, names = {"OWNER", "TENANT", "PLATFORM_ADMIN"})
+    @EnumSource(value = Role.class, names = {"OWNER", "TENANT", "REAL_ESTATE_MANAGER", "PLATFORM_ADMIN"})
     void permitsExpectedRoles(Role role) {
         when(actors.currentActor()).thenReturn(active(role));
         when(provider.geocode("Bogotá")).thenReturn(List.of());
@@ -64,7 +64,7 @@ class GeocodeAddressTest {
     }
 
     @ParameterizedTest
-    @EnumSource(value = Role.class, names = {"FIXER", "REAL_ESTATE_MANAGER"})
+    @EnumSource(value = Role.class, names = {"FIXER"})
     void deniesRolesOutsideTheUseCase(Role role) {
         when(actors.currentActor()).thenReturn(active(role));
 

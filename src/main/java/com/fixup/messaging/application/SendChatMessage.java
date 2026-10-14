@@ -2,18 +2,21 @@ package com.fixup.messaging.application;
 
 import com.fixup.identityaccess.api.CurrentActor;
 import com.fixup.messaging.api.ChatConflictException;
-import com.fixup.notifications.api.NotificationStatus;
 import com.fixup.messaging.domain.ChatMessage;
 import com.fixup.messaging.domain.ChatMessages;
-import com.fixup.notifications.api.PushNotificationGateway;
+import com.fixup.notifications.api.NotificationRequested;
+import com.fixup.notifications.api.NotificationStatus;
+import com.fixup.notifications.api.NotificationType;
 import com.fixup.notifications.api.PushNotificationGateway.PushNotification;
+import com.fixup.notifications.api.PushNotificationGateway;
 import com.fixup.requests.api.RepairRequestDirectory;
-import java.time.Instant;
-import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import java.time.Instant;
+import java.util.UUID;
 
 /**
  * FR-UC-24: the chat opens the moment a fixer is assigned to the request, and only for the two
@@ -33,34 +36,39 @@ public class SendChatMessage {
     private final ChatMessages messages;
     private final RepairRequestDirectory requests;
     private final PushNotificationGateway pushGateway;
+    private final ApplicationEventPublisher events;
 
-    SendChatMessage(ChatMessages messages, RepairRequestDirectory requests, PushNotificationGateway pushGateway) {
+    SendChatMessage(ChatMessages messages, RepairRequestDirectory requests, PushNotificationGateway pushGateway,
+            ApplicationEventPublisher events) {
         this.messages = messages;
         this.requests = requests;
         this.pushGateway = pushGateway;
+        this.events = events;
     }
 
     @Transactional
     public ChatMessageSummary execute(CurrentActor actor, UUID requestId, NewChatMessage draft) {
         ChatAccess.requireActive(actor);
         var request = requests.require(requestId);
-        // KNOWN LIMITATION / EXTENSION POINT: isAssigned() matches the ASSIGNED status exactly. It
-        // is complete today because ASSIGNED is the only non-OPEN status, but if a future terminal
-        // status is added (e.g. COMPLETED), sending stops the moment a request leaves ASSIGNED --
-        // mirroring chat_messages_insert's WITH CHECK in V12__chat_messages_rls.sql, which must be
-        // revisited together with this check. Reading history is unaffected either way: it is never
-        // gated on status. Whether a completed job's chat should stay writable for wrap-up messages
-        // is a product decision nobody has made yet -- don't assume either answer when that status
-        // is introduced.
+        // The chat is writable while a fixer is assigned and the work is still active (RF-14: "solicitud
+        // activa"). Once the job is completed the request moves to COMPLETED and the thread becomes
+        // read-only, mirroring chat_messages_insert in the RLS migrations. History is never gated.
         if (!request.isAssigned()) {
             throw new ChatConflictException("REQUEST_NOT_ASSIGNED",
                     "The chat opens only once the repair request has an assigned fixer");
         }
         ChatAccess.requireParticipant(actor, request);
 
-        var recipientId = actor.internalUserId().equals(request.ownerUserId())
-                ? request.assignedFixerUserId() : request.ownerUserId();
-        var notificationStatus = attemptNotification(recipientId, draft.body());
+        var recipients = request.participants().stream()
+                .filter(participant -> !participant.equals(actor.internalUserId()))
+                .toList();
+        var notificationStatus = NotificationStatus.SKIPPED;
+        for (var recipientId : recipients) {
+            notificationStatus = attemptNotification(recipientId, draft.body());
+            events.publishEvent(NotificationRequested.of(recipientId, NotificationType.CHAT_MESSAGE_RECEIVED,
+                    "Nuevo mensaje", preview(draft.body()), "/requests/" + requestId + "/messages", requestId,
+                    "REQUEST"));
+        }
 
         var message = ChatMessage.sent(UUID.randomUUID(), requestId, actor.internalUserId(), draft.body(),
                 Instant.now(), notificationStatus);

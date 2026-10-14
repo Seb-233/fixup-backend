@@ -120,11 +120,34 @@ abstract class EarningsHttpContract {
                 .andExpect(status().isOk());
     }
 
-    /** Deja al técnico con un trabajo asignado y su ingreso retenido. Devuelve el id del trabajo. */
+    /**
+     * FR-UC-05: el propietario paga la cotización aceptada en la pasarela de pruebas, con la
+     * referencia y el valor exactos del cobro.
+     */
+    private void payCharge(String ownerSubject, UUID requestId) throws Exception {
+        var charge = mapper.readTree(mvc.perform(get("/payments/charges/for-request/" + requestId)
+                        .with(identity(ownerSubject)))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+        mvc.perform(post("/payments/charges/" + charge.get("id").asText() + "/pay").with(identity(ownerSubject))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reference\":\"%s\",\"amount\":%d,\"method\":\"SANDBOX_PSE\"}"
+                                .formatted(charge.get("reference").asText(), charge.get("amount").asLong())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("APPROVED"));
+    }
+
+    /** Deja al técnico con un trabajo asignado y pagado, con su ingreso retenido. Devuelve el id del trabajo. */
     private UUID assignedJob(String ownerSubject, String fixerSubject, long amount) throws Exception {
+        return assignedJob(ownerSubject, fixerSubject, amount, true);
+    }
+
+    private UUID assignedJob(String ownerSubject, String fixerSubject, long amount, boolean paid) throws Exception {
         UUID requestId = createRequest(ownerSubject, "PLUMBING");
         UUID quotationId = submitQuotation(fixerSubject, requestId, amount);
         acceptQuotation(ownerSubject, quotationId);
+        if (paid) {
+            payCharge(ownerSubject, requestId);
+        }
 
         var result = mvc.perform(get("/jobs/me").with(identity(fixerSubject)))
                 .andExpect(status().isOk()).andReturn();
@@ -214,6 +237,76 @@ abstract class EarningsHttpContract {
         mvc.perform(post("/payments/me/payouts").with(identity(fixer)))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("NO_AVAILABLE_BALANCE"));
+    }
+
+    @Test
+    void anUnpaidJobKeepsTheMoneyInEscrowUntilTheOwnerPays() throws Exception {
+        String owner = "auth0|owner-unpaid";
+        String fixer = "auth0|fixer-unpaid";
+        provisionWithRole(owner, "OWNER");
+        provisionVerifiedFixer(fixer, "PLUMBING");
+        UUID jobId = assignedJob(owner, fixer, AMOUNT, false);
+        UUID requestId = UUID.fromString(mapper.readTree(mvc.perform(get("/jobs/me").with(identity(fixer)))
+                .andReturn().getResponse().getContentAsString()).get(0).get("requestId").asText());
+
+        mvc.perform(post("/jobs/" + jobId + "/complete").with(identity(fixer))).andExpect(status().isOk());
+        // El trabajo está cerrado pero el propietario no ha pagado: el dinero no es del técnico todavía.
+        mvc.perform(get("/payments/me/earnings").with(identity(fixer)))
+                .andExpect(jsonPath("$.availableBalance").value(0))
+                .andExpect(jsonPath("$.heldBalance").value(NET))
+                .andExpect(jsonPath("$.history[0].jobCompletedAt").isNotEmpty())
+                .andExpect(jsonPath("$.history[0].fundedAt").doesNotExist());
+
+        payCharge(owner, requestId);
+        mvc.perform(get("/payments/me/earnings").with(identity(fixer)))
+                .andExpect(jsonPath("$.availableBalance").value(NET))
+                .andExpect(jsonPath("$.history[0].status").value("AVAILABLE"));
+    }
+
+    @Test
+    void theSandboxRejectsAWrongReferenceOrAmountAndCanDecline() throws Exception {
+        String owner = "auth0|owner-sandbox";
+        String fixer = "auth0|fixer-sandbox";
+        String stranger = "auth0|owner-sandbox-stranger";
+        provisionWithRole(owner, "OWNER");
+        provisionWithRole(stranger, "OWNER");
+        provisionVerifiedFixer(fixer, "PLUMBING");
+        assignedJob(owner, fixer, AMOUNT, false);
+        UUID requestId = UUID.fromString(mapper.readTree(mvc.perform(get("/jobs/me").with(identity(fixer)))
+                .andReturn().getResponse().getContentAsString()).get(0).get("requestId").asText());
+        var charge = mapper.readTree(mvc.perform(get("/payments/charges/for-request/" + requestId)
+                .with(identity(owner))).andReturn().getResponse().getContentAsString());
+        String chargeId = charge.get("id").asText();
+        String reference = charge.get("reference").asText();
+
+        mvc.perform(post("/payments/charges/" + chargeId + "/pay").with(identity(owner))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reference\":\"FXR-WRONG\",\"amount\":%d,\"method\":\"SANDBOX_CARD\"}"
+                                .formatted(AMOUNT)))
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("REFERENCE_MISMATCH"));
+        mvc.perform(post("/payments/charges/" + chargeId + "/pay").with(identity(owner))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reference\":\"%s\",\"amount\":%d,\"method\":\"SANDBOX_CARD\"}"
+                                .formatted(reference, AMOUNT - 1)))
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("AMOUNT_MISMATCH"));
+        mvc.perform(post("/payments/charges/" + chargeId + "/pay").with(identity(stranger))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reference\":\"%s\",\"amount\":%d,\"method\":\"SANDBOX_CARD\"}"
+                                .formatted(reference, AMOUNT)))
+                .andExpect(status().isForbidden());
+        mvc.perform(post("/payments/charges/" + chargeId + "/pay").with(identity(owner))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reference\":\"%s\",\"amount\":%d,\"method\":\"SANDBOX_NEQUI\",\"scenario\":\"DECLINE_FUNDS\"}"
+                                .formatted(reference, AMOUNT)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("DECLINED"))
+                .andExpect(jsonPath("$.attempts").value(1));
+        // Un rechazo se puede reintentar; la aprobación deja el cobro cerrado para siempre.
+        payCharge(owner, requestId);
+        mvc.perform(post("/payments/charges/" + chargeId + "/pay").with(identity(owner))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reference\":\"%s\",\"amount\":%d,\"method\":\"SANDBOX_PSE\"}"
+                                .formatted(reference, AMOUNT)))
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("CHARGE_ALREADY_PAID"));
     }
 
     @Test

@@ -1,6 +1,8 @@
 package com.fixup.jobs.application;
 
 import com.fixup.jobs.domain.Job;
+import com.fixup.jobs.domain.JobLogEntry;
+import com.fixup.jobs.domain.JobRecords;
 import com.fixup.jobs.domain.Jobs;
 import com.fixup.quotations.api.QuotationAccepted;
 import java.time.Instant;
@@ -17,9 +19,11 @@ import org.springframework.transaction.annotation.Transactional;
 @Component
 class OpenJobOnAcceptedQuotation {
     private final Jobs jobs;
+    private final JobRecords records;
 
-    OpenJobOnAcceptedQuotation(Jobs jobs) {
+    OpenJobOnAcceptedQuotation(Jobs jobs, JobRecords records) {
         this.jobs = jobs;
+        this.records = records;
     }
 
     @EventListener
@@ -30,7 +34,10 @@ class OpenJobOnAcceptedQuotation {
         if (jobs.existsByQuotation(event.quotationId())) {
             return;
         }
-        jobs.create(Job.assigned(UUID.randomUUID(), event.requestId(), event.quotationId(),
-                event.fixerUserId(), event.ownerUserId(), Instant.now()));
+        var job = Job.assigned(UUID.randomUUID(), event.requestId(), event.quotationId(),
+                event.fixerUserId(), event.ownerUserId(), Instant.now());
+        jobs.create(job);
+        records.log(new JobLogEntry(UUID.randomUUID(), job.id(), job.status(),
+                "Cotización aceptada por $" + event.amount(), event.ownerUserId(), job.createdAt()));
     }
 }

@@ -36,6 +36,24 @@ public class BulkPropertyValidator {
         if (!isValidPositiveDecimal(row.areaM2Str())) {
             errors.add(new BulkValidationError(row.rowNumber(), "areaM2", "AREA_INVALID", "Area must be a positive decimal"));
         }
+        try {
+            row.listing();
+        } catch (IllegalArgumentException invalid) {
+            errors.add(new BulkValidationError(row.rowNumber(), "listing", "LISTING_INVALID", invalid.getMessage()));
+        }
+        try {
+            var latitude = row.latitude();
+            var longitude = row.longitude();
+            if ((latitude == null) != (longitude == null)
+                    || (latitude != null && (latitude.abs().compareTo(BigDecimal.valueOf(90)) > 0
+                        || longitude.abs().compareTo(BigDecimal.valueOf(180)) > 0))) {
+                errors.add(new BulkValidationError(row.rowNumber(), "latitude", "COORDINATES_INVALID",
+                        "Latitude and longitude must come together and inside their ranges"));
+            }
+        } catch (NumberFormatException invalid) {
+            errors.add(new BulkValidationError(row.rowNumber(), "latitude", "COORDINATES_INVALID",
+                    "Latitude and longitude must be decimal numbers"));
+        }
     }
 
     private void checkDuplicate(BulkPropertyRow row, Set<String> seenKeys, List<BulkValidationError> errors) {
