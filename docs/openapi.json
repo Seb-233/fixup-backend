@@ -9477,11 +9477,6 @@
       "Pageable" : {
         "type" : "object",
         "properties" : {
-          "page" : {
-            "type" : "integer",
-            "format" : "int32",
-            "minimum" : 0
-          },
           "size" : {
             "type" : "integer",
             "format" : "int32",
@@ -9492,6 +9487,11 @@
             "items" : {
               "type" : "string"
             }
+          },
+          "page" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 0
           }
         }
       },
