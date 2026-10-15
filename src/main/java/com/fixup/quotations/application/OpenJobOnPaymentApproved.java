@@ -3,6 +3,7 @@ package com.fixup.quotations.application;
 import com.fixup.jobs.api.JobOpening;
 import com.fixup.jobs.api.JobOpeningCommand;
 import com.fixup.payments.api.PaymentApproved;
+import com.fixup.payments.api.ApprovedPaymentPurpose;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
@@ -20,7 +21,10 @@ class OpenJobOnPaymentApproved {
     @EventListener
     @Transactional(propagation = Propagation.MANDATORY)
     public void on(PaymentApproved event) {
+        if (event.purpose() != ApprovedPaymentPurpose.SERVICE) {
+            return;
+        }
         jobs.open(new JobOpeningCommand(event.requestId(), event.quotationId(), event.fixerUserId(),
-                event.ownerUserId(), event.approvedAt()));
+                event.ownerUserId(), "TRANSFER", event.amount(), event.approvedAt()));
     }
 }

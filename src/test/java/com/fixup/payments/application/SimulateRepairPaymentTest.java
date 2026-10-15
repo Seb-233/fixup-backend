@@ -8,6 +8,7 @@ import com.fixup.payments.api.PaymentConflictException;
 import com.fixup.payments.api.PaymentSimulationOutcome;
 import com.fixup.payments.domain.FixerEarning;
 import com.fixup.payments.domain.FixerEarnings;
+import com.fixup.payments.domain.OwnerDebts;
 import com.fixup.payments.domain.PaymentPurpose;
 import com.fixup.payments.domain.PaymentStatus;
 import com.fixup.payments.domain.RepairPayment;
@@ -44,9 +45,10 @@ class SimulateRepairPaymentTest {
     private final RepairPayments payments = mock(RepairPayments.class);
     private final SimulatedPaymentAttempts attempts = mock(SimulatedPaymentAttempts.class);
     private final FixerEarnings earnings = mock(FixerEarnings.class);
+    private final OwnerDebts debts = mock(OwnerDebts.class);
     private final ApplicationEventPublisher events = mock(ApplicationEventPublisher.class);
     private final SimulateRepairPayment useCase = new SimulateRepairPayment(payments, attempts,
-            earnings, events, Clock.fixed(NOW, ZoneOffset.UTC));
+            earnings, debts, events, Clock.fixed(NOW, ZoneOffset.UTC));
 
     @Test
     void pendingDeclinedAndErrorAreAuditedWithoutEconomicEffects() {
@@ -99,7 +101,7 @@ class SimulateRepairPaymentTest {
             var localEvents = mock(ApplicationEventPublisher.class);
             when(localPayments.findByIdForUpdate(PAYMENT)).thenReturn(Optional.of(retryable));
             var simulation = new SimulateRepairPayment(localPayments, localAttempts, localEarnings,
-                    localEvents, Clock.fixed(NOW, ZoneOffset.UTC));
+                    mock(OwnerDebts.class), localEvents, Clock.fixed(NOW, ZoneOffset.UTC));
 
             assertThat(simulation.execute(owner(), PAYMENT, PaymentSimulationOutcome.APPROVED).status())
                     .isEqualTo(PaymentStatus.APPROVED);
@@ -133,18 +135,11 @@ class SimulateRepairPaymentTest {
     }
 
     @Test
-    void onlyTheOwnerCanSimulateAndUnsupportedPurposesAreControlledConflicts() {
+    void onlyTheOwnerCanSimulateAndCashPaymentIsRejected() {
         when(payments.findByIdForUpdate(PAYMENT)).thenReturn(Optional.of(pending()));
         var fixer = new CurrentActor(FIXER, "auth0|fixer", Set.of(Role.FIXER), UserStatus.ACTIVE);
         assertThatThrownBy(() -> useCase.execute(fixer, PAYMENT, PaymentSimulationOutcome.APPROVED))
                 .isInstanceOf(com.fixup.payments.api.PaymentAccessDeniedException.class);
-
-        var debtPayment = RepairPayment.pending(PAYMENT, QUOTATION, REQUEST, OWNER, FIXER, 10_000,
-                RepairPaymentMethod.TRANSFER, PaymentPurpose.OUTSTANDING_BALANCE, CREATED);
-        when(payments.findByIdForUpdate(PAYMENT)).thenReturn(Optional.of(debtPayment));
-        assertThatThrownBy(() -> useCase.execute(owner(), PAYMENT, PaymentSimulationOutcome.APPROVED))
-                .isInstanceOf(PaymentConflictException.class)
-                .extracting("code").isEqualTo("PAYMENT_PURPOSE_NOT_SUPPORTED");
 
         var cashPayment = RepairPayment.pending(PAYMENT, QUOTATION, REQUEST, OWNER, FIXER, 10_000,
                 RepairPaymentMethod.CASH, PaymentPurpose.SERVICE, CREATED);

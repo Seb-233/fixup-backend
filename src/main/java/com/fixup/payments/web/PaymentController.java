@@ -7,6 +7,11 @@ import com.fixup.payments.application.EarningLine;
 import com.fixup.payments.application.EarningsSummary;
 import com.fixup.payments.application.GetEarningsSummary;
 import com.fixup.payments.application.GetRepairPayment;
+import com.fixup.payments.application.GetCashSettlement;
+import com.fixup.payments.application.CashSettlementDetail;
+import com.fixup.payments.application.InitiateDebtPayment;
+import com.fixup.payments.application.ListOwnDebts;
+import com.fixup.payments.application.OwnerDebtDetail;
 import com.fixup.payments.application.ListOwnPayouts;
 import com.fixup.payments.application.PaymentDetail;
 import com.fixup.payments.application.PayoutSummary;
@@ -59,20 +64,49 @@ class PaymentController {
     private final ListOwnPayouts listPayouts;
     private final GetRepairPayment getPayment;
     private final SimulateRepairPayment simulatePayment;
+    private final ListOwnDebts listDebts;
+    private final InitiateDebtPayment initiateDebtPayment;
+    private final GetCashSettlement getCashSettlement;
 
     PaymentController(CurrentActorProvider actors, GetEarningsSummary getEarnings,
             RequestPayout requestPayout, ListOwnPayouts listPayouts, GetRepairPayment getPayment,
-            SimulateRepairPayment simulatePayment) {
+            SimulateRepairPayment simulatePayment, ListOwnDebts listDebts,
+            InitiateDebtPayment initiateDebtPayment, GetCashSettlement getCashSettlement) {
         this.actors = actors;
         this.getEarnings = getEarnings;
         this.requestPayout = requestPayout;
         this.listPayouts = listPayouts;
         this.getPayment = getPayment;
         this.simulatePayment = simulatePayment;
+        this.listDebts = listDebts;
+        this.initiateDebtPayment = initiateDebtPayment;
+        this.getCashSettlement = getCashSettlement;
+    }
+
+    @GetMapping("/cash-settlements/jobs/{jobId}")
+    @Operation(summary = "Read the authoritative cash settlement for a completed job")
+    @ApiResponse(responseCode = "200", description = "Audited cash settlement")
+    CashSettlementDetail cashSettlement(@PathVariable UUID jobId) {
+        return getCashSettlement.execute(actors.currentActor(), jobId);
+    }
+
+    @GetMapping("/me/debts")
+    @Operation(summary = "List the current owner's outstanding debts")
+    @ApiResponse(responseCode = "200", description = "Outstanding debts of the owner")
+    List<OwnerDebtDetail> debts() {
+        return listDebts.execute(actors.currentActor());
+    }
+
+    @PostMapping("/debts/{debtId}/pay")
+    @ResponseStatus(HttpStatus.CREATED)
+    @Operation(summary = "Initiate or reuse a simulated transfer for an outstanding debt")
+    @ApiResponse(responseCode = "201", description = "Debt payment ready to simulate")
+    PaymentDetail initiateDebt(@PathVariable UUID debtId) {
+        return initiateDebtPayment.execute(actors.currentActor(), debtId);
     }
 
     @GetMapping("/{paymentId}")
-    @Operation(summary = "Read a service payment",
+    @Operation(summary = "Read a simulated service or outstanding-balance payment",
             description = "Owners, the assigned fixer and platform administrators can audit a payment they may see.")
     @ApiResponse(responseCode = "200", description = "Authoritative payment state")
     PaymentDetail payment(@PathVariable UUID paymentId) {
@@ -81,8 +115,9 @@ class PaymentController {
 
     @PostMapping("/{paymentId}/simulate")
     @Operation(summary = "Simulate the provider outcome of an owner's transfer payment",
-            description = "Academic simulator only. APPROVED atomically creates the held earning and assigned job; "
-                    + "DECLINED, PENDING and ERROR remain retryable and create neither.")
+            description = "Service approval creates a held earning and job; outstanding-balance "
+                    + "approval pays the debt and creates an available earning. DECLINED, PENDING "
+                    + "and ERROR remain retryable.")
     @ApiResponse(responseCode = "200", description = "Authoritative payment state after the simulated outcome")
     PaymentDetail simulate(@PathVariable UUID paymentId, @Valid @RequestBody SimulationRequest request) {
         return simulatePayment.execute(actors.currentActor(), paymentId, request.outcome());
@@ -98,10 +133,10 @@ class PaymentController {
     }
 
     @PostMapping("/me/payouts")
-    @Operation(summary = "Request the transfer of the available balance",
-            description = "Academic scope: the request is recorded, no banking API is called. "
-                    + "Reading the balance and consuming it happen in the same transaction.")
-    @ApiResponse(responseCode = "201", description = "The transfer request was recorded")
+    @Operation(summary = "Simulate the transfer of the available balance",
+            description = "No banking API is called. The payout reaches TRANSFERRED and its earnings "
+                    + "become PAID_OUT in one transaction.")
+    @ApiResponse(responseCode = "201", description = "The payout was simulated and transferred")
     @ResponseStatus(HttpStatus.CREATED)
     PayoutResponse payout(HttpServletRequest request) {
         // Esta operación no lleva cuerpo. Aceptar uno en silencio sería peor que rechazarlo: un
@@ -147,11 +182,11 @@ class PaymentController {
 
     @Schema(requiredProperties = {"id", "amount", "earningCount", "status", "requestedAt"})
     record PayoutResponse(UUID id, long amount, int earningCount, PayoutStatus status,
-            Instant requestedAt) {
+            Instant requestedAt, @Schema(types = {"string", "null"}) Instant transferredAt) {
 
         static PayoutResponse of(PayoutSummary summary) {
             return new PayoutResponse(summary.id(), summary.amount(), summary.earningCount(),
-                    summary.status(), summary.requestedAt());
+                    summary.status(), summary.requestedAt(), summary.transferredAt());
         }
     }
 

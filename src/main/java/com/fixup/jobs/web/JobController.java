@@ -13,8 +13,10 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import java.time.Instant;
+import com.fasterxml.jackson.databind.JsonNode;
 import java.util.List;
 import java.util.UUID;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -61,17 +63,36 @@ class JobController {
             description = "Releases from escrow the amount the owner committed when accepting the "
                     + "quotation. Only the assigned fixer can close his own job.")
     @ApiResponse(responseCode = "200", description = "The job is completed and the earning released")
-    JobResponse complete(@PathVariable UUID jobId) {
-        return JobResponse.of(completeJob.execute(actors.currentActor(), jobId));
+    JobResponse complete(@PathVariable UUID jobId,
+            @RequestBody(required = false) CompletionRequest request) {
+        return JobResponse.of(completeJob.execute(actors.currentActor(), jobId,
+                request == null ? null : request.receivedAsLong()));
     }
 
-    @Schema(requiredProperties = {"id", "requestId", "quotationId", "ownerUserId", "status", "createdAt"})
-    record JobResponse(UUID id, UUID requestId, UUID quotationId, UUID ownerUserId, JobStatus status,
+    @Schema(additionalProperties = Schema.AdditionalPropertiesValue.FALSE)
+    record CompletionRequest(@Schema(type = "integer", format = "int64") JsonNode receivedAmount) {
+        Long receivedAsLong() {
+            if (receivedAmount == null || receivedAmount.isNull()) {
+                return null;
+            }
+            if (!receivedAmount.isIntegralNumber() || !receivedAmount.canConvertToLong()) {
+                throw new com.fixup.jobs.api.JobConflictException("INVALID_CASH_RECEIVED_AMOUNT",
+                        "Cash received must be a whole peso amount");
+            }
+            return receivedAmount.longValue();
+        }
+    }
+
+    @Schema(requiredProperties = {"id", "requestId", "quotationId", "ownerUserId", "paymentMethod",
+            "agreedAmount", "status", "createdAt"})
+    record JobResponse(UUID id, UUID requestId, UUID quotationId, UUID ownerUserId,
+            String paymentMethod, long agreedAmount, JobStatus status,
             Instant createdAt, @Schema(types = {"string", "null"}) Instant completedAt) {
 
         static JobResponse of(JobSummary summary) {
             return new JobResponse(summary.id(), summary.requestId(), summary.quotationId(),
-                    summary.ownerUserId(), summary.status(), summary.createdAt(), summary.completedAt());
+                    summary.ownerUserId(), summary.paymentMethod(), summary.agreedAmount(),
+                    summary.status(), summary.createdAt(), summary.completedAt());
         }
     }
 }

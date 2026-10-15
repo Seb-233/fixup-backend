@@ -28,6 +28,7 @@ class OpenJobOnPaymentApprovedTest {
 
         var captured = ArgumentCaptor.forClass(JobOpeningCommand.class);
         verify(jobs).open(captured.capture());
-        assertThat(captured.getValue()).isEqualTo(new JobOpeningCommand(request, quotation, fixer, owner, now));
+        assertThat(captured.getValue()).isEqualTo(new JobOpeningCommand(request, quotation, fixer,
+                owner, "TRANSFER", 450_000, now));
     }
 }

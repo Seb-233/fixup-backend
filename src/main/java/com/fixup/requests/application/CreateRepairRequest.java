@@ -3,6 +3,8 @@ package com.fixup.requests.application;
 import com.fixup.identityaccess.api.CurrentActor;
 import com.fixup.media.api.MediaAttachmentService;
 import com.fixup.notifications.api.RequestNotifications;
+import com.fixup.payments.api.OwnerDebtDirectory;
+import com.fixup.requests.api.RepairRequestConflictException;
 import com.fixup.requests.api.UrgencyLevel;
 import com.fixup.requests.api.NewProjectRepairRequest;
 import com.fixup.requests.api.ProjectRepairRequestSnapshot;
@@ -26,20 +28,26 @@ public class CreateRepairRequest implements RepairRequestCreation {
     private final MediaAttachmentService mediaAttachmentService;
     private final RequestNotifications notifications;
     private final Clock clock;
+    private final OwnerDebtDirectory debts;
 
     CreateRepairRequest(RepairRequests requests, MediaAttachmentService mediaAttachmentService, PropertyDirectory propertyDirectory, RepairSpecialtyClassifier classifier,
-                        RequestNotifications notifications, Clock clock) {
+                        RequestNotifications notifications, OwnerDebtDirectory debts, Clock clock) {
         this.requests = requests;
         this.propertyDirectory = propertyDirectory;
         this.classifier = classifier;
         this.mediaAttachmentService = mediaAttachmentService;
         this.notifications = notifications;
         this.clock = clock;
+        this.debts = debts;
     }
 
     @Transactional
     public RepairRequestSummary execute(CurrentActor actor, NewRepairRequest draft) {
         RequestAccess.requireActiveOwner(actor);
+        if (debts.hasOutstandingDebt(actor.internalUserId())) {
+            throw new RepairRequestConflictException("OWNER_HAS_OUTSTANDING_DEBT",
+                    "Pay outstanding debt before creating another repair request");
+        }
         var property = propertyDirectory.requireOwnedBy(draft.propertyId(), actor.internalUserId());
         Specialty specialty = classifier.classify(draft.title(), draft.description());
         var mediaIds = draft.mediaIds() == null ? List.<UUID>of() : draft.mediaIds();

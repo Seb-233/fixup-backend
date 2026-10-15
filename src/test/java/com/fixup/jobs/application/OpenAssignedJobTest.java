@@ -47,6 +47,6 @@ class OpenAssignedJobTest {
     }
 
     private JobOpeningCommand command() {
-        return new JobOpeningCommand(REQUEST, QUOTATION, FIXER, OWNER, NOW);
+        return new JobOpeningCommand(REQUEST, QUOTATION, FIXER, OWNER, "CASH", 100_000L, NOW);
     }
 }

@@ -20,7 +20,8 @@ class JobTest {
     private static final Instant NOW = Instant.parse("2026-09-19T15:00:00Z");
 
     private Job assigned() {
-        return Job.assigned(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), FIXER, OWNER, NOW);
+        return Job.assigned(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), FIXER, OWNER,
+                "TRANSFER", 450_000L, NOW);
     }
 
     @Test

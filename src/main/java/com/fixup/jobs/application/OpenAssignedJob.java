@@ -24,6 +24,7 @@ class OpenAssignedJob implements JobOpening {
             return;
         }
         jobs.create(Job.assigned(UUID.randomUUID(), command.requestId(), command.quotationId(),
-                command.fixerUserId(), command.ownerUserId(), command.occurredAt()));
+                command.fixerUserId(), command.ownerUserId(), command.paymentMethod(),
+                command.agreedAmount(), command.occurredAt()));
     }
 }

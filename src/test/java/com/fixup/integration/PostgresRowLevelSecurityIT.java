@@ -577,6 +577,46 @@ class PostgresRowLevelSecurityIT {
         assertThat(visiblePaymentAttemptIds(admin, "PLATFORM_ADMIN")).containsExactly(attempt);
     }
 
+    @Test
+    void cashSettlementIsVisibleOnlyToItsPartiesAndPlatformAdmin() throws Exception {
+        UUID owner = provisionWithRole("auth0|rls-cash-owner", "OWNER");
+        UUID unrelatedOwner = provisionWithRole("auth0|rls-cash-other", "OWNER");
+        UUID fixer = provisionVerifiedFixer("auth0|rls-cash-fixer", "PLUMBING");
+        UUID unrelatedFixer = provisionVerifiedFixer("auth0|rls-cash-other-fixer", "PLUMBING");
+        UUID admin = provisionAdmin("auth0|rls-cash-admin");
+        UUID request = createRequest(owner, "PLUMBING", "Cash settlement RLS");
+        UUID quotation = createQuotation(request, fixer, 100_000);
+        UUID job = UUID.randomUUID();
+        UUID settlement = UUID.randomUUID();
+        jdbc.update("UPDATE repair_requests SET status = 'ASSIGNED', assigned_fixer_user_id = ?, "
+                + "payment_method = 'CASH' WHERE id = ?", fixer, request);
+        jdbc.update("UPDATE quotations SET status = 'ACCEPTED' WHERE id = ?", quotation);
+        jdbc.update("INSERT INTO jobs (id, request_id, quotation_id, fixer_user_id, owner_user_id, "
+                + "payment_method, agreed_amount, status, created_at, completed_at, updated_at) "
+                + "VALUES (?, ?, ?, ?, ?, 'CASH', 100000, 'COMPLETED', CURRENT_TIMESTAMP, "
+                + "CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)", job, request, quotation, fixer, owner);
+        jdbc.update("INSERT INTO cash_settlements (id, job_id, quotation_id, request_id, "
+                + "owner_user_id, fixer_user_id, agreed_amount, received_amount, outstanding_amount, "
+                + "settled_at) VALUES (?, ?, ?, ?, ?, ?, 100000, 60000, 40000, CURRENT_TIMESTAMP)",
+                settlement, job, quotation, request, owner, fixer);
+
+        List<UUID> ownerVisible = actingAs(owner, "OWNER",
+                c -> queryUuids(c, "SELECT id FROM cash_settlements"));
+        List<UUID> fixerVisible = actingAs(fixer, "FIXER",
+                c -> queryUuids(c, "SELECT id FROM cash_settlements"));
+        List<UUID> adminVisible = actingAs(admin, "PLATFORM_ADMIN",
+                c -> queryUuids(c, "SELECT id FROM cash_settlements"));
+        List<UUID> otherOwnerVisible = actingAs(unrelatedOwner, "OWNER",
+                c -> queryUuids(c, "SELECT id FROM cash_settlements"));
+        List<UUID> otherFixerVisible = actingAs(unrelatedFixer, "FIXER",
+                c -> queryUuids(c, "SELECT id FROM cash_settlements"));
+        assertThat(ownerVisible).containsExactly(settlement);
+        assertThat(fixerVisible).containsExactly(settlement);
+        assertThat(adminVisible).containsExactly(settlement);
+        assertThat(otherOwnerVisible).isEmpty();
+        assertThat(otherFixerVisible).isEmpty();
+    }
+
     @org.junit.jupiter.api.Test
     void explicitlyTestsSelectForUpdateLocking() throws Exception {
         UUID owner = provisionWithRole("auth0|owner-for-lock", "OWNER");

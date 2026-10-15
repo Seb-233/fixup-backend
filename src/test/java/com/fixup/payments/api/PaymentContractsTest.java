@@ -44,14 +44,14 @@ class PaymentContractsTest {
     @Test
     void settlementCarriesCashInformationOnlyWhenTheFixerReportsIt() {
         var transfer = new PaymentSettlementCommand(JOB, QUOTATION, REQUEST, OWNER, FIXER,
-                null, NOW);
+                "TRANSFER", 450_000L, null, NOW);
         var cash = new PaymentSettlementCommand(JOB, QUOTATION, REQUEST, OWNER, FIXER,
-                440_000L, NOW);
+                "CASH", 450_000L, 440_000L, NOW);
 
         assertThat(transfer.cashReceivedAmount()).isNull();
         assertThat(cash.cashReceivedAmount()).isEqualTo(440_000L);
         assertThatThrownBy(() -> new PaymentSettlementCommand(JOB, QUOTATION, REQUEST, OWNER,
-                FIXER, -1L, NOW)).isInstanceOf(IllegalArgumentException.class);
+                FIXER, "CASH", 450_000L, -1L, NOW)).isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test

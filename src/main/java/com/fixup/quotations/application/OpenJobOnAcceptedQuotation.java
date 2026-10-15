@@ -25,6 +25,6 @@ class OpenJobOnAcceptedQuotation {
             return;
         }
         jobs.open(new JobOpeningCommand(event.requestId(), event.quotationId(), event.fixerUserId(),
-                event.ownerUserId(), event.acceptedAt()));
+                event.ownerUserId(), event.paymentMethod().name(), event.amount(), event.acceptedAt()));
     }
 }

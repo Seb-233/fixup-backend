@@ -1,10 +1,8 @@
 package com.fixup.payments.api;
 
 /**
- * Financial settlement requested by jobs after a job is completed.
- *
- * <p>The future implementation will release transfer earnings or record cash received without
- * importing the jobs module.
+ * Synchronous financial settlement for a completed job. A failed settlement rolls the
+ * job and request states back within the same transaction.
  */
 public interface PaymentSettlement {
 
