@@ -644,11 +644,11 @@
             }
           },
           "200" : {
-            "description" : "The accepted quotation",
+            "description" : "The accepted quotation and its next payment step",
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/QuotationResponse"
+                  "$ref" : "#/components/schemas/AcceptedQuotationResponse"
                 }
               }
             }
@@ -4664,6 +4664,27 @@
       "QuotationStatus" : {
         "type" : "string",
         "enum" : [ "SUBMITTED", "ACCEPTED", "REJECTED" ]
+      },
+      "AcceptedQuotationResponse" : {
+        "type" : "object",
+        "properties" : {
+          "quotationId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "requestId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "paymentMethod" : {
+            "$ref" : "#/components/schemas/PaymentMethod"
+          },
+          "paymentId" : {
+            "type" : [ "string", "null" ],
+            "format" : "uuid"
+          }
+        },
+        "required" : [ "paymentMethod", "quotationId", "requestId" ]
       },
       "NewProperty" : {
         "type" : "object",

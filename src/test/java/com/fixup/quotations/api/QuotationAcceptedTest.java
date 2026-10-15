@@ -6,6 +6,7 @@ import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatNullPointerException;
 
 class QuotationAcceptedTest {
 
@@ -27,5 +28,12 @@ class QuotationAcceptedTest {
         assertThat(event.amount()).isEqualTo(450_000L);
         assertThat(event.acceptedAt()).isEqualTo(acceptedAt);
         assertThat(event.paymentMethod()).isEqualTo(PaymentMethod.TRANSFER);
+    }
+
+    @Test
+    void eventRejectsMissingPaymentMethod() {
+        assertThatNullPointerException().isThrownBy(() -> new QuotationAccepted(UUID.randomUUID(),
+                UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), 10_000L,
+                Instant.parse("2026-10-15T12:00:00Z"), null));
     }
 }

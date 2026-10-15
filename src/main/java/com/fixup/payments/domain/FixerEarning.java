@@ -6,8 +6,8 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * FR-UC-20: lo que un trabajo le deja al técnico. Nace retenido cuando el propietario acepta la
- * cotización, se libera cuando el trabajo se cierra y sale de la cuenta cuando se transfiere.
+ * Lo que el ciclo financiero le deja al técnico. TRANSFER lo crea retenido solo después de
+ * aprobar el pago; aceptar cualquiera de los métodos no crea un earning.
  *
  * El monto bruto, la comisión y el neto se guardan los tres: recalcularlos después significaría
  * que un cambio de tarifa reescribe la historia.

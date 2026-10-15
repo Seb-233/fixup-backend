@@ -272,7 +272,7 @@ abstract class RemodelingHttpContract {
     }
 
     @Test
-    void independentRequirementsDriveJobsEarningsAndAllProgressStates() throws Exception {
+    void independentRequirementsUseTheirOwnPaymentMethodWhenAccepted() throws Exception {
         String ownerSubject = "auth0|remodel-owner-progress";
         UUID owner = provisionOwner(ownerSubject);
         JsonNode project = createProject(ownerSubject, property(owner));
@@ -291,19 +291,21 @@ abstract class RemodelingHttpContract {
         accept(ownerSubject, electricalQuotation);
         assertProjectStatus(ownerSubject, projectId, "FULLY_ASSIGNED", 2, 0);
         assertThat(jdbc.queryForObject("SELECT count(*) FROM jobs WHERE fixer_user_id = ?",
-                Integer.class, fixerId)).isEqualTo(2);
+                Integer.class, fixerId)).isEqualTo(1);
         assertThat(jdbc.queryForObject("SELECT count(*) FROM fixer_earnings WHERE fixer_user_id = ?",
-                Integer.class, fixerId)).isEqualTo(2);
-
-        List<UUID> jobs = jdbc.query("SELECT id FROM jobs ORDER BY request_id", (rs, row) ->
-                UUID.fromString(rs.getString(1)));
-        mvc.perform(post("/jobs/" + jobs.get(0) + "/complete").with(identity(fixer)))
-                .andExpect(status().isOk());
-        assertProjectStatus(ownerSubject, projectId, "PARTIALLY_COMPLETED", 2, 1);
-
-        mvc.perform(post("/jobs/" + jobs.get(1) + "/complete").with(identity(fixer)))
-                .andExpect(status().isOk());
-        assertProjectStatus(ownerSubject, projectId, "COMPLETED", 2, 2);
+                Integer.class, fixerId)).isZero();
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM repair_payments "
+                + "WHERE request_id = ? AND purpose = 'SERVICE' AND status = 'PENDING'",
+                Integer.class, plumbingRequest)).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM jobs WHERE request_id = ? AND status = 'ASSIGNED'",
+                Integer.class, electricalRequest)).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM jobs WHERE request_id = ?",
+                Integer.class, plumbingRequest)).isZero();
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM repair_payments WHERE request_id = ?",
+                Integer.class, electricalRequest)).isZero();
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM remodeling_requirements "
+                + "WHERE project_id = ? AND request_id IN (?, ?)", Integer.class,
+                projectId, plumbingRequest, electricalRequest)).isEqualTo(2);
     }
 
     void assertProjectStatus(String ownerSubject, UUID projectId, String expected,

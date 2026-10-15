@@ -161,7 +161,11 @@ class PostgresRemodelingIT extends RemodelingHttpContract {
                 .andExpect(status().isOk());
         assertProjectStatus(ownerSubject, projectId, "FULLY_ASSIGNED", 2, 0);
         assertThat(jdbc.queryForObject("SELECT count(*) FROM jobs WHERE request_id IN (?, ?)",
-                Integer.class, firstRequest, secondRequest)).isEqualTo(2);
+                Integer.class, firstRequest, secondRequest)).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM repair_payments WHERE request_id IN (?, ?)",
+                Integer.class, firstRequest, secondRequest)).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM fixer_earnings WHERE quotation_id IN (?, ?)",
+                Integer.class, firstQuotation, secondQuotation)).isZero();
     }
 
     private List<UUID> visibleProjectIds(UUID userId, String role) {

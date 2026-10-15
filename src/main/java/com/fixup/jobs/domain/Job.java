@@ -7,8 +7,8 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * FR-UC-20: el trabajo nace cuando el propietario acepta una cotización y termina cuando el
- * técnico lo cierra. Guarda a las dos partes porque el dinero se mueve entre ellas.
+ * Un trabajo CASH nace al aceptar la cotización; uno TRANSFER nace solo después de aprobar el
+ * pago. Guarda a las dos partes porque la liquidación mueve valor entre ellas.
  */
 public record Job(UUID id, UUID requestId, UUID quotationId, UUID fixerUserId, UUID ownerUserId,
         JobStatus status, Instant createdAt, Instant completedAt, Instant updatedAt) {

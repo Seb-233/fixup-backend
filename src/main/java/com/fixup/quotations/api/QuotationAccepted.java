@@ -2,6 +2,7 @@ package com.fixup.quotations.api;
 
 import com.fixup.requests.api.PaymentMethod;
 import java.time.Instant;
+import java.util.Objects;
 import java.util.UUID;
 
 /**
@@ -13,20 +14,14 @@ import java.util.UUID;
  * {@code @TransactionalEventListener(phase = AFTER_COMMIT)}: si la aceptación se revierte
  * después, el correo ya salió y no hay forma de recogerlo.
  *
- * <p>Un consumidor que solo escribe en nuestra propia base y cuyo registro debe existir
- * siempre que la cotización esté aceptada —el trabajo en {@code jobs}, el ingreso retenido en
- * {@code payments}— escucha con {@code @EventListener} y
- * {@code @Transactional(propagation = MANDATORY)}, dentro de la misma transacción. No hay nada
- * externo que proteger, y después del commit existiría una ventana en la que una cotización
- * aceptada no tiene trabajo abierto ni dinero comprometido: el rollback conjunto es
- * justamente la garantía que se quiere.
+ * <p>Los consumidores internos escuchan con {@code @EventListener} y
+ * {@code @Transactional(propagation = MANDATORY)} para compartir la transacción. En FR-UC-05
+ * solo CASH abre un Job desde este evento; TRANSFER queda bloqueado por su pago pendiente y
+ * ningún método crea un earning durante la aceptación.
  */
 public record QuotationAccepted(UUID quotationId, UUID requestId, UUID fixerUserId, UUID ownerUserId,
         long amount, Instant acceptedAt, PaymentMethod paymentMethod) {
-
-    /** Compatibility constructor until RepairRequest persists the selected payment method. */
-    public QuotationAccepted(UUID quotationId, UUID requestId, UUID fixerUserId, UUID ownerUserId,
-            long amount, Instant acceptedAt) {
-        this(quotationId, requestId, fixerUserId, ownerUserId, amount, acceptedAt, null);
+    public QuotationAccepted {
+        Objects.requireNonNull(paymentMethod, "paymentMethod must not be null");
     }
 }

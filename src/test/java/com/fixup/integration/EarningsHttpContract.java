@@ -29,10 +29,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * FR-UC-20: contrato HTTP del dinero, recorrido de extremo a extremo contra la base.
  *
- * <p>Las pruebas de dominio ya cubren la aritmética y las transiciones. Lo que falta verificar es
- * que el recorrido completo funcione por la API: aceptar la cotización retiene el dinero, cerrar
- * el trabajo lo libera, y la transferencia se lleva exactamente el saldo disponible. Se reutiliza
- * sin cambios contra H2 y contra PostgreSQL.
+ * <p>La aceptación CASH se verifica sin earning. Los casos históricos de liberación y payout
+ * parten de un earning HELD sembrado explícitamente para mantener esas pruebas aisladas mientras
+ * FR-UC-05 incorpora el nuevo punto de creación después de aprobar un pago TRANSFER.
  */
 abstract class EarningsHttpContract {
 
@@ -92,7 +91,7 @@ abstract class EarningsHttpContract {
         java.util.UUID reqPropId = java.util.UUID.randomUUID();
         java.util.UUID ownerUserId = java.util.UUID.fromString(mapper.readTree(mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/auth/me").with(org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt().jwt(j -> j.subject(ownerSubject)))).andReturn().getResponse().getContentAsString()).get("id").asText());
         com.fixup.testsupport.PropertyFixtures.insertPublished(jdbc, reqPropId, ownerUserId);
-        String body = "{\"propertyId\":\"" + reqPropId.toString() + "\",\"title\":\"Tubo roto\",\"description\":\"Fuga constante de agua en la cocina\",\"mediaIds\":[],\"paymentMethod\":\"TRANSFER\"}";
+        String body = "{\"propertyId\":\"" + reqPropId.toString() + "\",\"title\":\"Tubo roto\",\"description\":\"Fuga constante de agua en la cocina\",\"mediaIds\":[],\"paymentMethod\":\"CASH\"}";
         var result = mvc.perform(post("/requests").with(identity(ownerSubject)).contentType(MediaType.APPLICATION_JSON).content(body)).andExpect(status().isCreated()).andReturn();
         java.util.UUID reqId = java.util.UUID.fromString(mapper.readTree(result.getResponse().getContentAsString()).get("requestId").asText());
         jdbc.update("UPDATE repair_requests SET specialty = ? WHERE id = ?", specialty, reqId);
@@ -120,28 +119,45 @@ abstract class EarningsHttpContract {
                 .andExpect(status().isOk());
     }
 
-    /** Deja al técnico con un trabajo asignado y su ingreso retenido. Devuelve el id del trabajo. */
-    private UUID assignedJob(String ownerSubject, String fixerSubject, long amount) throws Exception {
+    private record AcceptedCashJob(UUID jobId, UUID quotationId, UUID fixerId) {
+    }
+
+    private AcceptedCashJob acceptedCashJob(String ownerSubject, String fixerSubject, long amount) throws Exception {
         UUID requestId = createRequest(ownerSubject, "PLUMBING");
         UUID quotationId = submitQuotation(fixerSubject, requestId, amount);
         acceptQuotation(ownerSubject, quotationId);
 
         var result = mvc.perform(get("/jobs/me").with(identity(fixerSubject)))
                 .andExpect(status().isOk()).andReturn();
-        return UUID.fromString(mapper.readTree(result.getResponse().getContentAsString())
+        UUID jobId = UUID.fromString(mapper.readTree(result.getResponse().getContentAsString())
                 .get(0).get("id").asText());
+        UUID fixerId = jdbc.queryForObject("SELECT fixer_user_id FROM quotations WHERE id = ?",
+                UUID.class, quotationId);
+        return new AcceptedCashJob(jobId, quotationId, fixerId);
+    }
+
+    /** Seeds escrow only to keep the existing completion and payout contracts isolated. */
+    private UUID assignedJob(String ownerSubject, String fixerSubject, long amount) throws Exception {
+        var accepted = acceptedCashJob(ownerSubject, fixerSubject, amount);
+        long commission = amount * 1_000 / 10_000;
+        jdbc.update("INSERT INTO fixer_earnings (id, quotation_id, fixer_user_id, gross_amount, "
+                + "commission_amount, net_amount, commission_rate_bps, status, created_at, updated_at) "
+                + "VALUES (?, ?, ?, ?, ?, ?, 1000, 'HELD', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
+                UUID.randomUUID(), accepted.quotationId(), accepted.fixerId(), amount, commission,
+                amount - commission);
+        return accepted.jobId();
     }
 
     // ---------- Tests ----------
 
     @Test
-    void acceptingTheQuotationOpensTheJobAndHoldsTheMoneyInEscrow() throws Exception {
+    void acceptingCashQuotationOpensJobWithoutCreatingEarning() throws Exception {
         String owner = "auth0|owner-escrow";
         String fixer = "auth0|fixer-escrow";
         provisionWithRole(owner, "OWNER");
         provisionVerifiedFixer(fixer, "PLUMBING");
 
-        UUID jobId = assignedJob(owner, fixer, AMOUNT);
+        UUID jobId = acceptedCashJob(owner, fixer, AMOUNT).jobId();
 
         mvc.perform(get("/jobs/me").with(identity(fixer)))
                 .andExpect(status().isOk())
@@ -154,16 +170,10 @@ abstract class EarningsHttpContract {
         mvc.perform(get("/payments/me/earnings").with(identity(fixer)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.availableBalance").value(0))
-                .andExpect(jsonPath("$.heldBalance").value(NET))
-                .andExpect(jsonPath("$.totalCommission").value(COMMISSION))
-                .andExpect(jsonPath("$.grossTotal").value(AMOUNT))
-                .andExpect(jsonPath("$.history", hasSize(1)))
-                .andExpect(jsonPath("$.history[0].status").value("HELD"))
-                .andExpect(jsonPath("$.history[0].grossAmount").value(AMOUNT))
-                .andExpect(jsonPath("$.history[0].commissionAmount").value(COMMISSION))
-                .andExpect(jsonPath("$.history[0].netAmount").value(NET))
-                .andExpect(jsonPath("$.history[0].commissionRateBasisPoints").value(1000))
-                .andExpect(jsonPath("$.history[0].releasedAt").doesNotExist());
+                .andExpect(jsonPath("$.heldBalance").value(0))
+                .andExpect(jsonPath("$.totalCommission").value(0))
+                .andExpect(jsonPath("$.grossTotal").value(0))
+                .andExpect(jsonPath("$.history", hasSize(0)));
     }
 
     @Test

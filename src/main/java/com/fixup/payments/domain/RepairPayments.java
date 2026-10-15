@@ -6,7 +6,7 @@ import java.util.UUID;
 
 public interface RepairPayments {
     Optional<RepairPayment> findById(UUID id);
-    Optional<RepairPayment> findByQuotation(UUID quotationId);
+    Optional<RepairPayment> findByQuotationAndPurpose(UUID quotationId, PaymentPurpose purpose);
     List<RepairPayment> findByOwner(UUID ownerUserId);
     void create(RepairPayment payment);
     void update(RepairPayment payment);
