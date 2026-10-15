@@ -221,7 +221,15 @@ abstract class PaymentHttpContract {
         return acceptedQuotation(suffix, "CASH");
     }
 
+    private AcceptedTransfer acceptedCash(String suffix, long amount) throws Exception {
+        return acceptedQuotation(suffix, "CASH", amount);
+    }
+
     private AcceptedTransfer acceptedQuotation(String suffix, String method) throws Exception {
+        return acceptedQuotation(suffix, method, AMOUNT);
+    }
+
+    private AcceptedTransfer acceptedQuotation(String suffix, String method, long amount) throws Exception {
         String owner = "auth0|payment-owner-" + suffix;
         String fixer = "auth0|payment-fixer-" + suffix;
         UUID ownerId = provisionWithRole(owner, "OWNER");
@@ -241,7 +249,7 @@ abstract class PaymentHttpContract {
         String quotationBody = """
                 {"requestId":"%s","amount":%d,"estimatedDays":2,
                  "message":"Materiales y mano de obra incluidos"}
-                """.formatted(requestId, AMOUNT);
+                """.formatted(requestId, amount);
         var quotationResult = mvc.perform(post("/quotations").with(identity(fixer))
                         .contentType(MediaType.APPLICATION_JSON).content(quotationBody))
                 .andExpect(status().isCreated()).andReturn();
@@ -296,6 +304,90 @@ abstract class PaymentHttpContract {
     }
 
     @Test
+    void cashWholePesoString50000CompletesWithoutDebtOrEarning() throws Exception {
+        var cash = acceptedCash("whole-peso-50000", 50_000L);
+        UUID jobId = jdbc.queryForObject("SELECT id FROM jobs WHERE quotation_id = ?", UUID.class,
+                cash.quotationId());
+
+        mvc.perform(post("/jobs/" + jobId + "/complete").with(identity(cash.fixerSubject()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"receivedAmount\":\"50000\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("COMPLETED"));
+        assertThat(jdbc.queryForObject("SELECT status FROM repair_requests WHERE id = ?",
+                String.class, cash.requestId())).isEqualTo("COMPLETED");
+        mvc.perform(get("/payments/cash-settlements/jobs/" + jobId)
+                        .with(identity(cash.ownerSubject())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.agreedAmount").value(50_000))
+                .andExpect(jsonPath("$.receivedAmount").value(50_000))
+                .andExpect(jsonPath("$.outstandingAmount").value(0));
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM owner_debts WHERE quotation_id = ?",
+                Integer.class, cash.quotationId())).isZero();
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM fixer_earnings WHERE quotation_id = ?",
+                Integer.class, cash.quotationId())).isZero();
+    }
+
+    @Test
+    void cashWholePesoString100000AlsoCompletes() throws Exception {
+        var cash = acceptedCash("whole-peso-100000", 100_000L);
+        UUID jobId = jdbc.queryForObject("SELECT id FROM jobs WHERE quotation_id = ?", UUID.class,
+                cash.quotationId());
+
+        mvc.perform(post("/jobs/" + jobId + "/complete").with(identity(cash.fixerSubject()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"receivedAmount\":\"100000\"}"))
+                .andExpect(status().isOk());
+        assertThat(jdbc.queryForObject("SELECT outstanding_amount FROM cash_settlements WHERE job_id = ?",
+                Long.class, jobId)).isZero();
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM owner_debts WHERE quotation_id = ?",
+                Integer.class, cash.quotationId())).isZero();
+    }
+
+    @Test
+    void cashWholePesoString30000CreatesOnlyThe20000Debt() throws Exception {
+        var cash = acceptedCash("whole-peso-30000", 50_000L);
+        UUID jobId = jdbc.queryForObject("SELECT id FROM jobs WHERE quotation_id = ?", UUID.class,
+                cash.quotationId());
+
+        mvc.perform(post("/jobs/" + jobId + "/complete").with(identity(cash.fixerSubject()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"receivedAmount\":\"30000\"}"))
+                .andExpect(status().isOk());
+        mvc.perform(get("/payments/cash-settlements/jobs/" + jobId)
+                        .with(identity(cash.ownerSubject())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.agreedAmount").value(50_000))
+                .andExpect(jsonPath("$.receivedAmount").value(30_000))
+                .andExpect(jsonPath("$.outstandingAmount").value(20_000));
+        assertThat(jdbc.queryForObject("SELECT status FROM owner_debts WHERE quotation_id = ?",
+                String.class, cash.quotationId())).isEqualTo("OUTSTANDING");
+        assertThat(jdbc.queryForObject("SELECT amount FROM owner_debts WHERE quotation_id = ?",
+                Long.class, cash.quotationId())).isEqualTo(20_000L);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM fixer_earnings WHERE quotation_id = ?",
+                Integer.class, cash.quotationId())).isZero();
+    }
+
+    @Test
+    void cashDecimalStringsCannotBeRoundedToWholePesos() throws Exception {
+        var cash = acceptedCash("cash-decimal-strings", 50_000L);
+        UUID jobId = jdbc.queryForObject("SELECT id FROM jobs WHERE quotation_id = ?", UUID.class,
+                cash.quotationId());
+
+        for (String value : new String[] {"0.01", "1.50", "49999.99"}) {
+            mvc.perform(post("/jobs/" + jobId + "/complete").with(identity(cash.fixerSubject()))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"receivedAmount\":\"" + value + "\"}"))
+                    .andExpect(status().isConflict())
+                    .andExpect(jsonPath("$.code").value("INVALID_CASH_RECEIVED_AMOUNT"));
+        }
+        assertThat(jdbc.queryForObject("SELECT status FROM jobs WHERE id = ?", String.class,
+                jobId)).isEqualTo("ASSIGNED");
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM cash_settlements WHERE job_id = ?",
+                Integer.class, jobId)).isZero();
+    }
+
+    @Test
     void fullCashCompletionCreatesOnlyAnAuditedSettlement() throws Exception {
         var cash = acceptedCash("final-cash-full");
         UUID jobId = jdbc.queryForObject("SELECT id FROM jobs WHERE quotation_id = ?", UUID.class,
@@ -317,7 +409,7 @@ abstract class PaymentHttpContract {
                 .andExpect(status().isConflict());
         mvc.perform(post("/jobs/" + jobId + "/complete").with(identity(cash.fixerSubject()))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"receivedAmount\":\"100\"}"))
+                        .content("{\"receivedAmount\":\"100.5\"}"))
                 .andExpect(status().isConflict());
         mvc.perform(post("/jobs/" + jobId + "/complete").with(identity(cash.fixerSubject()))
                         .contentType(MediaType.APPLICATION_JSON)
@@ -351,17 +443,17 @@ abstract class PaymentHttpContract {
 
     @Test
     void cashJobMayCompleteWithZeroReceived() throws Exception {
-        var cash = acceptedCash("final-cash-zero");
+        var cash = acceptedCash("final-cash-zero", 50_000L);
         UUID jobId = jdbc.queryForObject("SELECT id FROM jobs WHERE quotation_id = ?", UUID.class,
                 cash.quotationId());
         mvc.perform(post("/jobs/" + jobId + "/complete").with(identity(cash.fixerSubject()))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"receivedAmount\":0}"))
+                        .content("{\"receivedAmount\":\"0\"}"))
                 .andExpect(status().isOk());
         assertThat(jdbc.queryForObject("SELECT outstanding_amount FROM cash_settlements WHERE job_id = ?",
-                Long.class, jobId)).isEqualTo(AMOUNT);
+                Long.class, jobId)).isEqualTo(50_000L);
         assertThat(jdbc.queryForObject("SELECT amount FROM owner_debts WHERE quotation_id = ?",
-                Long.class, cash.quotationId())).isEqualTo(AMOUNT);
+                Long.class, cash.quotationId())).isEqualTo(50_000L);
         assertThat(jdbc.queryForObject("SELECT count(*) FROM fixer_earnings WHERE quotation_id = ?",
                 Integer.class, cash.quotationId())).isZero();
     }

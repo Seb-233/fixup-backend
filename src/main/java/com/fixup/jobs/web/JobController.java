@@ -12,6 +12,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import java.math.BigDecimal;
 import java.time.Instant;
 import com.fasterxml.jackson.databind.JsonNode;
 import java.util.List;
@@ -74,6 +75,14 @@ class JobController {
         Long receivedAsLong() {
             if (receivedAmount == null || receivedAmount.isNull()) {
                 return null;
+            }
+            if (receivedAmount.isTextual()) {
+                try {
+                    return new BigDecimal(receivedAmount.textValue()).longValueExact();
+                } catch (NumberFormatException | ArithmeticException ignored) {
+                    throw new com.fixup.jobs.api.JobConflictException("INVALID_CASH_RECEIVED_AMOUNT",
+                            "Cash received must be a whole peso amount");
+                }
             }
             if (!receivedAmount.isIntegralNumber() || !receivedAmount.canConvertToLong()) {
                 throw new com.fixup.jobs.api.JobConflictException("INVALID_CASH_RECEIVED_AMOUNT",
