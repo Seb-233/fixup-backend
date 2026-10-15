@@ -1,11 +1,8 @@
 package com.fixup.properties.infrastructure;
 
-import com.fixup.properties.api.PropertyStatus;
 import com.fixup.properties.domain.Property;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
@@ -36,22 +33,6 @@ class PropertyEntity {
     @Column(name = "area_m2", nullable = false, precision = 10, scale = 2)
     private BigDecimal areaM2;
 
-    @Column(name = "latitude", precision = 10, scale = 6)
-    private BigDecimal latitude;
-
-    @Column(name = "longitude", precision = 10, scale = 6)
-    private BigDecimal longitude;
-
-    @Enumerated(EnumType.STRING)
-    @Column(name = "status", nullable = false, length = 32)
-    private PropertyStatus status;
-
-    @Column(name = "published_at")
-    private Instant publishedAt;
-
-    @Column(name = "published_by_user_id")
-    private UUID publishedByUserId;
-
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
@@ -67,21 +48,11 @@ class PropertyEntity {
         this.address = property.address();
         this.city = property.city();
         this.areaM2 = property.areaM2();
-        this.latitude = property.latitude();
-        this.longitude = property.longitude();
-        this.status = property.status();
-        this.publishedAt = property.publishedAt();
-        this.publishedByUserId = property.publishedByUserId();
         this.createdAt = property.createdAt();
         this.updatedAt = property.updatedAt();
     }
 
     Property toDomain() {
-        return new Property(
-            id, ownerUserId, name, address, city, areaM2,
-            latitude, longitude,
-            status, publishedAt, publishedByUserId,
-            createdAt, updatedAt
-        );
+        return new Property(id, ownerUserId, name, address, city, areaM2, createdAt, updatedAt);
     }
 }

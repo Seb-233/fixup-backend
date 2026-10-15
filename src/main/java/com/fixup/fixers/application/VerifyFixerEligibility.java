@@ -50,19 +50,4 @@ class VerifyFixerEligibility implements FixerEligibility {
                 .map(profile -> profile.specialties())
                 .orElse(Set.of());
     }
-
-    @Override
-    @Transactional(readOnly = true)
-    public String cityOf(CurrentActor actor) {
-        requireVerified(actor);
-        return cityOf(actor.internalUserId());
-    }
-
-    @Override
-    @Transactional(readOnly = true)
-    public String cityOf(UUID fixerUserId) {
-        return profiles.findByUserId(fixerUserId)
-                .map(profile -> profile.city())
-                .orElse(null);
-    }
 }

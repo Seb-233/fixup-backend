@@ -14,10 +14,8 @@ final class PropertyAccess {
         if (actor.status() != UserStatus.ACTIVE) {
             throw new PropertyAccessDeniedException("Actor is not active");
         }
-        if (!actor.hasRole(Role.OWNER)
-                && !actor.hasRole(Role.REAL_ESTATE_MANAGER)
-                && !actor.hasRole(Role.PLATFORM_ADMIN)) {
-            throw new PropertyAccessDeniedException("Actor does not have OWNER, REAL_ESTATE_MANAGER or PLATFORM_ADMIN role");
+        if (!actor.hasRole(Role.OWNER)) {
+            throw new PropertyAccessDeniedException("Actor does not have OWNER role");
         }
     }
 

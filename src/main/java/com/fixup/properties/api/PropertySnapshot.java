@@ -9,7 +9,5 @@ public record PropertySnapshot(
     String name,
     String address,
     String city,
-    BigDecimal areaM2,
-    BigDecimal latitude,
-    BigDecimal longitude
+    BigDecimal areaM2
 ) {}
