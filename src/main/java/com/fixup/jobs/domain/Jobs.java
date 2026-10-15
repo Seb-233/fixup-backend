@@ -1,5 +1,6 @@
 package com.fixup.jobs.domain;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -9,6 +10,8 @@ public interface Jobs {
     Optional<Job> findByIdForUpdate(UUID id);
 
     List<Job> findByFixer(UUID fixerUserId);
+
+    List<Job> findByRequestIds(Collection<UUID> requestIds);
 
     boolean existsByQuotation(UUID quotationId);
 

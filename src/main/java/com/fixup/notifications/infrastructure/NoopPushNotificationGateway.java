@@ -22,8 +22,8 @@ class NoopPushNotificationGateway implements PushNotificationGateway {
 
     @Override
     public NotificationStatus send(PushNotification notification) {
-        LOG.debug("Push notification skipped (no provider configured yet): recipient={}",
-                notification.recipientUserId());
+        LOG.debug("Push notification skipped (no provider configured yet): recipient={}, title={}, payload={}",
+                notification.recipientUserId(), notification.title(), notification.payload());
         return NotificationStatus.SKIPPED;
     }
 }

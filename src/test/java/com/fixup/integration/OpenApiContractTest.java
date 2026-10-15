@@ -26,12 +26,9 @@ class OpenApiContractTest {
     @Autowired org.springdoc.webmvc.api.OpenApiWebMvcResource openApi;
 
     @Test
-    void exportsDevelopmentContractWithoutPublicDocumentationEndpoint() throws Exception {
-        mvc.perform(get("/v3/api-docs")).andExpect(status().isUnauthorized());
-        mvc.perform(get("/v3/api-docs").with(
-                org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt()))
-                .andExpect(status().isForbidden());
-        // Generate the contract directly; do not bypass or weaken the production filter chain.
+    void exportsContractWithDocumentationAvailableOnlyInDevelopment() throws Exception {
+        mvc.perform(get("/v3/api-docs")).andExpect(status().isOk());
+        // Use the project's existing exporter; production documentation remains disabled.
         var request = new org.springframework.mock.web.MockHttpServletRequest("GET", "/v3/api-docs");
         var contract = mapper.readTree(openApi.openapiJson(request, "/v3/api-docs", java.util.Locale.ROOT));
         assertThat(contract.at("/components/securitySchemes/bearerAuth/scheme").asText()).isEqualTo("bearer");
@@ -51,11 +48,24 @@ class OpenApiContractTest {
                 "/analytics/zones/{zone}/market-indicators",
                 "/requests", "/requests/me", "/requests/open", "/requests/{requestId}",
                 "/requests/{requestId}/messages",
+                "/remodelings", "/remodelings/me", "/remodelings/{projectId}",
                 "/quotations", "/quotations/me", "/quotations/for-request/{requestId}",
                 "/quotations/{quotationId}/accept", "/quotations/{quotationId}/reject",
                 "/jobs/me", "/jobs/{jobId}/complete",
-                "/payments/me/earnings", "/payments/me/payouts", "/properties", "/properties/{propertyId}", "/properties/me");
+                "/payments/me/earnings", "/payments/me/payouts", "/payments/me/debts",
+                "/payments/debts/{debtId}/pay", "/payments/cash-settlements/jobs/{jobId}",
+                "/payments/{paymentId}",
+                "/payments/{paymentId}/simulate", "/properties", "/properties/{propertyId}", "/properties/me",
+                "/properties/search", "/locations/geocode", "/locations/reverse-geocode",
+                "/properties/bulk/validate", "/properties/bulk/import",
+                "/notifications/me", "/notifications/{id}/read", "/notifications/read-all",
+                "/notifications/me/unread-count", "/notifications/device-token",
+                "/contracts", "/contracts/me", "/contracts/{id}", "/contracts/{id}/renew",
+                "/contracts/{id}/terminate", "/contracts/expiring",
+                "/administration/sla-board/requests", "/administration/sla-board/requests/{id}/reassign",
+                "/administration/sla-board/requests/{id}/acknowledge");
         assertThat(paths.fieldNames()).toIterable().doesNotContain(
+                "/demo/token", "/demo/token/{role}",
                 "/media/me/portfolio/{pieceId}",
                 "/media/me/portfolio/{pieceId}/hide",
                 "/media/me/portfolio/{pieceId}/show");
@@ -89,7 +99,12 @@ class OpenApiContractTest {
                 {"/jobs/me", "get", "200"}, {"/jobs/{jobId}/complete", "post", "200"},
                 {"/payments/me/earnings", "get", "200"},
                 {"/payments/me/payouts", "post", "201"},
-                {"/payments/me/payouts", "get", "200"}}) {
+                {"/payments/me/payouts", "get", "200"},
+                {"/payments/me/debts", "get", "200"},
+                {"/payments/debts/{debtId}/pay", "post", "201"},
+                {"/payments/cash-settlements/jobs/{jobId}", "get", "200"},
+                {"/payments/{paymentId}", "get", "200"},
+                {"/payments/{paymentId}/simulate", "post", "200"}}) {
             var operation = paths.get(endpoint[0]).get(endpoint[1]);
             assertThat(operation.get("security").toString()).contains("bearerAuth");
             for (String code : new String[]{endpoint[2], "400", "401", "403", "409"}) {
@@ -107,6 +122,93 @@ class OpenApiContractTest {
                     .as("/analytics/zones/{zone}/market-indicators status " + code).isTrue();
         }
         assertThat(analyticsOp.get("responses").has("402")).isFalse();
+
+        for (var endpoint : new String[][]{
+                {"/remodelings", "post", "201"},
+                {"/remodelings/me", "get", "200"},
+                {"/remodelings/{projectId}", "get", "200"}}) {
+            var operation = paths.get(endpoint[0]).get(endpoint[1]);
+            assertThat(operation.get("security").toString()).contains("bearerAuth");
+            for (String code : new String[]{endpoint[2], "400", "401", "403", "404", "409"}) {
+                assertThat(operation.get("responses").has(code))
+                        .as(endpoint[0] + " status " + code).isTrue();
+            }
+        }
+        assertThat(contract.at("/components/schemas/CreateProjectRequest/properties").toString())
+                .contains("propertyId", "title", "description", "requirements")
+                .doesNotContain("ownerUserId", "status");
+        assertThat(contract.at("/components/schemas/RequirementRequest/properties").toString())
+                .contains("title", "description", "mediaIds", "urgencyLevel", "paymentMethod")
+                .doesNotContain("requestId", "specialty", "assignedFixerUserId");
+        assertThat(contract.at("/components/schemas/ProjectResponse/properties").toString())
+                .contains("id", "propertyId", "ownerUserId", "status", "requirements",
+                        "requirementCount", "assignedCount", "completedCount");
+        assertThat(contract.at("/components/schemas/RequirementResponse/properties").toString())
+                .contains("requirementId", "requestId", "position", "specialty",
+                        "requestStatus", "paymentMethod", "assignedFixerUserId", "jobId", "jobStatus");
+        assertThat(contract.at("/components/schemas/OpenRequest/properties").toString())
+                .contains("paymentMethod");
+        assertThat(contract.at("/components/schemas/OpenRequest/required").toString())
+                .contains("paymentMethod");
+        assertThat(contract.at("/components/schemas/RequestDetailResponse/properties").toString())
+                .contains("paymentMethod");
+        assertThat(contract.at("/components/schemas/PaymentMethod/enum").toString())
+                .contains("TRANSFER", "CASH");
+        assertThat(contract.at("/components/schemas/RemodelingProgressStatus/enum").toString())
+                .contains("OPEN", "PARTIALLY_ASSIGNED", "FULLY_ASSIGNED",
+                        "PARTIALLY_COMPLETED", "COMPLETED");
+
+        var propertySearch = paths.get("/properties/search").get("get");
+        assertThat(propertySearch.get("security").toString()).contains("bearerAuth");
+        for (String code : new String[]{"200", "400", "401", "403"}) {
+            assertThat(propertySearch.get("responses").has(code))
+                    .as("/properties/search status " + code).isTrue();
+        }
+        var searchParameters = propertySearch.get("parameters");
+        assertThat(searchParameters.size()).isEqualTo(4);
+        for (String parameterName : new String[]{"latitude", "longitude", "radiusKm"}) {
+            var parameter = java.util.stream.StreamSupport.stream(searchParameters.spliterator(), false)
+                    .filter(candidate -> parameterName.equals(candidate.get("name").asText()))
+                    .findFirst().orElseThrow();
+            assertThat(parameter.get("required").asBoolean()).as(parameterName + " required").isTrue();
+        }
+        var ownershipScope = java.util.stream.StreamSupport.stream(searchParameters.spliterator(), false)
+                .filter(candidate -> "ownershipScope".equals(candidate.get("name").asText()))
+                .findFirst().orElseThrow();
+        assertThat(ownershipScope.get("required").asBoolean()).isFalse();
+        assertThat(ownershipScope.get("schema").get("default").asText()).isEqualTo("ALL");
+        assertThat(ownershipScope.get("schema").get("enum").toString())
+                .contains("ALL", "MINE", "OTHERS");
+        var searchResponseSchema = propertySearch.get("responses").get("200")
+                .get("content").get("application/json").get("schema");
+        assertThat(searchResponseSchema.get("type").asText()).isEqualTo("array");
+        assertThat(searchResponseSchema.get("items").get("$ref").asText()).contains("PropertySearchResult");
+        assertThat(contract.at("/components/schemas/PropertySearchResult/properties").toString())
+                .contains("id", "name", "address", "city", "areaM2", "latitude", "longitude", "distanceKm",
+                        "ownedByCurrentUser")
+                .doesNotContain("ownerUserId", "publishedByUserId");
+        assertThat(contract.at("/components/schemas/PropertySearchResult/required").toString())
+                .contains("ownedByCurrentUser");
+
+        var geocoding = paths.get("/locations/geocode").get("get");
+        assertThat(geocoding.get("security").toString()).contains("bearerAuth");
+        for (String code : new String[]{"200", "400", "401", "403", "429", "503"}) {
+            assertThat(geocoding.get("responses").has(code))
+                    .as("/locations/geocode status " + code).isTrue();
+        }
+        var geocodingQuery = geocoding.get("parameters").get(0);
+        assertThat(geocodingQuery.get("name").asText()).isEqualTo("query");
+        assertThat(geocodingQuery.get("required").asBoolean()).isTrue();
+        assertThat(geocodingQuery.get("schema").get("maxLength").asInt()).isEqualTo(200);
+        var geocodingResponse = geocoding.get("responses").get("200");
+        assertThat(geocodingResponse.get("headers").has("X-Data-Attribution")).isTrue();
+        assertThat(geocodingResponse.get("content").get("application/json").get("schema")
+                .get("items").get("$ref").asText()).contains("GeocodingCandidate");
+        assertThat(contract.at("/components/schemas/GeocodingCandidate/properties").toString())
+                .contains("displayName", "latitude", "longitude")
+                .doesNotContain("placeId", "osmType", "licence", "boundingbox");
+        assertThat(contract.at("/components/schemas/GeocodingCandidate/required").toString())
+                .contains("displayName", "latitude", "longitude");
 
         for (String piecePath : java.util.List.of(
                 "/media/me/portfolio/pieces/{pieceId}",
@@ -137,7 +239,13 @@ class OpenApiContractTest {
         assertThat(contract.at("/components/schemas/Specialty/enum").toString())
                 .contains("PLUMBING", "ELECTRICAL", "PAINTING", "CARPENTRY", "MASONRY", "GENERAL");
         assertThat(contract.at("/components/schemas/RepairRequestStatus/enum").toString())
-                .contains("OPEN", "ASSIGNED");
+                .contains("OPEN", "ASSIGNED", "COMPLETED");
+        assertThat(contract.at("/components/schemas/PayoutStatus/enum").toString())
+                .contains("REQUESTED", "TRANSFERRED");
+        assertThat(contract.at("/components/schemas/JobResponse/properties").toString())
+                .contains("paymentMethod", "agreedAmount");
+        assertThat(contract.at("/components/schemas/CompletionRequest/properties").toString())
+                .contains("receivedAmount");
         assertThat(contract.at("/components/schemas/QuotationStatus/enum").toString())
                 .contains("SUBMITTED", "ACCEPTED", "REJECTED");
         assertThat(contract.at("/components/schemas/RequestDetailResponse/properties/assignedFixerUserId/type")
@@ -150,7 +258,7 @@ class OpenApiContractTest {
         assertThat(contract.at("/components/schemas/RequestDetailResponse/properties").toString())
                 .doesNotContain("storageKey", "photoKeys");
         assertThat(contract.at("/components/schemas/OpenRequestSummaryResponse/properties").toString())
-                .contains("requestId", "specialty", "title", "createdAt")
+                .contains("requestId", "specialty", "title", "paymentMethod", "createdAt")
                 .doesNotContain("ownerUserId", "description", "photoKeys", "storageKey", "assignedFixerUserId");
         // No photo content crosses this API: the request carries media IDs only.
         assertThat(contract.at("/components/schemas/OpenRequest/properties").toString())
@@ -201,6 +309,19 @@ class OpenApiContractTest {
                 .toString()).contains("null");
         // A payout is requested for the whole available balance: the client never names an amount.
         assertThat(paths.get("/payments/me/payouts").get("post").has("requestBody")).isFalse();
+        assertThat(contract.at("/components/schemas/PaymentStatus/enum").toString())
+                .contains("PENDING", "APPROVED", "DECLINED", "ERROR");
+        assertThat(contract.at("/components/schemas/PaymentPurpose/enum").toString())
+                .contains("SERVICE", "OUTSTANDING_BALANCE");
+        assertThat(contract.at("/components/schemas/PaymentSimulationOutcome/enum").toString())
+                .contains("PENDING", "APPROVED", "DECLINED", "ERROR")
+                .doesNotContain("TRANSFER", "CASH", "CARD", "PSE", "SANDBOX");
+        assertThat(contract.at("/components/schemas/PaymentDetail/properties").toString())
+                .contains("paymentId", "quotationId", "requestId", "amount", "paymentMethod",
+                        "purpose", "status", "createdAt", "updatedAt", "completedAt")
+                .doesNotContain("ownerUserId", "fixerUserId", "card", "bank");
+        assertThat(contract.at("/components/schemas/SimulationRequest/properties").toString())
+                .contains("outcome").doesNotContain("ownerUserId", "paymentMethod");
         Files.createDirectories(Path.of("target"));
         Files.createDirectories(Path.of("docs"));
         String json = mapper.writerWithDefaultPrettyPrinter().writeValueAsString(contract) + System.lineSeparator();

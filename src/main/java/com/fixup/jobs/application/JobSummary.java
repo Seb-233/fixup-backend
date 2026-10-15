@@ -6,11 +6,13 @@ import java.time.Instant;
 import java.util.UUID;
 
 /** Read model of a job as the fixer executing it sees it. */
-public record JobSummary(UUID id, UUID requestId, UUID quotationId, UUID ownerUserId, JobStatus status,
+public record JobSummary(UUID id, UUID requestId, UUID quotationId, UUID ownerUserId,
+        String paymentMethod, long agreedAmount, JobStatus status,
         Instant createdAt, Instant completedAt) {
 
     static JobSummary of(Job job) {
         return new JobSummary(job.id(), job.requestId(), job.quotationId(), job.ownerUserId(),
+                job.paymentMethod(), job.agreedAmount(),
                 job.status(), job.createdAt(), job.completedAt());
     }
 }

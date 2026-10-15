@@ -26,7 +26,9 @@ public class CreateProperty {
             command.name(),
             command.address(),
             command.city(),
-            command.areaM2()
+            command.areaM2(),
+            command.latitude(),
+            command.longitude()
         );
 
         return PropertySummary.from(properties.save(property));

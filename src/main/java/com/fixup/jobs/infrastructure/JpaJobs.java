@@ -3,6 +3,7 @@ package com.fixup.jobs.infrastructure;
 import com.fixup.jobs.api.JobNotFoundException;
 import com.fixup.jobs.domain.Job;
 import com.fixup.jobs.domain.Jobs;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -25,6 +26,14 @@ class JpaJobs implements Jobs {
     public List<Job> findByFixer(UUID fixerUserId) {
         return repository.findByFixerUserIdOrderByCreatedAtDesc(fixerUserId).stream()
                 .map(JobEntity::toDomain).toList();
+    }
+
+    @Override
+    public List<Job> findByRequestIds(Collection<UUID> requestIds) {
+        if (requestIds == null || requestIds.isEmpty()) {
+            return List.of();
+        }
+        return repository.findByRequestIdIn(requestIds).stream().map(JobEntity::toDomain).toList();
     }
 
     @Override

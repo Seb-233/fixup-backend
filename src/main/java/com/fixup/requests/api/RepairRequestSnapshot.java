@@ -10,7 +10,13 @@ import java.util.UUID;
  * it does.
  */
 public record RepairRequestSnapshot(UUID requestId, UUID ownerUserId, Specialty specialty,
-        RepairRequestStatus status, UUID assignedFixerUserId) {
+        RepairRequestStatus status, UUID assignedFixerUserId, PaymentMethod paymentMethod) {
+
+    /** Compatibility constructor for repair requests persisted before FR-UC-05. */
+    public RepairRequestSnapshot(UUID requestId, UUID ownerUserId, Specialty specialty,
+            RepairRequestStatus status, UUID assignedFixerUserId) {
+        this(requestId, ownerUserId, specialty, status, assignedFixerUserId, null);
+    }
 
     public boolean isOpen() {
         return status == RepairRequestStatus.OPEN;
@@ -18,6 +24,12 @@ public record RepairRequestSnapshot(UUID requestId, UUID ownerUserId, Specialty 
 
     public boolean isAssigned() {
         return status == RepairRequestStatus.ASSIGNED;
+    }
+
+    public boolean allowsChat() {
+        return assignedFixerUserId != null
+                && (status == RepairRequestStatus.ASSIGNED
+                        || status == RepairRequestStatus.COMPLETED);
     }
 
     /** FR-UC-25: the owner check travels with the record, not with the screen that displays it. */

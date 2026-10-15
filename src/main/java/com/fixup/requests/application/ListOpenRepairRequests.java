@@ -12,10 +12,6 @@ import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/**
- * FR-UC-18: la bandeja del Fixer. Exige cuenta ACTIVE, rol FIXER y verificación VERIFIED.
- * Devuelve únicamente solicitudes compatibles con las especialidades del perfil del Fixer.
- */
 @Service
 public class ListOpenRepairRequests {
     private final RepairRequests requests;
@@ -42,8 +38,10 @@ public class ListOpenRepairRequests {
             return List.of();
         }
 
-        return requests.findOpenBySpecialties(specialties).stream()
-                // A fixer never sees his own request in the offer list.
+        var city = eligibility.cityOf(actor);
+        List<RepairRequest> requestsList = requests.findOpenBySpecialtiesAndCity(specialties, city);
+
+        return requestsList.stream()
                 .filter(request -> !request.ownerUserId().equals(actor.internalUserId()))
                 .toList();
     }

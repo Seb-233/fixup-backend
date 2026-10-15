@@ -7,10 +7,10 @@ import java.util.UUID;
 
 /** Read model of a transfer request. */
 public record PayoutSummary(UUID id, long amount, int earningCount, PayoutStatus status,
-        Instant requestedAt) {
+        Instant requestedAt, Instant transferredAt) {
 
     static PayoutSummary of(Payout payout) {
         return new PayoutSummary(payout.id(), payout.amount(), payout.earningCount(),
-                payout.status(), payout.requestedAt());
+                payout.status(), payout.requestedAt(), payout.transferredAt());
     }
 }

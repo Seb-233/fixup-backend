@@ -3,8 +3,11 @@ package com.fixup.requests.application;
 import com.fixup.requests.api.RepairRequestDirectory;
 import com.fixup.requests.api.RepairRequestNotFoundException;
 import com.fixup.requests.api.RepairRequestSnapshot;
+import com.fixup.requests.api.ProjectRepairRequestSnapshot;
 import com.fixup.requests.domain.RepairRequests;
 import java.time.Instant;
+import java.util.Collection;
+import java.util.List;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
@@ -28,6 +31,15 @@ class RepairRequestAssignment implements RepairRequestDirectory {
     public RepairRequestSnapshot require(UUID requestId) {
         return requests.findById(requestId).map(request -> request.snapshot())
                 .orElseThrow(RepairRequestNotFoundException::new);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<ProjectRepairRequestSnapshot> findAll(Collection<UUID> requestIds) {
+        return requests.findAllByIds(requestIds).stream()
+                .map(request -> new ProjectRepairRequestSnapshot(request.id(), request.specialty(),
+                        request.status(), request.assignedFixerUserId(), request.paymentMethod()))
+                .toList();
     }
 
     @Override
