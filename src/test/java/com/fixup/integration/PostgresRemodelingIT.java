@@ -14,6 +14,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -54,12 +55,36 @@ class PostgresRemodelingIT extends RemodelingHttpContract {
     void migrationsConstraintsIndexesAndForcedRlsAreInstalled() {
         assertThat(jdbc.queryForObject("SELECT count(*) FROM flyway_schema_history "
                 + "WHERE version IN ('20', '21') AND success = true", Integer.class)).isEqualTo(2);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM flyway_schema_history "
+                + "WHERE version = '24' AND success = true", Integer.class)).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT is_nullable FROM information_schema.columns "
+                + "WHERE table_name = 'repair_requests' AND column_name = 'payment_method'", String.class))
+                .isEqualTo("NO");
+        assertThat(jdbc.queryForObject("SELECT pg_get_constraintdef(oid) FROM pg_constraint "
+                + "WHERE conname = 'ck_repair_request_payment_method'", String.class))
+                .contains("TRANSFER", "CASH");
         assertThat(jdbc.queryForObject("SELECT relrowsecurity AND relforcerowsecurity "
                 + "FROM pg_class WHERE relname = 'remodeling_projects'", Boolean.class)).isTrue();
         assertThat(jdbc.queryForObject("SELECT relrowsecurity AND relforcerowsecurity "
                 + "FROM pg_class WHERE relname = 'remodeling_requirements'", Boolean.class)).isTrue();
         assertThat(jdbc.queryForObject("SELECT count(*) FROM pg_indexes WHERE tablename IN "
                 + "('remodeling_projects','remodeling_requirements')", Integer.class)).isGreaterThanOrEqualTo(7);
+    }
+
+    @Test
+    void paymentMethodPersistsForEachRequirementAndDatabaseRejectsUnknownValues() throws Exception {
+        String ownerSubject = "auth0|remodel-payment-methods";
+        UUID owner = provisionOwner(ownerSubject);
+        var project = createProject(ownerSubject, property(owner));
+        UUID transferRequest = UUID.fromString(project.at("/requirements/0/requestId").asText());
+        UUID cashRequest = UUID.fromString(project.at("/requirements/1/requestId").asText());
+
+        assertThat(jdbc.queryForObject("SELECT payment_method FROM repair_requests WHERE id = ?", String.class,
+                transferRequest)).isEqualTo("TRANSFER");
+        assertThat(jdbc.queryForObject("SELECT payment_method FROM repair_requests WHERE id = ?", String.class,
+                cashRequest)).isEqualTo("CASH");
+        assertThatThrownBy(() -> jdbc.update("UPDATE repair_requests SET payment_method = 'CARD' WHERE id = ?",
+                transferRequest)).isInstanceOf(DataIntegrityViolationException.class);
     }
 
     @Test

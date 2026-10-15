@@ -92,7 +92,7 @@ abstract class EarningsHttpContract {
         java.util.UUID reqPropId = java.util.UUID.randomUUID();
         java.util.UUID ownerUserId = java.util.UUID.fromString(mapper.readTree(mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/auth/me").with(org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt().jwt(j -> j.subject(ownerSubject)))).andReturn().getResponse().getContentAsString()).get("id").asText());
         com.fixup.testsupport.PropertyFixtures.insertPublished(jdbc, reqPropId, ownerUserId);
-        String body = "{\"propertyId\":\"" + reqPropId.toString() + "\",\"title\":\"Tubo roto\",\"description\":\"Fuga constante de agua en la cocina\",\"mediaIds\":[]}";
+        String body = "{\"propertyId\":\"" + reqPropId.toString() + "\",\"title\":\"Tubo roto\",\"description\":\"Fuga constante de agua en la cocina\",\"mediaIds\":[],\"paymentMethod\":\"TRANSFER\"}";
         var result = mvc.perform(post("/requests").with(identity(ownerSubject)).contentType(MediaType.APPLICATION_JSON).content(body)).andExpect(status().isCreated()).andReturn();
         java.util.UUID reqId = java.util.UUID.fromString(mapper.readTree(result.getResponse().getContentAsString()).get("requestId").asText());
         jdbc.update("UPDATE repair_requests SET specialty = ? WHERE id = ?", specialty, reqId);

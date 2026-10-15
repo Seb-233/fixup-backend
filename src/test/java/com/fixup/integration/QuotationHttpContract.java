@@ -125,7 +125,7 @@ abstract class QuotationHttpContract {
         java.util.UUID reqPropId = java.util.UUID.randomUUID();
         java.util.UUID ownerUserId = java.util.UUID.fromString(mapper.readTree(mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/auth/me").with(org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt().jwt(j -> j.subject(ownerSubject)))).andReturn().getResponse().getContentAsString()).get("id").asText());
         com.fixup.testsupport.PropertyFixtures.insertPublished(jdbc, reqPropId, ownerUserId);
-        String body = "{\"propertyId\":\"" + reqPropId.toString() + "\",\"title\":\"" + title + "\",\"description\":\"" + description + "\",\"mediaIds\":" + mediaArray + "}";
+        String body = "{\"propertyId\":\"" + reqPropId.toString() + "\",\"title\":\"" + title + "\",\"description\":\"" + description + "\",\"mediaIds\":" + mediaArray + ",\"paymentMethod\":\"TRANSFER\"}";
         var result = mvc.perform(post("/requests").with(identity(ownerSubject)).contentType(MediaType.APPLICATION_JSON).content(body)).andExpect(status().isCreated()).andReturn();
         java.util.UUID reqId = java.util.UUID.fromString(mapper.readTree(result.getResponse().getContentAsString()).get("requestId").asText());
         jdbc.update("UPDATE repair_requests SET specialty = ? WHERE id = ?", specialty, reqId);
@@ -719,7 +719,7 @@ abstract class QuotationHttpContract {
 
         // Alien media -> 404
         String alienReq = """
-                {"propertyId":"%s","title":"Tubo","description":"Desc","mediaIds":["%s"]}
+                {"propertyId":"%s","title":"Tubo","description":"Desc","mediaIds":["%s"],"paymentMethod":"TRANSFER"}
                 """.formatted(reqPropIdA, alienMedia);
         mvc.perform(post("/requests").with(identity(ownerSubject))
                 .contentType(MediaType.APPLICATION_JSON).content(alienReq))
@@ -728,7 +728,7 @@ abstract class QuotationHttpContract {
         // Duplicate media in request -> 400
         UUID myMedia = uploadAndConfirmRepairRequestMedia(ownerSubject, ownerUserId);
         String dupReq = """
-                {"propertyId":"%s","title":"Tubo","description":"Desc","mediaIds":["%s","%s"]}
+                {"propertyId":"%s","title":"Tubo","description":"Desc","mediaIds":["%s","%s"],"paymentMethod":"TRANSFER"}
                 """.formatted(reqPropIdA, myMedia, myMedia);
         mvc.perform(post("/requests").with(identity(ownerSubject))
                 .contentType(MediaType.APPLICATION_JSON).content(dupReq))
@@ -737,7 +737,7 @@ abstract class QuotationHttpContract {
         // More than 6 mediaIds -> 400
         var tooManyIds = java.util.stream.Stream.generate(UUID::randomUUID).limit(7).toList();
         String tooManyReq = """
-                {"propertyId":"%s","title":"Tubo","description":"Desc","mediaIds":%s}
+                {"propertyId":"%s","title":"Tubo","description":"Desc","mediaIds":%s,"paymentMethod":"TRANSFER"}
                 """.formatted(reqPropIdA, mapper.writeValueAsString(tooManyIds));
         mvc.perform(post("/requests").with(identity(ownerSubject))
                 .contentType(MediaType.APPLICATION_JSON).content(tooManyReq))
@@ -753,7 +753,7 @@ abstract class QuotationHttpContract {
         java.util.UUID reqPropIdP = java.util.UUID.randomUUID();
         com.fixup.testsupport.PropertyFixtures.insertPublished(jdbc, reqPropIdP, ownerUserId);
         String portReq = """
-                {"propertyId":"%s","title":"Tubo","description":"Desc","mediaIds":["%s"]}
+                {"propertyId":"%s","title":"Tubo","description":"Desc","mediaIds":["%s"],"paymentMethod":"TRANSFER"}
                 """.formatted(reqPropIdP, portfolioMedia);
         mvc.perform(post("/requests").with(identity(ownerSubject))
                 .contentType(MediaType.APPLICATION_JSON).content(portReq))
@@ -767,7 +767,7 @@ abstract class QuotationHttpContract {
         java.util.UUID reqPropIdR = java.util.UUID.randomUUID();
         com.fixup.testsupport.PropertyFixtures.insertPublished(jdbc, reqPropIdR, ownerUserId);
         String reuseReq = """
-                {"propertyId":"%s","title":"Otro tubo","description":"Desc","mediaIds":["%s"]}
+                {"propertyId":"%s","title":"Otro tubo","description":"Desc","mediaIds":["%s"],"paymentMethod":"TRANSFER"}
                 """.formatted(reqPropIdR, myMedia);
         mvc.perform(post("/requests").with(identity(ownerSubject))
                 .contentType(MediaType.APPLICATION_JSON).content(reuseReq))

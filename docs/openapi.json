@@ -4303,9 +4303,16 @@
           },
           "urgencyLevel" : {
             "$ref" : "#/components/schemas/UrgencyLevel"
+          },
+          "paymentMethod" : {
+            "$ref" : "#/components/schemas/PaymentMethod"
           }
         },
-        "required" : [ "description", "propertyId", "title" ]
+        "required" : [ "description", "paymentMethod", "propertyId", "title" ]
+      },
+      "PaymentMethod" : {
+        "type" : "string",
+        "enum" : [ "TRANSFER", "CASH" ]
       },
       "UrgencyLevel" : {
         "type" : "string",
@@ -4365,6 +4372,9 @@
             "type" : [ "string", "null" ],
             "format" : "uuid"
           },
+          "paymentMethod" : {
+            "$ref" : "#/components/schemas/PaymentMethod"
+          },
           "createdAt" : {
             "type" : "string",
             "format" : "date-time"
@@ -4377,7 +4387,7 @@
             "format" : "date-time"
           }
         },
-        "required" : [ "createdAt", "description", "photos", "requestId", "specialty", "status", "title", "urgencyLevel" ]
+        "required" : [ "createdAt", "description", "paymentMethod", "photos", "requestId", "specialty", "status", "title", "urgencyLevel" ]
       },
       "Specialty" : {
         "type" : "string",
@@ -4480,9 +4490,12 @@
           },
           "urgencyLevel" : {
             "$ref" : "#/components/schemas/UrgencyLevel"
+          },
+          "paymentMethod" : {
+            "$ref" : "#/components/schemas/PaymentMethod"
           }
         },
-        "required" : [ "description", "title" ]
+        "required" : [ "description", "paymentMethod", "title" ]
       },
       "JobStatus" : {
         "type" : "string",
@@ -4566,6 +4579,9 @@
           "requestStatus" : {
             "$ref" : "#/components/schemas/RepairRequestStatus"
           },
+          "paymentMethod" : {
+            "$ref" : "#/components/schemas/PaymentMethod"
+          },
           "assignedFixerUserId" : {
             "type" : [ "string", "null" ],
             "format" : "uuid"
@@ -4579,7 +4595,7 @@
             "$ref" : "#/components/schemas/JobStatus"
           }
         },
-        "required" : [ "position", "requestId", "requestStatus", "requirementId", "specialty" ]
+        "required" : [ "paymentMethod", "position", "requestId", "requestStatus", "requirementId", "specialty" ]
       },
       "QuotationRequest" : {
         "type" : "object",
@@ -5332,12 +5348,15 @@
           "title" : {
             "type" : "string"
           },
+          "paymentMethod" : {
+            "$ref" : "#/components/schemas/PaymentMethod"
+          },
           "createdAt" : {
             "type" : "string",
             "format" : "date-time"
           }
         },
-        "required" : [ "createdAt", "requestId", "specialty", "title" ]
+        "required" : [ "createdAt", "paymentMethod", "requestId", "specialty", "title" ]
       },
       "ProjectSummaryResponse" : {
         "type" : "object",

@@ -112,8 +112,8 @@ class PostgresRowLevelSecurityIT {
     private UUID createRequest(UUID ownerId, String specialty, String title) {
         UUID propertyId = createProperty(ownerId, title + " Property");
         UUID id = UUID.randomUUID();
-        jdbc.update("INSERT INTO repair_requests (id, property_id, owner_user_id, specialty, title, description, status, "
-                        + "created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'fixture description', 'OPEN', "
+        jdbc.update("INSERT INTO repair_requests (id, property_id, owner_user_id, specialty, title, description, status, payment_method, "
+                        + "created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'fixture description', 'OPEN', 'TRANSFER', "
                         + "CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
                 id, propertyId, ownerId, specialty, title);
         return id;
@@ -359,9 +359,9 @@ class PostgresRowLevelSecurityIT {
     private UUID createAssignedRequest(UUID ownerId, UUID fixerId, String specialty, String title) {
         UUID propertyId = createProperty(ownerId, title + " Property");
         UUID id = UUID.randomUUID();
-        jdbc.update("INSERT INTO repair_requests (id, property_id, owner_user_id, specialty, title, description, status, "
+        jdbc.update("INSERT INTO repair_requests (id, property_id, owner_user_id, specialty, title, description, status, payment_method, "
                         + "assigned_fixer_user_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, "
-                        + "'fixture description', 'ASSIGNED', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
+                        + "'fixture description', 'ASSIGNED', 'TRANSFER', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
                 id, propertyId, ownerId, specialty, title, fixerId);
         return id;
     }

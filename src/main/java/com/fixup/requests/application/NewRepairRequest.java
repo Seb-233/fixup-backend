@@ -8,13 +8,8 @@ import java.util.UUID;
 public record NewRepairRequest(UUID propertyId, String title, String description,
         List<UUID> mediaIds, UrgencyLevel urgencyLevel, PaymentMethod paymentMethod) {
 
-    /**
-     * Compatibility constructor for the pre-FR-UC-05 HTTP and persistence flow.
-     * The next task makes the method mandatory when the aggregate is persisted.
-     */
-    public NewRepairRequest(UUID propertyId, String title, String description,
-            List<UUID> mediaIds, UrgencyLevel urgencyLevel) {
-        this(propertyId, title, description, mediaIds, urgencyLevel, null);
+    public NewRepairRequest {
+        java.util.Objects.requireNonNull(paymentMethod, "paymentMethod must not be null");
     }
 
     public UrgencyLevel urgencyLevel() {

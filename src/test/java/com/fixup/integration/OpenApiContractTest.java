@@ -130,14 +130,22 @@ class OpenApiContractTest {
                 .contains("propertyId", "title", "description", "requirements")
                 .doesNotContain("ownerUserId", "status");
         assertThat(contract.at("/components/schemas/RequirementRequest/properties").toString())
-                .contains("title", "description", "mediaIds", "urgencyLevel")
+                .contains("title", "description", "mediaIds", "urgencyLevel", "paymentMethod")
                 .doesNotContain("requestId", "specialty", "assignedFixerUserId");
         assertThat(contract.at("/components/schemas/ProjectResponse/properties").toString())
                 .contains("id", "propertyId", "ownerUserId", "status", "requirements",
                         "requirementCount", "assignedCount", "completedCount");
         assertThat(contract.at("/components/schemas/RequirementResponse/properties").toString())
                 .contains("requirementId", "requestId", "position", "specialty",
-                        "requestStatus", "assignedFixerUserId", "jobId", "jobStatus");
+                        "requestStatus", "paymentMethod", "assignedFixerUserId", "jobId", "jobStatus");
+        assertThat(contract.at("/components/schemas/OpenRequest/properties").toString())
+                .contains("paymentMethod");
+        assertThat(contract.at("/components/schemas/OpenRequest/required").toString())
+                .contains("paymentMethod");
+        assertThat(contract.at("/components/schemas/RequestDetailResponse/properties").toString())
+                .contains("paymentMethod");
+        assertThat(contract.at("/components/schemas/PaymentMethod/enum").toString())
+                .contains("TRANSFER", "CASH");
         assertThat(contract.at("/components/schemas/RemodelingProgressStatus/enum").toString())
                 .contains("OPEN", "PARTIALLY_ASSIGNED", "FULLY_ASSIGNED",
                         "PARTIALLY_COMPLETED", "COMPLETED");
@@ -236,7 +244,7 @@ class OpenApiContractTest {
         assertThat(contract.at("/components/schemas/RequestDetailResponse/properties").toString())
                 .doesNotContain("storageKey", "photoKeys");
         assertThat(contract.at("/components/schemas/OpenRequestSummaryResponse/properties").toString())
-                .contains("requestId", "specialty", "title", "createdAt")
+                .contains("requestId", "specialty", "title", "paymentMethod", "createdAt")
                 .doesNotContain("ownerUserId", "description", "photoKeys", "storageKey", "assignedFixerUserId");
         // No photo content crosses this API: the request carries media IDs only.
         assertThat(contract.at("/components/schemas/OpenRequest/properties").toString())

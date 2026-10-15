@@ -103,8 +103,8 @@ abstract class RemodelingHttpContract {
                   "title":"Renovación integral",
                   "description":"Cocina y red eléctrica",
                   "requirements":[
-                    {"title":"Arreglar fuga","description":"Fuga de agua en la tubería","mediaIds":[]},
-                    {"title":"Cambiar tablero","description":"Cableado eléctrico y breaker","mediaIds":[]}
+                    {"title":"Arreglar fuga","description":"Fuga de agua en la tubería","mediaIds":[],"paymentMethod":"TRANSFER"},
+                    {"title":"Cambiar tablero","description":"Cableado eléctrico y breaker","mediaIds":[],"paymentMethod":"CASH"}
                   ]
                 }
                 """.formatted(propertyId);
@@ -147,8 +147,10 @@ abstract class RemodelingHttpContract {
         assertThat(project.get("requirements")).hasSize(2);
         assertThat(project.at("/requirements/0/position").asInt()).isZero();
         assertThat(project.at("/requirements/0/specialty").asText()).isEqualTo("PLUMBING");
+        assertThat(project.at("/requirements/0/paymentMethod").asText()).isEqualTo("TRANSFER");
         assertThat(project.at("/requirements/1/position").asInt()).isEqualTo(1);
         assertThat(project.at("/requirements/1/specialty").asText()).isEqualTo("ELECTRICAL");
+        assertThat(project.at("/requirements/1/paymentMethod").asText()).isEqualTo("CASH");
         assertThat(jdbc.queryForObject("SELECT count(*) FROM remodeling_projects", Integer.class))
                 .isEqualTo(1);
         assertThat(jdbc.queryForObject("SELECT count(*) FROM remodeling_requirements", Integer.class))
@@ -224,8 +226,8 @@ abstract class RemodelingHttpContract {
                 {
                   "propertyId":"%s","title":"Rollback",
                   "requirements":[
-                    {"title":"Primera","description":"Fuga de agua","mediaIds":[]},
-                    {"title":"Segunda","description":"Cable eléctrico","mediaIds":["%s"]}
+                    {"title":"Primera","description":"Fuga de agua","mediaIds":[],"paymentMethod":"TRANSFER"},
+                    {"title":"Segunda","description":"Cable eléctrico","mediaIds":["%s"],"paymentMethod":"CASH"}
                   ]
                 }
                 """.formatted(property, UUID.randomUUID());

@@ -81,7 +81,8 @@ public class AcceptQuotation {
 
         // 10. Publish event.
         events.publishEvent(new QuotationAccepted(accepted.id(), accepted.requestId(),
-                accepted.fixerUserId(), request.ownerUserId(), accepted.amount(), now));
+                accepted.fixerUserId(), request.ownerUserId(), accepted.amount(), now,
+                request.paymentMethod()));
 
         return QuotationSummary.of(accepted);
     }

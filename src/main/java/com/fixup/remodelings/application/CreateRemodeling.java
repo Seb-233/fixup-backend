@@ -47,7 +47,7 @@ public class CreateRemodeling {
             var requirement = draft.requirements().get(position);
             var request = requestCreation.open(actor, new NewProjectRepairRequest(
                     draft.propertyId(), requirement.title(), requirement.description(),
-                    requirement.mediaIds(), requirement.urgencyLevel()));
+                    requirement.mediaIds(), requirement.urgencyLevel(), requirement.paymentMethod()));
             requirements.add(new RemodelingRequirement(UUID.randomUUID(), projectId,
                     request.requestId(), position));
         }

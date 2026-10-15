@@ -9,13 +9,8 @@ import java.util.UUID;
 public record NewProjectRepairRequest(UUID propertyId, String title, String description,
         List<UUID> mediaIds, UrgencyLevel urgencyLevel, PaymentMethod paymentMethod) {
 
-    /** Compatibility constructor while FR-UC-05 persistence is introduced in its next task. */
-    public NewProjectRepairRequest(UUID propertyId, String title, String description,
-            List<UUID> mediaIds, UrgencyLevel urgencyLevel) {
-        this(propertyId, title, description, mediaIds, urgencyLevel, null);
-    }
-
     public NewProjectRepairRequest {
+        Objects.requireNonNull(paymentMethod, "paymentMethod must not be null");
         if (mediaIds != null && mediaIds.stream().anyMatch(Objects::isNull)) {
             throw new IllegalArgumentException("mediaIds cannot contain null elements");
         }

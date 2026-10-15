@@ -46,7 +46,8 @@ public class CreateRepairRequest implements RepairRequestCreation {
         mediaAttachmentService.attachRepairRequestPhotos(actor.internalUserId(), mediaIds);
         UrgencyLevel urgency = draft.urgencyLevel() == null ? UrgencyLevel.MEDIUM : draft.urgencyLevel();
         var request = RepairRequest.open(UUID.randomUUID(), draft.propertyId(), property.city(), actor.internalUserId(), specialty,
-                draft.title().trim(), draft.description().trim(), mediaIds, urgency, Instant.now(clock));
+                draft.title().trim(), draft.description().trim(), mediaIds, urgency,
+                draft.paymentMethod(), Instant.now(clock));
         requests.create(request);
 
         if (urgency == UrgencyLevel.URGENT) {
@@ -59,8 +60,8 @@ public class CreateRepairRequest implements RepairRequestCreation {
     @Override
     public ProjectRepairRequestSnapshot open(CurrentActor actor, NewProjectRepairRequest draft) {
         var summary = execute(actor, new NewRepairRequest(draft.propertyId(), draft.title(),
-                draft.description(), draft.mediaIds(), draft.urgencyLevel()));
+                draft.description(), draft.mediaIds(), draft.urgencyLevel(), draft.paymentMethod()));
         return new ProjectRepairRequestSnapshot(summary.id(), summary.specialty(), summary.status(),
-                summary.assignedFixerUserId());
+                summary.assignedFixerUserId(), summary.paymentMethod());
     }
 }
