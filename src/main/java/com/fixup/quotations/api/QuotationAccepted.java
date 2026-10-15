@@ -1,5 +1,6 @@
 package com.fixup.quotations.api;
 
+import com.fixup.requests.api.PaymentMethod;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -21,5 +22,11 @@ import java.util.UUID;
  * justamente la garantía que se quiere.
  */
 public record QuotationAccepted(UUID quotationId, UUID requestId, UUID fixerUserId, UUID ownerUserId,
-        long amount, Instant acceptedAt) {
+        long amount, Instant acceptedAt, PaymentMethod paymentMethod) {
+
+    /** Compatibility constructor until RepairRequest persists the selected payment method. */
+    public QuotationAccepted(UUID quotationId, UUID requestId, UUID fixerUserId, UUID ownerUserId,
+            long amount, Instant acceptedAt) {
+        this(quotationId, requestId, fixerUserId, ownerUserId, amount, acceptedAt, null);
+    }
 }
