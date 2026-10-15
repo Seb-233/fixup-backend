@@ -5,6 +5,8 @@ import com.fixup.fixers.api.Specialty;
 import com.fixup.media.api.MediaAttachmentService;
 import com.fixup.media.api.SignedMediaView;
 import com.fixup.requests.api.RepairRequestStatus;
+import com.fixup.requests.api.PaymentMethod;
+import com.fixup.requests.api.UrgencyLevel;
 import com.fixup.requests.application.CreateRepairRequest;
 import com.fixup.requests.application.GetRepairRequest;
 import com.fixup.requests.application.ListOpenRepairRequests;
@@ -85,7 +87,8 @@ class RepairRequestController {
     RequestDetailResponse open(@Valid @RequestBody OpenRequest body) {
         var mediaIds = body.mediaIds() == null ? List.<UUID>of() : body.mediaIds();
         var summary = createRequest.execute(actors.currentActor(),
-                new NewRepairRequest(body.propertyId(), body.title(), body.description(), mediaIds));
+                new NewRepairRequest(body.propertyId(), body.title(), body.description(), mediaIds,
+                        body.urgencyLevel(), body.paymentMethod()));
         var photos = mediaAttachmentService.resolveReadUrls(summary.mediaIds());
         return RequestDetailResponse.of(summary, photos);
     }
@@ -125,7 +128,8 @@ class RepairRequestController {
     @com.fasterxml.jackson.annotation.JsonIgnoreProperties(ignoreUnknown = false)
     record OpenRequest(@NotNull UUID propertyId, @NotBlank @Size(max = 150) String title,
             @NotBlank @Size(max = 2000) String description,
-            @Size(max = 6) List<@NotNull UUID> mediaIds) {
+            @Size(max = 6) List<@NotNull UUID> mediaIds,
+            UrgencyLevel urgencyLevel, @NotNull PaymentMethod paymentMethod) {
         public OpenRequest {
             if (mediaIds != null) {
                 if (mediaIds.contains(null)) {
@@ -138,19 +142,23 @@ class RepairRequestController {
         }
     }
 
-    @Schema(requiredProperties = {"requestId", "specialty", "title", "createdAt"})
+    @Schema(requiredProperties = {"requestId", "specialty", "title", "paymentMethod", "createdAt"})
     @com.fasterxml.jackson.annotation.JsonIgnoreProperties(ignoreUnknown = false)
-    record OpenRequestSummaryResponse(UUID requestId, Specialty specialty, String title, Instant createdAt) {
+    record OpenRequestSummaryResponse(UUID requestId, Specialty specialty, String title,
+            PaymentMethod paymentMethod, Instant createdAt) {
         static OpenRequestSummaryResponse of(com.fixup.requests.domain.RepairRequest request) {
-            return new OpenRequestSummaryResponse(request.id(), request.specialty(), request.title(), request.createdAt());
+            return new OpenRequestSummaryResponse(request.id(), request.specialty(), request.title(),
+                    request.paymentMethod(), request.createdAt());
         }
     }
 
     @Schema(requiredProperties = {"requestId", "specialty", "title", "description", "photos",
-        "status", "createdAt"})
+        "status", "paymentMethod", "urgencyLevel", "createdAt"})
     record RequestDetailResponse(UUID requestId, UUID propertyId, Specialty specialty, String title, String description,
             List<PhotoResponse> photos, RepairRequestStatus status,
-            @Schema(types = {"string", "null"}) UUID assignedFixerUserId, Instant createdAt) {
+            @Schema(types = {"string", "null"}) UUID assignedFixerUserId, PaymentMethod paymentMethod, Instant createdAt,
+            UrgencyLevel urgencyLevel,
+            @Schema(types = {"string", "null"}) Instant slaDeadline) {
 
         static RequestDetailResponse of(com.fixup.requests.domain.RepairRequest request,
                 List<SignedMediaView> photos) {
@@ -158,7 +166,8 @@ class RepairRequestController {
                     .map(p -> new PhotoResponse(p.mediaId(), p.readUrl(), p.readUrlExpiresAt()))
                     .toList();
             return new RequestDetailResponse(request.id(), request.propertyId(), request.specialty(), request.title(), request.description(),
-                    photoResponses, request.status(), request.assignedFixerUserId(), request.createdAt());
+                    photoResponses, request.status(), request.assignedFixerUserId(), request.paymentMethod(), request.createdAt(),
+                    request.urgencyLevel(), request.slaDeadline());
         }
 
         static RequestDetailResponse of(RepairRequestSummary summary,
@@ -167,7 +176,8 @@ class RepairRequestController {
                     .map(p -> new PhotoResponse(p.mediaId(), p.readUrl(), p.readUrlExpiresAt()))
                     .toList();
             return new RequestDetailResponse(summary.id(), summary.propertyId(), summary.specialty(), summary.title(), summary.description(),
-                    photoResponses, summary.status(), summary.assignedFixerUserId(), summary.createdAt());
+                    photoResponses, summary.status(), summary.assignedFixerUserId(), summary.paymentMethod(), summary.createdAt(),
+                    summary.urgencyLevel(), summary.slaDeadline());
         }
     }
 

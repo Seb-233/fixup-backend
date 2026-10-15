@@ -13,6 +13,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -50,7 +51,7 @@ class DefaultMediaAttachmentService implements MediaAttachmentService {
         if (mediaIds.size() > maxCount) {
             throw new IllegalArgumentException("Cannot attach more than " + maxCount + " media assets");
         }
-        if (mediaIds.contains(null)) {
+        if (mediaIds.stream().anyMatch(Objects::isNull)) {
             throw new IllegalArgumentException("mediaIds cannot contain null elements");
         }
         if (new HashSet<>(mediaIds).size() != mediaIds.size()) {

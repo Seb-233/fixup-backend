@@ -1,0 +1,52 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: minio-bootstrap
+  namespace: fixup
+  labels:
+    app: minio-bootstrap
+    app.kubernetes.io/part-of: fixup
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 300
+  template:
+    metadata:
+      labels:
+        app: minio-bootstrap
+    spec:
+      restartPolicy: Never
+      imagePullSecrets:
+        - name: ghcr-pull-secret
+      containers:
+        - name: bootstrap
+          image: ghcr.io/seb-233/fixup-minio-client@sha256:9aa490587da3c5b6e0e77319fab2b34bc2ef61a03a7f6463575e533793bf7108
+          command: ["/bin/sh", "-ec"]
+          args:
+            - |
+              until mc alias set fixup http://minio:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD"; do
+                sleep 2
+              done
+
+              mc mb --ignore-existing "fixup/$FIXUP_STORAGE_BUCKET"
+              mc anonymous set none "fixup/$FIXUP_STORAGE_BUCKET"
+
+              mc stat "fixup/$FIXUP_STORAGE_BUCKET" >/dev/null
+              mc anonymous get "fixup/$FIXUP_STORAGE_BUCKET" | grep -qi "private"
+
+              echo "MinIO bootstrap completed successfully."
+          env:
+            - name: MINIO_ROOT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: minio-secret
+                  key: MINIO_ROOT_USER
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: minio-secret
+                  key: MINIO_ROOT_PASSWORD
+            - name: FIXUP_STORAGE_BUCKET
+              valueFrom:
+                secretKeyRef:
+                  name: backend-secret
+                  key: FIXUP_STORAGE_BUCKET

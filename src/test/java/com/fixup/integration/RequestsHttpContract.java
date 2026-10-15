@@ -6,6 +6,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fixup.testsupport.PropertyFixtures;
+import static org.assertj.core.api.Assertions.assertThat;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -52,14 +54,15 @@ abstract class RequestsHttpContract {
     void ownerCanCreateRequestForOwnValidProperty() throws Exception {
         UUID ownerId = provisionOwner("auth0|owner-requests-1");
         UUID propId = UUID.randomUUID();
-        jdbc.update("INSERT INTO properties (id, owner_user_id, name, address, city, area_m2, created_at, updated_at) VALUES (?, ?, 'Prop', 'Addr', 'City', 10, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)", propId, ownerId);
+        PropertyFixtures.insertPublished(jdbc, propId, ownerId);
 
         String body = """
                 {
                     "propertyId": "%s",
                     "title": "Tubo roto en la pared",
                     "description": "Fuga de agua masiva",
-                    "mediaIds": []
+                    "mediaIds": [],
+                    "paymentMethod": "TRANSFER"
                 }
                 """.formatted(propId);
 
@@ -72,14 +75,52 @@ abstract class RequestsHttpContract {
     }
 
     @Test
+    void urgentRequestPersistsExactlyOneOwnerNotification() throws Exception {
+        String subject = "auth0|owner-urgent-notification";
+        UUID ownerId = provisionOwner(subject);
+        UUID propertyId = UUID.randomUUID();
+        PropertyFixtures.insertPublished(jdbc, propertyId, ownerId);
+        String body = """
+                {"propertyId":"%s","title":"Tubo roto urgente","description":"Fuga de agua masiva",
+                 "mediaIds":[],"urgencyLevel":"URGENT","paymentMethod":"CASH"}
+                """.formatted(propertyId);
+
+        var response = mvc.perform(post("/requests").with(identity(subject))
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.urgencyLevel").value("URGENT"))
+                .andExpect(jsonPath("$.paymentMethod").value("CASH"))
+                .andReturn().getResponse();
+        UUID requestId = UUID.fromString(mapper.readTree(response.getContentAsString()).get("requestId").asText());
+
+        var notifications = jdbc.queryForList("""
+                SELECT type, title, body, navigate_to, entity_id, entity_type,
+                       data->>'urgency' AS urgency, read_at, created_at
+                FROM notifications WHERE recipient_user_id = ?
+                """, ownerId);
+        assertThat(notifications).hasSize(1);
+        var notification = notifications.getFirst();
+        assertThat(notification.get("type")).isEqualTo("REQUEST_CREATED_URGENT");
+        assertThat(notification.get("title")).isEqualTo("Solicitud urgente creada: Tubo roto urgente");
+        assertThat(notification.get("body")).isEqualTo(
+                "Tu solicitud urgente fue recibida y asignada a la cola de prioridad. Recibirás propuestas de técnicos pronto. SLA máximo: 48h.");
+        assertThat(notification.get("navigate_to")).isEqualTo("/requests/" + requestId);
+        assertThat(notification.get("entity_id")).isEqualTo(requestId);
+        assertThat(notification.get("entity_type")).isEqualTo("REQUEST");
+        assertThat(notification.get("urgency")).isEqualTo("URGENT");
+        assertThat(notification.get("read_at")).isNull();
+        assertThat(notification.get("created_at")).isNotNull();
+    }
+
+    @Test
     void foreignPropertyReturns404() throws Exception {
         UUID ownerId1 = provisionOwner("auth0|owner-foreign-1");
         UUID ownerId2 = provisionOwner("auth0|owner-foreign-2");
         UUID propId = UUID.randomUUID();
-        jdbc.update("INSERT INTO properties (id, owner_user_id, name, address, city, area_m2, created_at, updated_at) VALUES (?, ?, 'Prop', 'Addr', 'City', 10, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)", propId, ownerId2);
+        PropertyFixtures.insertPublished(jdbc, propId, ownerId2);
 
         String body = """
-                {"propertyId":"%s","title":"Fuga","description":"Gotera","mediaIds":[]}
+                {"propertyId":"%s","title":"Fuga","description":"Gotera","mediaIds":[],"paymentMethod":"TRANSFER"}
                 """.formatted(propId);
 
         mvc.perform(post("/requests").with(identity("auth0|owner-foreign-1"))
@@ -91,7 +132,7 @@ abstract class RequestsHttpContract {
     void nonexistentPropertyReturns404() throws Exception {
         provisionOwner("auth0|owner-nonexistent");
         String body = """
-                {"propertyId":"%s","title":"Fuga","description":"Gotera","mediaIds":[]}
+                {"propertyId":"%s","title":"Fuga","description":"Gotera","mediaIds":[],"paymentMethod":"TRANSFER"}
                 """.formatted(UUID.randomUUID());
 
         mvc.perform(post("/requests").with(identity("auth0|owner-nonexistent"))
@@ -103,7 +144,7 @@ abstract class RequestsHttpContract {
     void tenantCannotCreateRequest() throws Exception {
         provisionWithRole("auth0|tenant-1", "TENANT");
         String body = """
-                {"propertyId":"%s","title":"Fuga","description":"Gotera","mediaIds":[]}
+                {"propertyId":"%s","title":"Fuga","description":"Gotera","mediaIds":[],"paymentMethod":"TRANSFER"}
                 """.formatted(UUID.randomUUID());
 
         mvc.perform(post("/requests").with(identity("auth0|tenant-1"))
@@ -115,7 +156,7 @@ abstract class RequestsHttpContract {
     void realEstateManagerCannotCreateRequest() throws Exception {
         provisionWithRole("auth0|rem-1", "REAL_ESTATE_MANAGER");
         String body = """
-                {"propertyId":"%s","title":"Fuga","description":"Gotera","mediaIds":[]}
+                {"propertyId":"%s","title":"Fuga","description":"Gotera","mediaIds":[],"paymentMethod":"TRANSFER"}
                 """.formatted(UUID.randomUUID());
 
         mvc.perform(post("/requests").with(identity("auth0|rem-1"))
@@ -127,7 +168,7 @@ abstract class RequestsHttpContract {
     void fixerCannotCreateRequest() throws Exception {
         provisionWithRole("auth0|fixer-1", "FIXER");
         String body = """
-                {"propertyId":"%s","title":"Fuga","description":"Gotera","mediaIds":[]}
+                {"propertyId":"%s","title":"Fuga","description":"Gotera","mediaIds":[],"paymentMethod":"TRANSFER"}
                 """.formatted(UUID.randomUUID());
 
         mvc.perform(post("/requests").with(identity("auth0|fixer-1"))
@@ -152,7 +193,7 @@ abstract class RequestsHttpContract {
     void legacySpecialtyFieldInBodyReturns400() throws Exception {
         UUID ownerId = provisionOwner("auth0|owner-legacy-field");
         UUID propId = UUID.randomUUID();
-        jdbc.update("INSERT INTO properties (id, owner_user_id, name, address, city, area_m2, created_at, updated_at) VALUES (?, ?, 'Prop', 'Addr', 'City', 10, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)", propId, ownerId);
+        PropertyFixtures.insertPublished(jdbc, propId, ownerId);
 
         String body = """
                 {
@@ -160,6 +201,7 @@ abstract class RequestsHttpContract {
                     "title": "Tubo",
                     "description": "Fuga",
                     "mediaIds": [],
+                    "paymentMethod": "TRANSFER",
                     "specialty": "PLUMBING"
                 }
                 """.formatted(propId);
@@ -173,11 +215,26 @@ abstract class RequestsHttpContract {
     void missingPropertyIdReturns400() throws Exception {
         provisionOwner("auth0|owner-missing-prop");
         String body = """
-                {"title":"Fuga","description":"Gotera","mediaIds":[]}
+                {"title":"Fuga","description":"Gotera","mediaIds":[],"paymentMethod":"TRANSFER"}
                 """;
 
         mvc.perform(post("/requests").with(identity("auth0|owner-missing-prop"))
                 .contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void paymentMethodIsRequiredAndMustBeKnown() throws Exception {
+        UUID ownerId = provisionOwner("auth0|owner-payment-method");
+        UUID propertyId = UUID.randomUUID();
+        PropertyFixtures.insertPublished(jdbc, propertyId, ownerId);
+
+        for (String body : java.util.List.of(
+                "{\"propertyId\":\"" + propertyId + "\",\"title\":\"Fuga\",\"description\":\"Gotera\",\"mediaIds\":[]}",
+                "{\"propertyId\":\"" + propertyId + "\",\"title\":\"Fuga\",\"description\":\"Gotera\",\"mediaIds\":[],\"paymentMethod\":\"CARD\"}")) {
+            mvc.perform(post("/requests").with(identity("auth0|owner-payment-method"))
+                            .contentType(MediaType.APPLICATION_JSON).content(body))
+                    .andExpect(status().isBadRequest());
+        }
     }
 }

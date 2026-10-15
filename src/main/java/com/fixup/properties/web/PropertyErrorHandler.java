@@ -1,5 +1,7 @@
 package com.fixup.properties.web;
 
+import com.fixup.properties.api.GeocodingRateLimitExceededException;
+import com.fixup.properties.api.GeocodingUnavailableException;
 import com.fixup.properties.api.PropertyAccessDeniedException;
 import com.fixup.properties.api.PropertyNotFoundException;
 import com.fixup.shared.security.SecurityAuditLog;
@@ -27,5 +29,17 @@ class PropertyErrorHandler {
     @ExceptionHandler(IllegalArgumentException.class)
     ProblemDetail handleIllegalArgument(IllegalArgumentException ex) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
+    }
+
+    @ExceptionHandler(GeocodingRateLimitExceededException.class)
+    ProblemDetail handleGeocodingRateLimit(GeocodingRateLimitExceededException ex) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.TOO_MANY_REQUESTS, ex.getMessage());
+    }
+
+    @ExceptionHandler(GeocodingUnavailableException.class)
+    ProblemDetail handleGeocodingUnavailable(GeocodingUnavailableException ex) {
+        return ProblemDetail.forStatusAndDetail(
+                HttpStatus.SERVICE_UNAVAILABLE,
+                "Address geocoding is temporarily unavailable");
     }
 }

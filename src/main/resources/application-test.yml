@@ -13,6 +13,8 @@ spring:
 fixup:
   cors:
     allowed-origins: http://localhost:4200
+  geocoding:
+    enabled: false
   storage:
     endpoint: ${FIXUP_STORAGE_ENDPOINT:http://localhost:9000}
     public-endpoint: ${FIXUP_STORAGE_PUBLIC_ENDPOINT:http://localhost:9000}

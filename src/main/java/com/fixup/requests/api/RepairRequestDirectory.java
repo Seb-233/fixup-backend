@@ -1,5 +1,7 @@
 package com.fixup.requests.api;
 
+import java.util.Collection;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -10,6 +12,9 @@ public interface RepairRequestDirectory {
 
     /** @throws RepairRequestNotFoundException when no request carries that identifier. */
     RepairRequestSnapshot require(UUID requestId);
+
+    /** Batch view for project composition; missing identifiers are omitted from the result. */
+    List<ProjectRepairRequestSnapshot> findAll(Collection<UUID> requestIds);
 
     /**
      * Locks the repair request row with PESSIMISTIC_WRITE for a decision.

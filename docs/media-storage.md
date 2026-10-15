@@ -47,12 +47,14 @@ La API expone exclusivamente las siguientes rutas para medios y portafolio:
 El bucket de almacenamiento es **estrictamente privado** y rechaza cualquier acceso anónimo directo (HTTP 403).
 
 ### 3.1 Proveedores y configuración
-- **Desarrollo y pruebas locales:** Servicio S3-compatible provisto por MinIO (`quay.io/minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e`) configurado en `compose.development.yml`.
-- **Producción:** Amazon Web Services S3.
+- **Desarrollo, pruebas y K3s:** Servicio S3-compatible provisto por MinIO, fijado en `ghcr.io/seb-233/fixup-minio@sha256:a1a8bd4ac40ad7881a245bab97323e18f971e4d4cba2c2007ec1bedd21cbaba2`. Compose, Testcontainers y el StatefulSet usan la misma referencia.
+- **K3s:** El backend accede internamente mediante `FIXUP_STORAGE_ENDPOINT=http://minio:9000`. El Job `minio-bootstrap` crea el bucket configurado y lo mantiene privado. La edición Community de MinIO usada por FixUp no soporta CORS por bucket; los orígenes permitidos se configuran globalmente en el StatefulSet mediante `MINIO_API_CORS_ALLOW_ORIGIN`.
 - **Credenciales:**
   - En producción, las variables de entorno `FIXUP_STORAGE_ACCESS_KEY` y `FIXUP_STORAGE_SECRET_KEY` son obligatorias (no existen valores predeterminados en `application.yml`).
   - En desarrollo, las credenciales se configuran mediante `.env.example`, `compose.development.yml` y `application-dev.yml`.
   - La auto-creación de buckets (`auto-create-bucket: true`) está estrictamente limitada a los perfiles `development` y `test`. En producción está deshabilitada (`auto-create-bucket: false`).
+
+Si el paquete GHCR es privado, el desarrollo local debe autenticarse previamente con `docker login ghcr.io`; las credenciales no se almacenan en `.env`, Compose ni Git. La exposición externa de `FIXUP_STORAGE_PUBLIC_ENDPOINT` se definirá en M2 a partir de la topología real del clúster. El Service interno publica solamente el API S3 en el puerto 9000; el puerto de consola 9001 no se publica.
 
 ### 3.2 Tiempos de expiración de URLs firmadas
 - **URL firmada de subida (PUT):** 15 minutos de vigencia.

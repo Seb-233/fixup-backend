@@ -8,14 +8,11 @@ import java.util.UUID;
 /**
  * FR-UC-20: la solicitud de transferencia del técnico a su cuenta bancaria.
  *
- * <p>En el alcance académico actual el estado siempre es {@code REQUESTED}: el sistema registra
- * la intención de transferir pero no llama a ningún proveedor de pagos externo. Una solicitud
- * {@code REQUESTED} es, por tanto, <em>registrada en el sistema</em>, no
- * <em>ejecutada por una entidad financiera</em>. La liquidación efectiva hacia una cuenta bancaria
- * es trabajo posterior, fuera del alcance del prototipo.
+ * New payouts pass from REQUESTED to TRANSFERRED within one simulated operation. Historical
+ * REQUESTED rows remain readable. No banking provider is called.
  */
 public record Payout(UUID id, UUID fixerUserId, long amount, int earningCount, PayoutStatus status,
-        Instant requestedAt) {
+        Instant requestedAt, Instant transferredAt) {
 
     public static Payout requested(UUID id, UUID fixerUserId, long amount, int earningCount,
             Instant now) {
@@ -23,6 +20,15 @@ public record Payout(UUID id, UUID fixerUserId, long amount, int earningCount, P
             throw new PaymentConflictException("NO_AVAILABLE_BALANCE",
                     "There is no available balance to transfer");
         }
-        return new Payout(id, fixerUserId, amount, earningCount, PayoutStatus.REQUESTED, now);
+        return new Payout(id, fixerUserId, amount, earningCount, PayoutStatus.REQUESTED, now, null);
+    }
+
+    public Payout transferred(Instant now) {
+        if (status != PayoutStatus.REQUESTED) {
+            throw new PaymentConflictException("PAYOUT_ALREADY_TRANSFERRED",
+                    "The simulated payout has already been transferred");
+        }
+        return new Payout(id, fixerUserId, amount, earningCount, PayoutStatus.TRANSFERRED,
+                requestedAt, now);
     }
 }

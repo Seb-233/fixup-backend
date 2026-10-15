@@ -28,6 +28,10 @@ public interface PushNotificationGateway {
      */
     NotificationStatus send(PushNotification notification);
 
-    record PushNotification(UUID recipientUserId, String title, String body) {
+    record PushNotification(UUID recipientUserId, String title, String body, PushNotificationPayload payload) {
+
+        public PushNotification(UUID recipientUserId, String title, String body) {
+            this(recipientUserId, title, body, null);
+        }
     }
 }
