@@ -1,11 +1,14 @@
 package com.fixup.quotations.application;
 
 import com.fixup.identityaccess.api.CurrentActor;
+import com.fixup.payments.api.PaymentInitiation;
+import com.fixup.payments.api.PaymentInitiationCommand;
 import com.fixup.quotations.api.QuotationAccepted;
 import com.fixup.quotations.api.QuotationConflictException;
 import com.fixup.quotations.api.QuotationNotFoundException;
 import com.fixup.quotations.domain.Quotation;
 import com.fixup.quotations.domain.Quotations;
+import com.fixup.requests.api.PaymentMethod;
 import com.fixup.requests.api.RepairRequestDirectory;
 import java.time.Instant;
 import java.util.UUID;
@@ -21,17 +24,19 @@ import org.springframework.transaction.annotation.Transactional;
 public class AcceptQuotation {
     private final Quotations quotations;
     private final RepairRequestDirectory requests;
+    private final PaymentInitiation paymentInitiation;
     private final ApplicationEventPublisher events;
 
     AcceptQuotation(Quotations quotations, RepairRequestDirectory requests,
-            ApplicationEventPublisher events) {
+            PaymentInitiation paymentInitiation, ApplicationEventPublisher events) {
         this.quotations = quotations;
         this.requests = requests;
+        this.paymentInitiation = paymentInitiation;
         this.events = events;
     }
 
     @Transactional
-    public QuotationSummary execute(CurrentActor actor, UUID quotationId) {
+    public AcceptedQuotation execute(CurrentActor actor, UUID quotationId) {
         QuotationAccess.requireActive(actor);
 
         // 1. Read quotation without locking to find the target requestId.
@@ -79,10 +84,18 @@ public class AcceptQuotation {
         // 9. Assign the request.
         requests.assign(requestId, accepted.fixerUserId());
 
+        UUID paymentId = null;
+        if (request.paymentMethod() == PaymentMethod.TRANSFER) {
+            paymentId = paymentInitiation.initiate(new PaymentInitiationCommand(accepted.id(),
+                    accepted.requestId(), request.ownerUserId(), accepted.fixerUserId(),
+                    accepted.amount(), request.paymentMethod().name(), now)).paymentId();
+        }
+
         // 10. Publish event.
         events.publishEvent(new QuotationAccepted(accepted.id(), accepted.requestId(),
-                accepted.fixerUserId(), request.ownerUserId(), accepted.amount(), now));
+                accepted.fixerUserId(), request.ownerUserId(), accepted.amount(), now,
+                request.paymentMethod()));
 
-        return QuotationSummary.of(accepted);
+        return new AcceptedQuotation(accepted.id(), accepted.requestId(), request.paymentMethod(), paymentId);
     }
 }

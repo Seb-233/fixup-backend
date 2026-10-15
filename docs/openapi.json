@@ -644,11 +644,11 @@
             }
           },
           "200" : {
-            "description" : "The accepted quotation",
+            "description" : "The accepted quotation and its next payment step",
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/QuotationResponse"
+                  "$ref" : "#/components/schemas/AcceptedQuotationResponse"
                 }
               }
             }
@@ -755,6 +755,98 @@
         }
       }
     },
+    "/payments/{paymentId}/simulate" : {
+      "post" : {
+        "tags" : [ "payment-controller" ],
+        "summary" : "Simulate the provider outcome of an owner's transfer payment",
+        "description" : "Service approval creates a held earning and job; outstanding-balance approval pays the debt and creates an available earning. DECLINED, PENDING and ERROR remain retryable.",
+        "operationId" : "simulate",
+        "parameters" : [ {
+          "name" : "paymentId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/SimulationRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "400" : {
+            "description" : "Unexpected client fields",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "The caller cannot perform this payment operation",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "The requested financial resource does not exist",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "The requested financial transition conflicts with current state",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "200" : {
+            "description" : "Authoritative payment state after the simulated outcome",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PaymentDetail"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
     "/payments/me/payouts" : {
       "get" : {
         "tags" : [ "payment-controller" ],
@@ -782,7 +874,7 @@
             }
           },
           "403" : {
-            "description" : "Inactive account or missing FIXER role",
+            "description" : "The caller cannot perform this payment operation",
             "content" : {
               "application/json" : {
                 "schema" : {
@@ -792,7 +884,7 @@
             }
           },
           "404" : {
-            "description" : "The account has no payment record",
+            "description" : "The requested financial resource does not exist",
             "content" : {
               "application/json" : {
                 "schema" : {
@@ -802,7 +894,7 @@
             }
           },
           "409" : {
-            "description" : "There is no available balance to transfer",
+            "description" : "The requested financial transition conflicts with current state",
             "content" : {
               "application/json" : {
                 "schema" : {
@@ -831,8 +923,8 @@
       },
       "post" : {
         "tags" : [ "payment-controller" ],
-        "summary" : "Request the transfer of the available balance",
-        "description" : "Academic scope: the request is recorded, no banking API is called. Reading the balance and consuming it happen in the same transaction.",
+        "summary" : "Simulate the transfer of the available balance",
+        "description" : "No banking API is called. The payout reaches TRANSFERRED and its earnings become PAID_OUT in one transaction.",
         "operationId" : "payout",
         "responses" : {
           "400" : {
@@ -856,7 +948,7 @@
             }
           },
           "403" : {
-            "description" : "Inactive account or missing FIXER role",
+            "description" : "The caller cannot perform this payment operation",
             "content" : {
               "application/json" : {
                 "schema" : {
@@ -866,7 +958,7 @@
             }
           },
           "404" : {
-            "description" : "The account has no payment record",
+            "description" : "The requested financial resource does not exist",
             "content" : {
               "application/json" : {
                 "schema" : {
@@ -876,7 +968,7 @@
             }
           },
           "409" : {
-            "description" : "There is no available balance to transfer",
+            "description" : "The requested financial transition conflicts with current state",
             "content" : {
               "application/json" : {
                 "schema" : {
@@ -886,11 +978,92 @@
             }
           },
           "201" : {
-            "description" : "The transfer request was recorded",
+            "description" : "The payout was simulated and transferred",
             "content" : {
               "application/json" : {
                 "schema" : {
                   "$ref" : "#/components/schemas/PayoutResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/payments/debts/{debtId}/pay" : {
+      "post" : {
+        "tags" : [ "payment-controller" ],
+        "summary" : "Initiate or reuse a simulated transfer for an outstanding debt",
+        "operationId" : "initiateDebt",
+        "parameters" : [ {
+          "name" : "debtId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "responses" : {
+          "400" : {
+            "description" : "Unexpected client fields",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "The caller cannot perform this payment operation",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "The requested financial resource does not exist",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "The requested financial transition conflicts with current state",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "201" : {
+            "description" : "Debt payment ready to simulate",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PaymentDetail"
                 }
               }
             }
@@ -1575,6 +1748,15 @@
             "format" : "uuid"
           }
         } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/CompletionRequest"
+              }
+            }
+          }
+        },
         "responses" : {
           "400" : {
             "description" : "Invalid identifier or unexpected client fields",
@@ -3135,6 +3317,88 @@
         }
       }
     },
+    "/payments/{paymentId}" : {
+      "get" : {
+        "tags" : [ "payment-controller" ],
+        "summary" : "Read a simulated service or outstanding-balance payment",
+        "description" : "Owners, the assigned fixer and platform administrators can audit a payment they may see.",
+        "operationId" : "payment",
+        "parameters" : [ {
+          "name" : "paymentId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "responses" : {
+          "400" : {
+            "description" : "Unexpected client fields",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "The caller cannot perform this payment operation",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "The requested financial resource does not exist",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "The requested financial transition conflicts with current state",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "200" : {
+            "description" : "Authoritative payment state",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PaymentDetail"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
     "/payments/me/earnings" : {
       "get" : {
         "tags" : [ "payment-controller" ],
@@ -3163,7 +3427,7 @@
             }
           },
           "403" : {
-            "description" : "Inactive account or missing FIXER role",
+            "description" : "The caller cannot perform this payment operation",
             "content" : {
               "application/json" : {
                 "schema" : {
@@ -3173,7 +3437,7 @@
             }
           },
           "404" : {
-            "description" : "The account has no payment record",
+            "description" : "The requested financial resource does not exist",
             "content" : {
               "application/json" : {
                 "schema" : {
@@ -3183,7 +3447,7 @@
             }
           },
           "409" : {
-            "description" : "There is no available balance to transfer",
+            "description" : "The requested financial transition conflicts with current state",
             "content" : {
               "application/json" : {
                 "schema" : {
@@ -3198,6 +3462,162 @@
               "application/json" : {
                 "schema" : {
                   "$ref" : "#/components/schemas/EarningsResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/payments/me/debts" : {
+      "get" : {
+        "tags" : [ "payment-controller" ],
+        "summary" : "List the current owner's outstanding debts",
+        "operationId" : "debts",
+        "responses" : {
+          "400" : {
+            "description" : "Unexpected client fields",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "The caller cannot perform this payment operation",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "The requested financial resource does not exist",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "The requested financial transition conflicts with current state",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "200" : {
+            "description" : "Outstanding debts of the owner",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/OwnerDebtDetail"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/payments/cash-settlements/jobs/{jobId}" : {
+      "get" : {
+        "tags" : [ "payment-controller" ],
+        "summary" : "Read the authoritative cash settlement for a completed job",
+        "operationId" : "cashSettlement",
+        "parameters" : [ {
+          "name" : "jobId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "responses" : {
+          "400" : {
+            "description" : "Unexpected client fields",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "The caller cannot perform this payment operation",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "The requested financial resource does not exist",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "The requested financial transition conflicts with current state",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "200" : {
+            "description" : "Audited cash settlement",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/CashSettlementDetail"
                 }
               }
             }
@@ -3497,6 +3917,46 @@
                   "type" : "array",
                   "items" : {
                     "$ref" : "#/components/schemas/PieceResponse"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/locations/reverse-geocode" : {
+      "get" : {
+        "tags" : [ "location-controller" ],
+        "summary" : "Resolve map coordinates to a readable address",
+        "operationId" : "reverseGeocode",
+        "parameters" : [ {
+          "name" : "latitude",
+          "in" : "query",
+          "required" : true,
+          "schema" : {
+            "type" : "number"
+          }
+        }, {
+          "name" : "longitude",
+          "in" : "query",
+          "required" : true,
+          "schema" : {
+            "type" : "number"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/GeocodingCandidate"
                   }
                 }
               }
@@ -4303,9 +4763,16 @@
           },
           "urgencyLevel" : {
             "$ref" : "#/components/schemas/UrgencyLevel"
+          },
+          "paymentMethod" : {
+            "$ref" : "#/components/schemas/PaymentMethod"
           }
         },
-        "required" : [ "description", "propertyId", "title" ]
+        "required" : [ "description", "paymentMethod", "propertyId", "title" ]
+      },
+      "PaymentMethod" : {
+        "type" : "string",
+        "enum" : [ "TRANSFER", "CASH" ]
       },
       "UrgencyLevel" : {
         "type" : "string",
@@ -4365,6 +4832,9 @@
             "type" : [ "string", "null" ],
             "format" : "uuid"
           },
+          "paymentMethod" : {
+            "$ref" : "#/components/schemas/PaymentMethod"
+          },
           "createdAt" : {
             "type" : "string",
             "format" : "date-time"
@@ -4377,7 +4847,7 @@
             "format" : "date-time"
           }
         },
-        "required" : [ "createdAt", "description", "photos", "requestId", "specialty", "status", "title", "urgencyLevel" ]
+        "required" : [ "createdAt", "description", "paymentMethod", "photos", "requestId", "specialty", "status", "title", "urgencyLevel" ]
       },
       "Specialty" : {
         "type" : "string",
@@ -4480,9 +4950,12 @@
           },
           "urgencyLevel" : {
             "$ref" : "#/components/schemas/UrgencyLevel"
+          },
+          "paymentMethod" : {
+            "$ref" : "#/components/schemas/PaymentMethod"
           }
         },
-        "required" : [ "description", "title" ]
+        "required" : [ "description", "paymentMethod", "title" ]
       },
       "JobStatus" : {
         "type" : "string",
@@ -4566,6 +5039,9 @@
           "requestStatus" : {
             "$ref" : "#/components/schemas/RepairRequestStatus"
           },
+          "paymentMethod" : {
+            "$ref" : "#/components/schemas/PaymentMethod"
+          },
           "assignedFixerUserId" : {
             "type" : [ "string", "null" ],
             "format" : "uuid"
@@ -4579,7 +5055,7 @@
             "$ref" : "#/components/schemas/JobStatus"
           }
         },
-        "required" : [ "position", "requestId", "requestStatus", "requirementId", "specialty" ]
+        "required" : [ "paymentMethod", "position", "requestId", "requestStatus", "requirementId", "specialty" ]
       },
       "QuotationRequest" : {
         "type" : "object",
@@ -4648,6 +5124,27 @@
       "QuotationStatus" : {
         "type" : "string",
         "enum" : [ "SUBMITTED", "ACCEPTED", "REJECTED" ]
+      },
+      "AcceptedQuotationResponse" : {
+        "type" : "object",
+        "properties" : {
+          "quotationId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "requestId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "paymentMethod" : {
+            "$ref" : "#/components/schemas/PaymentMethod"
+          },
+          "paymentId" : {
+            "type" : [ "string", "null" ],
+            "format" : "uuid"
+          }
+        },
+        "required" : [ "paymentMethod", "quotationId", "requestId" ]
       },
       "NewProperty" : {
         "type" : "object",
@@ -4769,6 +5266,70 @@
           }
         }
       },
+      "PaymentSimulationOutcome" : {
+        "type" : "string",
+        "enum" : [ "APPROVED", "DECLINED", "PENDING", "ERROR" ]
+      },
+      "SimulationRequest" : {
+        "type" : "object",
+        "properties" : {
+          "outcome" : {
+            "$ref" : "#/components/schemas/PaymentSimulationOutcome"
+          }
+        },
+        "required" : [ "outcome" ]
+      },
+      "PaymentDetail" : {
+        "type" : "object",
+        "properties" : {
+          "paymentId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "quotationId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "requestId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "amount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "paymentMethod" : {
+            "$ref" : "#/components/schemas/PaymentMethod"
+          },
+          "purpose" : {
+            "$ref" : "#/components/schemas/PaymentPurpose"
+          },
+          "status" : {
+            "$ref" : "#/components/schemas/PaymentStatus"
+          },
+          "createdAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "updatedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "completedAt" : {
+            "type" : [ "string", "null" ],
+            "format" : "date-time"
+          }
+        },
+        "required" : [ "amount", "createdAt", "paymentId", "paymentMethod", "purpose", "quotationId", "requestId", "status", "updatedAt" ]
+      },
+      "PaymentPurpose" : {
+        "type" : "string",
+        "enum" : [ "SERVICE", "OUTSTANDING_BALANCE" ]
+      },
+      "PaymentStatus" : {
+        "type" : "string",
+        "enum" : [ "PENDING", "APPROVED", "DECLINED", "ERROR" ]
+      },
       "PayoutResponse" : {
         "type" : "object",
         "properties" : {
@@ -4790,13 +5351,17 @@
           "requestedAt" : {
             "type" : "string",
             "format" : "date-time"
+          },
+          "transferredAt" : {
+            "type" : [ "string", "null" ],
+            "format" : "date-time"
           }
         },
         "required" : [ "amount", "earningCount", "id", "requestedAt", "status" ]
       },
       "PayoutStatus" : {
         "type" : "string",
-        "enum" : [ "REQUESTED" ]
+        "enum" : [ "REQUESTED", "TRANSFERRED" ]
       },
       "DeviceTokenRequest" : {
         "type" : "object",
@@ -4961,6 +5526,16 @@
         },
         "required" : [ "id", "mediaId", "position", "readUrl", "readUrlExpiresAt", "title", "visibility" ]
       },
+      "CompletionRequest" : {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "receivedAmount" : {
+            "type" : "string",
+            "format" : "int64"
+          }
+        }
+      },
       "JobResponse" : {
         "type" : "object",
         "properties" : {
@@ -4980,6 +5555,13 @@
             "type" : "string",
             "format" : "uuid"
           },
+          "paymentMethod" : {
+            "type" : "string"
+          },
+          "agreedAmount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
           "status" : {
             "$ref" : "#/components/schemas/JobStatus"
           },
@@ -4992,7 +5574,7 @@
             "format" : "date-time"
           }
         },
-        "required" : [ "createdAt", "id", "ownerUserId", "quotationId", "requestId", "status" ]
+        "required" : [ "agreedAmount", "createdAt", "id", "ownerUserId", "paymentMethod", "quotationId", "requestId", "status" ]
       },
       "RejectionRequest" : {
         "type" : "object",
@@ -5332,12 +5914,15 @@
           "title" : {
             "type" : "string"
           },
+          "paymentMethod" : {
+            "$ref" : "#/components/schemas/PaymentMethod"
+          },
           "createdAt" : {
             "type" : "string",
             "format" : "date-time"
           }
         },
-        "required" : [ "createdAt", "requestId", "specialty", "title" ]
+        "required" : [ "createdAt", "paymentMethod", "requestId", "specialty", "title" ]
       },
       "ProjectSummaryResponse" : {
         "type" : "object",
@@ -5490,6 +6075,80 @@
           }
         },
         "required" : [ "availableBalance", "grossTotal", "heldBalance", "history", "paidOutTotal", "totalCommission" ]
+      },
+      "OwnerDebtDetail" : {
+        "type" : "object",
+        "properties" : {
+          "debtId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "requestId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "quotationId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "amount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "status" : {
+            "type" : "string",
+            "enum" : [ "OUTSTANDING", "PAID" ]
+          },
+          "createdAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "settledAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          }
+        }
+      },
+      "CashSettlementDetail" : {
+        "type" : "object",
+        "properties" : {
+          "settlementId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "jobId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "quotationId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "requestId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "agreedAmount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "receivedAmount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "outstandingAmount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "debtId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "settledAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          }
+        }
       },
       "NotificationPageResponse" : {
         "type" : "object",

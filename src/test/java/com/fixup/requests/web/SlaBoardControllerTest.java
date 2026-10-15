@@ -3,6 +3,7 @@ package com.fixup.requests.web;
 import com.fixup.fixers.api.Specialty;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fixup.requests.api.RepairRequestStatus;
+import com.fixup.requests.api.PaymentMethod;
 import com.fixup.requests.api.UrgencyLevel;
 import com.fixup.requests.domain.RepairRequest;
 import com.fixup.requests.domain.RepairRequests;
@@ -93,6 +94,7 @@ class SlaBoardControllerTest {
                 List.of(),
                 status,
                 null,
+                PaymentMethod.TRANSFER,
                 now.minusSeconds(7200),
                 now.minusSeconds(7200),
                 UrgencyLevel.URGENT,

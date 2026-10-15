@@ -52,8 +52,11 @@ class OpenApiContractTest {
                 "/quotations", "/quotations/me", "/quotations/for-request/{requestId}",
                 "/quotations/{quotationId}/accept", "/quotations/{quotationId}/reject",
                 "/jobs/me", "/jobs/{jobId}/complete",
-                "/payments/me/earnings", "/payments/me/payouts", "/properties", "/properties/{propertyId}", "/properties/me",
-                "/properties/search", "/locations/geocode",
+                "/payments/me/earnings", "/payments/me/payouts", "/payments/me/debts",
+                "/payments/debts/{debtId}/pay", "/payments/cash-settlements/jobs/{jobId}",
+                "/payments/{paymentId}",
+                "/payments/{paymentId}/simulate", "/properties", "/properties/{propertyId}", "/properties/me",
+                "/properties/search", "/locations/geocode", "/locations/reverse-geocode",
                 "/properties/bulk/validate", "/properties/bulk/import",
                 "/notifications/me", "/notifications/{id}/read", "/notifications/read-all",
                 "/notifications/me/unread-count", "/notifications/device-token",
@@ -96,7 +99,12 @@ class OpenApiContractTest {
                 {"/jobs/me", "get", "200"}, {"/jobs/{jobId}/complete", "post", "200"},
                 {"/payments/me/earnings", "get", "200"},
                 {"/payments/me/payouts", "post", "201"},
-                {"/payments/me/payouts", "get", "200"}}) {
+                {"/payments/me/payouts", "get", "200"},
+                {"/payments/me/debts", "get", "200"},
+                {"/payments/debts/{debtId}/pay", "post", "201"},
+                {"/payments/cash-settlements/jobs/{jobId}", "get", "200"},
+                {"/payments/{paymentId}", "get", "200"},
+                {"/payments/{paymentId}/simulate", "post", "200"}}) {
             var operation = paths.get(endpoint[0]).get(endpoint[1]);
             assertThat(operation.get("security").toString()).contains("bearerAuth");
             for (String code : new String[]{endpoint[2], "400", "401", "403", "409"}) {
@@ -130,14 +138,22 @@ class OpenApiContractTest {
                 .contains("propertyId", "title", "description", "requirements")
                 .doesNotContain("ownerUserId", "status");
         assertThat(contract.at("/components/schemas/RequirementRequest/properties").toString())
-                .contains("title", "description", "mediaIds", "urgencyLevel")
+                .contains("title", "description", "mediaIds", "urgencyLevel", "paymentMethod")
                 .doesNotContain("requestId", "specialty", "assignedFixerUserId");
         assertThat(contract.at("/components/schemas/ProjectResponse/properties").toString())
                 .contains("id", "propertyId", "ownerUserId", "status", "requirements",
                         "requirementCount", "assignedCount", "completedCount");
         assertThat(contract.at("/components/schemas/RequirementResponse/properties").toString())
                 .contains("requirementId", "requestId", "position", "specialty",
-                        "requestStatus", "assignedFixerUserId", "jobId", "jobStatus");
+                        "requestStatus", "paymentMethod", "assignedFixerUserId", "jobId", "jobStatus");
+        assertThat(contract.at("/components/schemas/OpenRequest/properties").toString())
+                .contains("paymentMethod");
+        assertThat(contract.at("/components/schemas/OpenRequest/required").toString())
+                .contains("paymentMethod");
+        assertThat(contract.at("/components/schemas/RequestDetailResponse/properties").toString())
+                .contains("paymentMethod");
+        assertThat(contract.at("/components/schemas/PaymentMethod/enum").toString())
+                .contains("TRANSFER", "CASH");
         assertThat(contract.at("/components/schemas/RemodelingProgressStatus/enum").toString())
                 .contains("OPEN", "PARTIALLY_ASSIGNED", "FULLY_ASSIGNED",
                         "PARTIALLY_COMPLETED", "COMPLETED");
@@ -223,7 +239,13 @@ class OpenApiContractTest {
         assertThat(contract.at("/components/schemas/Specialty/enum").toString())
                 .contains("PLUMBING", "ELECTRICAL", "PAINTING", "CARPENTRY", "MASONRY", "GENERAL");
         assertThat(contract.at("/components/schemas/RepairRequestStatus/enum").toString())
-                .contains("OPEN", "ASSIGNED");
+                .contains("OPEN", "ASSIGNED", "COMPLETED");
+        assertThat(contract.at("/components/schemas/PayoutStatus/enum").toString())
+                .contains("REQUESTED", "TRANSFERRED");
+        assertThat(contract.at("/components/schemas/JobResponse/properties").toString())
+                .contains("paymentMethod", "agreedAmount");
+        assertThat(contract.at("/components/schemas/CompletionRequest/properties").toString())
+                .contains("receivedAmount");
         assertThat(contract.at("/components/schemas/QuotationStatus/enum").toString())
                 .contains("SUBMITTED", "ACCEPTED", "REJECTED");
         assertThat(contract.at("/components/schemas/RequestDetailResponse/properties/assignedFixerUserId/type")
@@ -236,7 +258,7 @@ class OpenApiContractTest {
         assertThat(contract.at("/components/schemas/RequestDetailResponse/properties").toString())
                 .doesNotContain("storageKey", "photoKeys");
         assertThat(contract.at("/components/schemas/OpenRequestSummaryResponse/properties").toString())
-                .contains("requestId", "specialty", "title", "createdAt")
+                .contains("requestId", "specialty", "title", "paymentMethod", "createdAt")
                 .doesNotContain("ownerUserId", "description", "photoKeys", "storageKey", "assignedFixerUserId");
         // No photo content crosses this API: the request carries media IDs only.
         assertThat(contract.at("/components/schemas/OpenRequest/properties").toString())
@@ -287,6 +309,19 @@ class OpenApiContractTest {
                 .toString()).contains("null");
         // A payout is requested for the whole available balance: the client never names an amount.
         assertThat(paths.get("/payments/me/payouts").get("post").has("requestBody")).isFalse();
+        assertThat(contract.at("/components/schemas/PaymentStatus/enum").toString())
+                .contains("PENDING", "APPROVED", "DECLINED", "ERROR");
+        assertThat(contract.at("/components/schemas/PaymentPurpose/enum").toString())
+                .contains("SERVICE", "OUTSTANDING_BALANCE");
+        assertThat(contract.at("/components/schemas/PaymentSimulationOutcome/enum").toString())
+                .contains("PENDING", "APPROVED", "DECLINED", "ERROR")
+                .doesNotContain("TRANSFER", "CASH", "CARD", "PSE", "SANDBOX");
+        assertThat(contract.at("/components/schemas/PaymentDetail/properties").toString())
+                .contains("paymentId", "quotationId", "requestId", "amount", "paymentMethod",
+                        "purpose", "status", "createdAt", "updatedAt", "completedAt")
+                .doesNotContain("ownerUserId", "fixerUserId", "card", "bank");
+        assertThat(contract.at("/components/schemas/SimulationRequest/properties").toString())
+                .contains("outcome").doesNotContain("ownerUserId", "paymentMethod");
         Files.createDirectories(Path.of("target"));
         Files.createDirectories(Path.of("docs"));
         String json = mapper.writerWithDefaultPrettyPrinter().writeValueAsString(contract) + System.lineSeparator();

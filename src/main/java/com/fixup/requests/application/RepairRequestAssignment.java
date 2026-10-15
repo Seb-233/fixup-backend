@@ -38,7 +38,7 @@ class RepairRequestAssignment implements RepairRequestDirectory {
     public List<ProjectRepairRequestSnapshot> findAll(Collection<UUID> requestIds) {
         return requests.findAllByIds(requestIds).stream()
                 .map(request -> new ProjectRepairRequestSnapshot(request.id(), request.specialty(),
-                        request.status(), request.assignedFixerUserId()))
+                        request.status(), request.assignedFixerUserId(), request.paymentMethod()))
                 .toList();
     }
 

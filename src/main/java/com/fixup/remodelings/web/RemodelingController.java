@@ -14,6 +14,7 @@ import com.fixup.remodelings.application.RemodelingProjectDetail;
 import com.fixup.remodelings.application.RemodelingProjectSummary;
 import com.fixup.remodelings.application.RemodelingRequirementSummary;
 import com.fixup.requests.api.RepairRequestStatus;
+import com.fixup.requests.api.PaymentMethod;
 import com.fixup.requests.api.UrgencyLevel;
 import com.fixup.shared.errors.ErrorResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -80,7 +81,7 @@ class RemodelingController {
         var requirements = body.requirements().stream()
                 .map(requirement -> new NewRemodelingRequirement(requirement.title(),
                         requirement.description(), requirement.mediaIds(),
-                        requirement.urgencyLevel()))
+                        requirement.urgencyLevel(), requirement.paymentMethod()))
                 .toList();
         return ProjectResponse.of(create.execute(actors.currentActor(),
                 new NewRemodeling(body.propertyId(), body.title(), body.description(),
@@ -118,7 +119,7 @@ class RemodelingController {
     record RequirementRequest(@NotBlank @Size(max = 150) String title,
             @NotBlank @Size(max = 2000) String description,
             @Size(max = 6) List<@NotNull UUID> mediaIds,
-            UrgencyLevel urgencyLevel) {
+            UrgencyLevel urgencyLevel, @NotNull PaymentMethod paymentMethod) {
         RequirementRequest {
             if (mediaIds != null && new HashSet<>(mediaIds).size() != mediaIds.size()) {
                 throw new IllegalArgumentException("mediaIds cannot contain duplicates");
@@ -156,15 +157,15 @@ class RemodelingController {
     }
 
     @Schema(requiredProperties = {"requirementId", "requestId", "position", "specialty",
-        "requestStatus"})
+        "requestStatus", "paymentMethod"})
     record RequirementResponse(UUID requirementId, UUID requestId, int position,
-            Specialty specialty, RepairRequestStatus requestStatus,
+            Specialty specialty, RepairRequestStatus requestStatus, PaymentMethod paymentMethod,
             @Schema(types = {"string", "null"}) UUID assignedFixerUserId,
             @Schema(types = {"string", "null"}) UUID jobId,
             @Schema(types = {"string", "null"}) JobStatus jobStatus) {
         static RequirementResponse of(RemodelingRequirementSummary summary) {
             return new RequirementResponse(summary.requirementId(), summary.requestId(),
-                    summary.position(), summary.specialty(), summary.requestStatus(),
+                    summary.position(), summary.specialty(), summary.requestStatus(), summary.paymentMethod(),
                     summary.assignedFixerUserId(), summary.jobId(), summary.jobStatus());
         }
     }

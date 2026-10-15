@@ -2,6 +2,7 @@ package com.fixup.remodelings.application;
 
 import com.fixup.identityaccess.api.CurrentActor;
 import com.fixup.properties.api.PropertyDirectory;
+import com.fixup.payments.api.OwnerDebtDirectory;
 import com.fixup.remodelings.api.RemodelingConflictException;
 import com.fixup.remodelings.domain.RemodelingProject;
 import com.fixup.remodelings.domain.RemodelingProjects;
@@ -22,19 +23,26 @@ public class CreateRemodeling {
     private final RepairRequestCreation requestCreation;
     private final RemodelingViewAssembler views;
     private final Clock clock;
+    private final OwnerDebtDirectory debts;
 
     CreateRemodeling(RemodelingProjects projects, PropertyDirectory properties,
-            RepairRequestCreation requestCreation, RemodelingViewAssembler views, Clock clock) {
+            RepairRequestCreation requestCreation, RemodelingViewAssembler views,
+            OwnerDebtDirectory debts, Clock clock) {
         this.projects = projects;
         this.properties = properties;
         this.requestCreation = requestCreation;
         this.views = views;
         this.clock = clock;
+        this.debts = debts;
     }
 
     @Transactional
     public RemodelingProjectDetail execute(CurrentActor actor, NewRemodeling draft) {
         RemodelingAccess.requireActiveOwner(actor);
+        if (debts.hasOutstandingDebt(actor.internalUserId())) {
+            throw new RemodelingConflictException("OWNER_HAS_OUTSTANDING_DEBT",
+                    "Pay outstanding debt before creating a remodeling project");
+        }
         if (draft.requirements().isEmpty()) {
             throw new RemodelingConflictException("REQUIREMENTS_REQUIRED",
                     "A remodeling project requires at least one requirement");
@@ -47,7 +55,7 @@ public class CreateRemodeling {
             var requirement = draft.requirements().get(position);
             var request = requestCreation.open(actor, new NewProjectRepairRequest(
                     draft.propertyId(), requirement.title(), requirement.description(),
-                    requirement.mediaIds(), requirement.urgencyLevel()));
+                    requirement.mediaIds(), requirement.urgencyLevel(), requirement.paymentMethod()));
             requirements.add(new RemodelingRequirement(UUID.randomUUID(), projectId,
                     request.requestId(), position));
         }

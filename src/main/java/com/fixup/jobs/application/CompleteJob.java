@@ -12,8 +12,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * FR-UC-20: el técnico cierra el trabajo y con eso libera el dinero retenido. Solo puede hacerlo
- * un Fixer verificado, que es la regla que module-rules exige invocar antes de dejarlo trabajar.
+ * The verified fixer closes the job. Synchronous listeners settle its payment and complete the
+ * repair request in the same transaction.
  */
 @Service
 public class CompleteJob {
@@ -28,17 +28,28 @@ public class CompleteJob {
     }
 
     @Transactional
-    public JobSummary execute(CurrentActor actor, UUID jobId) {
+    public JobSummary execute(CurrentActor actor, UUID jobId, Long receivedAmount) {
         JobAccess.requireActiveFixer(actor);
         eligibility.requireVerified(actor);
         // Lock the row: two concurrent completions must not release the escrow twice.
         var job = jobs.findByIdForUpdate(jobId).orElseThrow(JobNotFoundException::new);
         job.requireExecutedBy(actor.internalUserId());
+        if (job.paymentMethod().equals("CASH")) {
+            if (receivedAmount == null || receivedAmount < 0 || receivedAmount > job.agreedAmount()) {
+                throw new com.fixup.jobs.api.JobConflictException("INVALID_CASH_RECEIVED_AMOUNT",
+                        "Cash received must be between zero and the agreed amount");
+            }
+        } else if (receivedAmount != null) {
+            throw new com.fixup.jobs.api.JobConflictException("INVALID_CASH_RECEIVED_AMOUNT",
+                    "Transfer jobs do not accept a cash received amount");
+        }
 
         var completed = job.complete(Instant.now());
         jobs.update(completed);
         events.publishEvent(new JobCompleted(completed.id(), completed.quotationId(),
-                completed.fixerUserId(), completed.completedAt()));
+                completed.requestId(), completed.ownerUserId(), completed.fixerUserId(),
+                completed.paymentMethod(), completed.agreedAmount(), receivedAmount,
+                completed.completedAt()));
         return JobSummary.of(completed);
     }
 }

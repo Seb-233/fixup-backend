@@ -12,6 +12,7 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 import com.fixup.properties.api.GeocodingRateLimitExceededException;
 import com.fixup.properties.api.GeocodingUnavailableException;
 import java.io.IOException;
+import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -68,6 +69,34 @@ class NominatimGeocodingProviderTest {
             assertThat(candidate.latitude()).isEqualByComparingTo("4.657000");
             assertThat(candidate.longitude()).isEqualByComparingTo("-74.055000");
         });
+        server.verify();
+    }
+
+    @Test
+    void reverseGeocodingUsesTheSameProviderAndCachesItsNormalizedResult() {
+        server.expect(once(), requestTo(BASE_URL
+                        + "/reverse?lat=4.657&lon=-74.055&format=jsonv2&addressdetails=1"))
+                .andExpect(header(HttpHeaders.USER_AGENT, USER_AGENT))
+                .andRespond(withSuccess("""
+                        {"display_name":"Carrera 7, Bogota, Colombia",
+                         "lat":"4.657","lon":"-74.055"}
+                        """, MediaType.APPLICATION_JSON));
+        var latitude = new BigDecimal("4.657");
+        var longitude = new BigDecimal("-74.055");
+
+        assertThat(provider.reverseGeocode(latitude, longitude)).singleElement()
+                .satisfies(candidate -> assertThat(candidate.displayName())
+                        .isEqualTo("Carrera 7, Bogota, Colombia"));
+        assertThat(provider.reverseGeocode(latitude, longitude)).hasSize(1);
+        server.verify();
+    }
+
+    @Test
+    void reverseGeocodingReturnsNoResultOnProviderNotFound() {
+        server.expect(once(), requestTo(BASE_URL
+                        + "/reverse?lat=4&lon=-74&format=jsonv2&addressdetails=1"))
+                .andRespond(withStatus(HttpStatus.NOT_FOUND));
+        assertThat(provider.reverseGeocode(new BigDecimal("4"), new BigDecimal("-74"))).isEmpty();
         server.verify();
     }
 

@@ -116,16 +116,26 @@ abstract class QuotationHttpContract {
     }
 
     UUID createRequest(String ownerSubject, String specialty, String title, String description) throws Exception {
-        return createRequestWithMedia(ownerSubject, specialty, title, description, List.of());
+        return createRequest(ownerSubject, specialty, title, description, "TRANSFER");
+    }
+
+    UUID createRequest(String ownerSubject, String specialty, String title, String description,
+            String paymentMethod) throws Exception {
+        return createRequestWithMedia(ownerSubject, specialty, title, description, List.of(), paymentMethod);
     }
 
     UUID createRequestWithMedia(String ownerSubject, String specialty, String title, String description,
             List<UUID> mediaIds) throws Exception {
+        return createRequestWithMedia(ownerSubject, specialty, title, description, mediaIds, "TRANSFER");
+    }
+
+    UUID createRequestWithMedia(String ownerSubject, String specialty, String title, String description,
+            List<UUID> mediaIds, String paymentMethod) throws Exception {
         String mediaArray = mapper.writeValueAsString(mediaIds);
         java.util.UUID reqPropId = java.util.UUID.randomUUID();
         java.util.UUID ownerUserId = java.util.UUID.fromString(mapper.readTree(mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/auth/me").with(org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt().jwt(j -> j.subject(ownerSubject)))).andReturn().getResponse().getContentAsString()).get("id").asText());
         com.fixup.testsupport.PropertyFixtures.insertPublished(jdbc, reqPropId, ownerUserId);
-        String body = "{\"propertyId\":\"" + reqPropId.toString() + "\",\"title\":\"" + title + "\",\"description\":\"" + description + "\",\"mediaIds\":" + mediaArray + "}";
+        String body = "{\"propertyId\":\"" + reqPropId.toString() + "\",\"title\":\"" + title + "\",\"description\":\"" + description + "\",\"mediaIds\":" + mediaArray + ",\"paymentMethod\":\"" + paymentMethod + "\"}";
         var result = mvc.perform(post("/requests").with(identity(ownerSubject)).contentType(MediaType.APPLICATION_JSON).content(body)).andExpect(status().isCreated()).andReturn();
         java.util.UUID reqId = java.util.UUID.fromString(mapper.readTree(result.getResponse().getContentAsString()).get("requestId").asText());
         jdbc.update("UPDATE repair_requests SET specialty = ? WHERE id = ?", specialty, reqId);
@@ -342,7 +352,10 @@ abstract class QuotationHttpContract {
 
         mvc.perform(post("/quotations/" + quotationId + "/accept").with(identity(ownerSubject)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("ACCEPTED"));
+                .andExpect(jsonPath("$.quotationId").value(quotationId.toString()))
+                .andExpect(jsonPath("$.requestId").value(requestId.toString()))
+                .andExpect(jsonPath("$.paymentMethod").value("TRANSFER"))
+                .andExpect(jsonPath("$.paymentId").isNotEmpty());
 
         assertThat(events.acceptedEvents).hasSize(1);
         QuotationAccepted event = events.acceptedEvents.getFirst();
@@ -351,6 +364,71 @@ abstract class QuotationHttpContract {
         assertThat(event.ownerUserId()).isEqualTo(ownerId);
         assertThat(event.fixerUserId()).isEqualTo(fixerId);
         assertThat(event.amount()).isEqualTo(300_000L);
+        assertThat(event.paymentMethod()).isEqualTo(com.fixup.requests.api.PaymentMethod.TRANSFER);
+    }
+
+    @Test
+    void transferAcceptanceCreatesOnlyPendingServicePayment() throws Exception {
+        String ownerSubject = "auth0|owner-transfer-accept";
+        UUID ownerId = provisionOwner(ownerSubject);
+        UUID requestId = createRequest(ownerSubject, "PLUMBING", "Fuga", "Reparar tuberÃ­a", "TRANSFER");
+        String winnerSubject = "auth0|fixer-transfer-winner";
+        UUID fixerId = provisionVerifiedFixer(winnerSubject, "PLUMBING");
+        UUID quotationId = submitQuotation(winnerSubject, requestId, 320_000L, 2, "Oferta ganadora");
+        String competitorSubject = "auth0|fixer-transfer-competitor";
+        provisionVerifiedFixer(competitorSubject, "PLUMBING");
+        UUID competitorId = submitQuotation(competitorSubject, requestId, 330_000L, 3, "Oferta alterna");
+
+        var result = mvc.perform(post("/quotations/" + quotationId + "/accept").with(identity(ownerSubject)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.quotationId").value(quotationId.toString()))
+                .andExpect(jsonPath("$.requestId").value(requestId.toString()))
+                .andExpect(jsonPath("$.paymentMethod").value("TRANSFER"))
+                .andExpect(jsonPath("$.paymentId").isNotEmpty())
+                .andReturn();
+        UUID paymentId = UUID.fromString(mapper.readTree(result.getResponse().getContentAsString())
+                .get("paymentId").asText());
+
+        assertThat(jdbc.queryForObject("SELECT status FROM quotations WHERE id = ?", String.class, quotationId))
+                .isEqualTo("ACCEPTED");
+        assertThat(jdbc.queryForObject("SELECT status FROM quotations WHERE id = ?", String.class, competitorId))
+                .isEqualTo("REJECTED");
+        assertThat(jdbc.queryForObject("SELECT status FROM repair_requests WHERE id = ?", String.class, requestId))
+                .isEqualTo("ASSIGNED");
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM repair_payments WHERE id = ? AND quotation_id = ? "
+                + "AND request_id = ? AND owner_user_id = ? AND fixer_user_id = ? AND amount = 320000 "
+                + "AND payment_method = 'TRANSFER' AND purpose = 'SERVICE' AND status = 'PENDING'",
+                Integer.class, paymentId, quotationId, requestId, ownerId, fixerId)).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM jobs WHERE quotation_id = ?", Integer.class, quotationId))
+                .isZero();
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM fixer_earnings WHERE quotation_id = ?",
+                Integer.class, quotationId)).isZero();
+    }
+
+    @Test
+    void cashAcceptanceCreatesJobWithoutGatewayPaymentOrEarning() throws Exception {
+        String ownerSubject = "auth0|owner-cash-accept";
+        provisionOwner(ownerSubject);
+        UUID requestId = createRequest(ownerSubject, "ELECTRICAL", "Tablero", "Cambiar breaker", "CASH");
+        String fixerSubject = "auth0|fixer-cash-accept";
+        provisionVerifiedFixer(fixerSubject, "ELECTRICAL");
+        UUID quotationId = submitQuotation(fixerSubject, requestId, 210_000L, 1, "Pago al terminar");
+
+        mvc.perform(post("/quotations/" + quotationId + "/accept").with(identity(ownerSubject)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.quotationId").value(quotationId.toString()))
+                .andExpect(jsonPath("$.requestId").value(requestId.toString()))
+                .andExpect(jsonPath("$.paymentMethod").value("CASH"))
+                .andExpect(jsonPath("$.paymentId").doesNotExist());
+
+        assertThat(jdbc.queryForObject("SELECT status FROM repair_requests WHERE id = ?", String.class, requestId))
+                .isEqualTo("ASSIGNED");
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM repair_payments WHERE quotation_id = ?",
+                Integer.class, quotationId)).isZero();
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM jobs WHERE quotation_id = ? AND status = 'ASSIGNED'",
+                Integer.class, quotationId)).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM fixer_earnings WHERE quotation_id = ?",
+                Integer.class, quotationId)).isZero();
     }
 
     @Test
@@ -415,6 +493,10 @@ abstract class QuotationHttpContract {
                 .isEqualTo(1);
         assertThat(jdbc.queryForObject("SELECT status FROM repair_requests WHERE id = ?", String.class, requestId))
                 .isEqualTo("ASSIGNED");
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM repair_payments WHERE request_id = ?",
+                Integer.class, requestId)).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM jobs WHERE request_id = ?",
+                Integer.class, requestId)).isZero();
     }
 
     @Test
@@ -719,7 +801,7 @@ abstract class QuotationHttpContract {
 
         // Alien media -> 404
         String alienReq = """
-                {"propertyId":"%s","title":"Tubo","description":"Desc","mediaIds":["%s"]}
+                {"propertyId":"%s","title":"Tubo","description":"Desc","mediaIds":["%s"],"paymentMethod":"TRANSFER"}
                 """.formatted(reqPropIdA, alienMedia);
         mvc.perform(post("/requests").with(identity(ownerSubject))
                 .contentType(MediaType.APPLICATION_JSON).content(alienReq))
@@ -728,7 +810,7 @@ abstract class QuotationHttpContract {
         // Duplicate media in request -> 400
         UUID myMedia = uploadAndConfirmRepairRequestMedia(ownerSubject, ownerUserId);
         String dupReq = """
-                {"propertyId":"%s","title":"Tubo","description":"Desc","mediaIds":["%s","%s"]}
+                {"propertyId":"%s","title":"Tubo","description":"Desc","mediaIds":["%s","%s"],"paymentMethod":"TRANSFER"}
                 """.formatted(reqPropIdA, myMedia, myMedia);
         mvc.perform(post("/requests").with(identity(ownerSubject))
                 .contentType(MediaType.APPLICATION_JSON).content(dupReq))
@@ -737,7 +819,7 @@ abstract class QuotationHttpContract {
         // More than 6 mediaIds -> 400
         var tooManyIds = java.util.stream.Stream.generate(UUID::randomUUID).limit(7).toList();
         String tooManyReq = """
-                {"propertyId":"%s","title":"Tubo","description":"Desc","mediaIds":%s}
+                {"propertyId":"%s","title":"Tubo","description":"Desc","mediaIds":%s,"paymentMethod":"TRANSFER"}
                 """.formatted(reqPropIdA, mapper.writeValueAsString(tooManyIds));
         mvc.perform(post("/requests").with(identity(ownerSubject))
                 .contentType(MediaType.APPLICATION_JSON).content(tooManyReq))
@@ -753,7 +835,7 @@ abstract class QuotationHttpContract {
         java.util.UUID reqPropIdP = java.util.UUID.randomUUID();
         com.fixup.testsupport.PropertyFixtures.insertPublished(jdbc, reqPropIdP, ownerUserId);
         String portReq = """
-                {"propertyId":"%s","title":"Tubo","description":"Desc","mediaIds":["%s"]}
+                {"propertyId":"%s","title":"Tubo","description":"Desc","mediaIds":["%s"],"paymentMethod":"TRANSFER"}
                 """.formatted(reqPropIdP, portfolioMedia);
         mvc.perform(post("/requests").with(identity(ownerSubject))
                 .contentType(MediaType.APPLICATION_JSON).content(portReq))
@@ -767,7 +849,7 @@ abstract class QuotationHttpContract {
         java.util.UUID reqPropIdR = java.util.UUID.randomUUID();
         com.fixup.testsupport.PropertyFixtures.insertPublished(jdbc, reqPropIdR, ownerUserId);
         String reuseReq = """
-                {"propertyId":"%s","title":"Otro tubo","description":"Desc","mediaIds":["%s"]}
+                {"propertyId":"%s","title":"Otro tubo","description":"Desc","mediaIds":["%s"],"paymentMethod":"TRANSFER"}
                 """.formatted(reqPropIdR, myMedia);
         mvc.perform(post("/requests").with(identity(ownerSubject))
                 .contentType(MediaType.APPLICATION_JSON).content(reuseReq))

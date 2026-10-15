@@ -35,11 +35,11 @@ public class RequestPayout {
         var amount = available.stream().mapToLong(FixerEarning::netAmount).sum();
 
         // Payout.requested rechaza un saldo de cero: no se registran transferencias vacías.
+        var now = Instant.now();
         var payout = Payout.requested(UUID.randomUUID(), actor.internalUserId(), amount,
-                available.size(), Instant.now());
+                available.size(), now).transferred(now);
         payouts.create(payout);
 
-        var now = Instant.now();
         available.forEach(earning -> earnings.update(earning.payOut(now)));
 
         return PayoutSummary.of(payout);

@@ -7,9 +7,10 @@ import java.util.UUID;
 
 /** Data a collaborating module may use to open an ordinary repair request. */
 public record NewProjectRepairRequest(UUID propertyId, String title, String description,
-        List<UUID> mediaIds, UrgencyLevel urgencyLevel) {
+        List<UUID> mediaIds, UrgencyLevel urgencyLevel, PaymentMethod paymentMethod) {
 
     public NewProjectRepairRequest {
+        Objects.requireNonNull(paymentMethod, "paymentMethod must not be null");
         if (mediaIds != null && mediaIds.stream().anyMatch(Objects::isNull)) {
             throw new IllegalArgumentException("mediaIds cannot contain null elements");
         }

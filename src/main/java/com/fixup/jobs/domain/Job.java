@@ -7,16 +7,17 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * FR-UC-20: el trabajo nace cuando el propietario acepta una cotización y termina cuando el
- * técnico lo cierra. Guarda a las dos partes porque el dinero se mueve entre ellas.
+ * Un trabajo CASH nace al aceptar la cotización; uno TRANSFER nace solo después de aprobar el
+ * pago. Guarda a las dos partes porque la liquidación mueve valor entre ellas.
  */
 public record Job(UUID id, UUID requestId, UUID quotationId, UUID fixerUserId, UUID ownerUserId,
-        JobStatus status, Instant createdAt, Instant completedAt, Instant updatedAt) {
+        String paymentMethod, long agreedAmount, JobStatus status, Instant createdAt,
+        Instant completedAt, Instant updatedAt) {
 
     public static Job assigned(UUID id, UUID requestId, UUID quotationId, UUID fixerUserId,
-            UUID ownerUserId, Instant now) {
-        return new Job(id, requestId, quotationId, fixerUserId, ownerUserId, JobStatus.ASSIGNED,
-                now, null, now);
+            UUID ownerUserId, String paymentMethod, long agreedAmount, Instant now) {
+        return new Job(id, requestId, quotationId, fixerUserId, ownerUserId, paymentMethod,
+                agreedAmount, JobStatus.ASSIGNED, now, null, now);
     }
 
     /** Un trabajo se cierra una sola vez: de ese hecho cuelga la liberación del escrow. */
@@ -24,8 +25,8 @@ public record Job(UUID id, UUID requestId, UUID quotationId, UUID fixerUserId, U
         if (status == JobStatus.COMPLETED) {
             throw new JobConflictException("JOB_ALREADY_COMPLETED", "The job is already completed");
         }
-        return new Job(id, requestId, quotationId, fixerUserId, ownerUserId, JobStatus.COMPLETED,
-                createdAt, now, now);
+        return new Job(id, requestId, quotationId, fixerUserId, ownerUserId, paymentMethod,
+                agreedAmount, JobStatus.COMPLETED, createdAt, now, now);
     }
 
     /** Solo el técnico asignado cierra su trabajo; ni el propietario ni un tercero pueden. */

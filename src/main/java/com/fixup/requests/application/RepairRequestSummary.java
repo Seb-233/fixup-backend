@@ -1,6 +1,7 @@
 package com.fixup.requests.application;
 
 import com.fixup.requests.api.RepairRequestStatus;
+import com.fixup.requests.api.PaymentMethod;
 import com.fixup.requests.api.SlaState;
 import com.fixup.requests.api.UrgencyLevel;
 import com.fixup.fixers.api.Specialty;
@@ -12,7 +13,7 @@ import java.util.UUID;
 
 public record RepairRequestSummary(UUID id, UUID propertyId, UUID ownerUserId, Specialty specialty, String title,
         String description, List<UUID> mediaIds, RepairRequestStatus status,
-        UUID assignedFixerUserId, Instant createdAt,
+        UUID assignedFixerUserId, PaymentMethod paymentMethod, Instant createdAt,
         UrgencyLevel urgencyLevel, Instant slaDeadline, SlaState slaState) {
 
     private static final Duration WARNING_THRESHOLD = Duration.ofMinutes((long) (48 * 60 * 0.20));
@@ -21,7 +22,7 @@ public record RepairRequestSummary(UUID id, UUID propertyId, UUID ownerUserId, S
         SlaState slaState = computeSlaState(request);
         return new RepairRequestSummary(request.id(), request.propertyId(), request.ownerUserId(), request.specialty(),
                 request.title(), request.description(), request.mediaIds(), request.status(),
-                request.assignedFixerUserId(), request.createdAt(),
+                request.assignedFixerUserId(), request.paymentMethod(), request.createdAt(),
                 request.urgencyLevel(), request.slaDeadline(), slaState);
     }
 
