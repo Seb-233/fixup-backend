@@ -26,6 +26,12 @@ public record RepairRequestSnapshot(UUID requestId, UUID ownerUserId, Specialty 
         return status == RepairRequestStatus.ASSIGNED;
     }
 
+    public boolean allowsChat() {
+        return assignedFixerUserId != null
+                && (status == RepairRequestStatus.ASSIGNED
+                        || status == RepairRequestStatus.COMPLETED);
+    }
+
     /** FR-UC-25: the owner check travels with the record, not with the screen that displays it. */
     public void requireOwnedBy(UUID userId) {
         if (!ownerUserId.equals(userId)) {

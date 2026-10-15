@@ -52,9 +52,11 @@ class OpenApiContractTest {
                 "/quotations", "/quotations/me", "/quotations/for-request/{requestId}",
                 "/quotations/{quotationId}/accept", "/quotations/{quotationId}/reject",
                 "/jobs/me", "/jobs/{jobId}/complete",
-                "/payments/me/earnings", "/payments/me/payouts", "/payments/{paymentId}",
+                "/payments/me/earnings", "/payments/me/payouts", "/payments/me/debts",
+                "/payments/debts/{debtId}/pay", "/payments/cash-settlements/jobs/{jobId}",
+                "/payments/{paymentId}",
                 "/payments/{paymentId}/simulate", "/properties", "/properties/{propertyId}", "/properties/me",
-                "/properties/search", "/locations/geocode",
+                "/properties/search", "/locations/geocode", "/locations/reverse-geocode",
                 "/properties/bulk/validate", "/properties/bulk/import",
                 "/notifications/me", "/notifications/{id}/read", "/notifications/read-all",
                 "/notifications/me/unread-count", "/notifications/device-token",
@@ -98,6 +100,9 @@ class OpenApiContractTest {
                 {"/payments/me/earnings", "get", "200"},
                 {"/payments/me/payouts", "post", "201"},
                 {"/payments/me/payouts", "get", "200"},
+                {"/payments/me/debts", "get", "200"},
+                {"/payments/debts/{debtId}/pay", "post", "201"},
+                {"/payments/cash-settlements/jobs/{jobId}", "get", "200"},
                 {"/payments/{paymentId}", "get", "200"},
                 {"/payments/{paymentId}/simulate", "post", "200"}}) {
             var operation = paths.get(endpoint[0]).get(endpoint[1]);
@@ -234,7 +239,13 @@ class OpenApiContractTest {
         assertThat(contract.at("/components/schemas/Specialty/enum").toString())
                 .contains("PLUMBING", "ELECTRICAL", "PAINTING", "CARPENTRY", "MASONRY", "GENERAL");
         assertThat(contract.at("/components/schemas/RepairRequestStatus/enum").toString())
-                .contains("OPEN", "ASSIGNED");
+                .contains("OPEN", "ASSIGNED", "COMPLETED");
+        assertThat(contract.at("/components/schemas/PayoutStatus/enum").toString())
+                .contains("REQUESTED", "TRANSFERRED");
+        assertThat(contract.at("/components/schemas/JobResponse/properties").toString())
+                .contains("paymentMethod", "agreedAmount");
+        assertThat(contract.at("/components/schemas/CompletionRequest/properties").toString())
+                .contains("receivedAmount");
         assertThat(contract.at("/components/schemas/QuotationStatus/enum").toString())
                 .contains("SUBMITTED", "ACCEPTED", "REJECTED");
         assertThat(contract.at("/components/schemas/RequestDetailResponse/properties/assignedFixerUserId/type")

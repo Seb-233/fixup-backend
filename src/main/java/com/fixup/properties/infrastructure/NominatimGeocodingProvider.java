@@ -36,13 +36,21 @@ final class NominatimGeocodingProvider implements GeocodingProvider {
 
     @Override
     public List<GeocodingCandidate> geocode(String normalizedQuery) {
+        return cached("search:" + normalizedQuery.toLowerCase(Locale.ROOT),
+                () -> requestCandidates(normalizedQuery));
+    }
+
+    @Override
+    public List<GeocodingCandidate> reverseGeocode(BigDecimal latitude, BigDecimal longitude) {
+        return cached("reverse:" + latitude.toPlainString() + ":" + longitude.toPlainString(),
+                () -> requestReverse(latitude, longitude));
+    }
+
+    private List<GeocodingCandidate> cached(String cacheKey,
+            java.util.function.Supplier<List<GeocodingCandidate>> request) {
         if (!properties.isEnabled()) {
             throw new GeocodingUnavailableException("Address geocoding is disabled");
         }
-
-        // The query is already whitespace-normalized by the use case. Case folding completes the
-        // cache key so equivalent user input does not trigger another external request.
-        String cacheKey = normalizedQuery.toLowerCase(Locale.ROOT);
         Instant now = Instant.now(clock);
         synchronized (stateMonitor) {
             removeExpiredEntries(now);
@@ -56,9 +64,37 @@ final class NominatimGeocodingProvider implements GeocodingProvider {
             nextRequestAt = now.plus(MINIMUM_REQUEST_INTERVAL);
         }
 
-        List<GeocodingCandidate> candidates = requestCandidates(normalizedQuery);
+        List<GeocodingCandidate> candidates = request.get();
         cacheSuccessfulResult(cacheKey, candidates, now);
         return candidates;
+    }
+
+    private List<GeocodingCandidate> requestReverse(BigDecimal latitude, BigDecimal longitude) {
+        try {
+            var payload = restClient.get()
+                    .uri(uri -> uri.path("/reverse")
+                            .queryParam("lat", latitude.toPlainString())
+                            .queryParam("lon", longitude.toPlainString())
+                            .queryParam("format", "jsonv2")
+                            .queryParam("addressdetails", 1)
+                            .build())
+                    .retrieve()
+                    .body(NominatimResult.class);
+            return payload == null || payload.displayName() == null
+                    ? List.of() : List.of(toCandidate(payload));
+        } catch (RestClientResponseException failure) {
+            if (failure.getStatusCode() == HttpStatus.NOT_FOUND) {
+                return List.of();
+            }
+            if (failure.getStatusCode() == HttpStatus.TOO_MANY_REQUESTS) {
+                throw new GeocodingRateLimitExceededException();
+            }
+            throw new GeocodingUnavailableException("Nominatim did not answer successfully", failure);
+        } catch (RestClientException failure) {
+            throw new GeocodingUnavailableException("Nominatim did not answer", failure);
+        } catch (IllegalArgumentException failure) {
+            throw new GeocodingUnavailableException("Nominatim returned an invalid payload", failure);
+        }
     }
 
     private List<GeocodingCandidate> requestCandidates(String query) {

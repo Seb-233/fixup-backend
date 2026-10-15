@@ -192,6 +192,24 @@ abstract class ChatHttpContract {
 
         assertThat(jdbc.queryForObject("SELECT count(*) FROM chat_messages WHERE request_id = ?",
                 Integer.class, requestId)).isEqualTo(2);
+        mvc.perform(get("/notifications/me").with(identity(fixerSubject))
+                        .queryParam("type", "CHAT_MESSAGE_RECEIVED")
+                        .queryParam("unreadOnly", "true"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.content[0].read").value(false));
+        var ownerNotifications = mvc.perform(get("/notifications/me")
+                        .with(identity(ownerSubject))
+                        .queryParam("type", "CHAT_MESSAGE_RECEIVED"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(1)).andReturn();
+        String notificationId = mapper.readTree(ownerNotifications.getResponse().getContentAsString())
+                .get("content").get(0).get("id").asText();
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .patch("/notifications/" + notificationId + "/read")
+                        .with(identity(ownerSubject)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.read").value(true));
     }
 
     // ---------- terceros ajenos ----------
@@ -211,6 +229,10 @@ abstract class ChatHttpContract {
         send("auth0|chat-stranger", requestId, messageBody("Puedo ver esto?"))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+        mvc.perform(get("/notifications/me").with(identity("auth0|chat-stranger"))
+                        .queryParam("type", "CHAT_MESSAGE_RECEIVED"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(0));
 
         assertThat(jdbc.queryForObject("SELECT count(*) FROM chat_messages WHERE request_id = ?",
                 Integer.class, requestId)).isEqualTo(1);
@@ -322,5 +344,10 @@ abstract class ChatHttpContract {
 
         assertThat(jdbc.queryForObject("SELECT count(*) FROM chat_messages WHERE request_id = ?",
                 Integer.class, requestId)).isEqualTo(1);
+        mvc.perform(get("/notifications/me").with(identity(fixerSubject))
+                        .queryParam("type", "CHAT_MESSAGE_RECEIVED")
+                        .queryParam("unreadOnly", "true"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(1));
     }
 }
