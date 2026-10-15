@@ -152,6 +152,26 @@ class PostgresRowLevelSecurityIT {
         return jdbc.queryForObject("SELECT amount FROM quotations WHERE id = ?", Long.class, quotationId);
     }
 
+    private UUID createRepairPayment(UUID ownerId, UUID fixerId) {
+        UUID id = UUID.randomUUID();
+        jdbc.update("INSERT INTO repair_payments (id, quotation_id, request_id, owner_user_id, fixer_user_id, amount, payment_method, purpose, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 100000, 'TRANSFER', 'SERVICE', 'PENDING', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
+                id, UUID.randomUUID(), UUID.randomUUID(), ownerId, fixerId);
+        return id;
+    }
+
+    private UUID createOwnerDebt(UUID ownerId, UUID fixerId) {
+        UUID id = UUID.randomUUID();
+        jdbc.update("INSERT INTO owner_debts (id, owner_user_id, fixer_user_id, request_id, quotation_id, amount, status, created_at) VALUES (?, ?, ?, ?, ?, 10000, 'OUTSTANDING', CURRENT_TIMESTAMP)",
+                id, ownerId, fixerId, UUID.randomUUID(), UUID.randomUUID());
+        return id;
+    }
+
+    private UUID createPaymentAttempt(UUID paymentId, UUID actorId) {
+        UUID id = UUID.randomUUID();
+        jdbc.update("INSERT INTO simulated_payment_attempts (id, payment_id, requested_outcome, resulting_status, attempted_by_user_id, attempted_at) VALUES (?, ?, 'DECLINED', 'DECLINED', ?, CURRENT_TIMESTAMP)", id, paymentId, actorId);
+        return id;
+    }
+
     // ---------- RLS session helper: exactly what RlsSessionTransactionManager does for a request ----------
 
     @FunctionalInterface
@@ -196,6 +216,18 @@ class PostgresRowLevelSecurityIT {
 
     private List<UUID> visibleQuotationIds(UUID userId, String role) {
         return actingAs(userId, role, connection -> queryUuids(connection, "SELECT id FROM quotations"));
+    }
+
+    private List<UUID> visibleRepairPaymentIds(UUID userId, String role) {
+        return actingAs(userId, role, connection -> queryUuids(connection, "SELECT id FROM repair_payments"));
+    }
+
+    private List<UUID> visibleOwnerDebtIds(UUID userId, String role) {
+        return actingAs(userId, role, connection -> queryUuids(connection, "SELECT id FROM owner_debts"));
+    }
+
+    private List<UUID> visiblePaymentAttemptIds(UUID userId, String role) {
+        return actingAs(userId, role, connection -> queryUuids(connection, "SELECT id FROM simulated_payment_attempts"));
     }
 
     private List<UUID> visibleVerificationDocumentMediaIds(UUID userId, String role) {
@@ -513,6 +545,36 @@ class PostgresRowLevelSecurityIT {
                 }
             }
         });
+    }
+
+    @Test
+    void paymentsDebtsAndAttemptsFollowOwnerFixerAndAdminVisibility() throws Exception {
+        UUID ownerA = provisionWithRole("auth0|rls-payment-owner-a", "OWNER");
+        UUID ownerB = provisionWithRole("auth0|rls-payment-owner-b", "OWNER");
+        UUID fixerA = provisionVerifiedFixer("auth0|rls-payment-fixer-a", "PLUMBING");
+        UUID fixerB = provisionVerifiedFixer("auth0|rls-payment-fixer-b", "PLUMBING");
+        UUID admin = provisionAdmin("auth0|rls-payment-admin");
+        UUID payment = createRepairPayment(ownerA, fixerA);
+        UUID debt = createOwnerDebt(ownerA, fixerA);
+        UUID attempt = createPaymentAttempt(payment, ownerA);
+
+        assertThat(visibleRepairPaymentIds(ownerA, "OWNER")).containsExactly(payment);
+        assertThat(visibleRepairPaymentIds(ownerB, "OWNER")).isEmpty();
+        assertThat(visibleRepairPaymentIds(fixerA, "FIXER")).containsExactly(payment);
+        assertThat(visibleRepairPaymentIds(fixerB, "FIXER")).isEmpty();
+        assertThat(visibleRepairPaymentIds(admin, "PLATFORM_ADMIN")).containsExactly(payment);
+
+        assertThat(visibleOwnerDebtIds(ownerA, "OWNER")).containsExactly(debt);
+        assertThat(visibleOwnerDebtIds(ownerB, "OWNER")).isEmpty();
+        assertThat(visibleOwnerDebtIds(fixerA, "FIXER")).containsExactly(debt);
+        assertThat(visibleOwnerDebtIds(fixerB, "FIXER")).isEmpty();
+        assertThat(visibleOwnerDebtIds(admin, "PLATFORM_ADMIN")).containsExactly(debt);
+
+        assertThat(visiblePaymentAttemptIds(ownerA, "OWNER")).containsExactly(attempt);
+        assertThat(visiblePaymentAttemptIds(ownerB, "OWNER")).isEmpty();
+        assertThat(visiblePaymentAttemptIds(fixerA, "FIXER")).containsExactly(attempt);
+        assertThat(visiblePaymentAttemptIds(fixerB, "FIXER")).isEmpty();
+        assertThat(visiblePaymentAttemptIds(admin, "PLATFORM_ADMIN")).containsExactly(attempt);
     }
 
     @org.junit.jupiter.api.Test

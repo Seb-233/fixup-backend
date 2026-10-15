@@ -1,5 +1,6 @@
 package com.fixup.payments.api;
 
+import com.fixup.payments.domain.RepairPaymentMethod;
 import java.time.Instant;
 import java.util.Objects;
 import java.util.UUID;
@@ -18,8 +19,6 @@ public record PaymentInitiationCommand(UUID quotationId, UUID requestId, UUID ow
         if (amount <= 0) {
             throw new IllegalArgumentException("amount must be positive");
         }
-        if (!"TRANSFER".equals(paymentMethod) && !"CASH".equals(paymentMethod)) {
-            throw new IllegalArgumentException("paymentMethod must be TRANSFER or CASH");
-        }
+        RepairPaymentMethod.fromCanonical(paymentMethod);
     }
 }
