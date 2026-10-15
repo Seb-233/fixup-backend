@@ -44,7 +44,7 @@ CREATE TABLE owner_debts (
         (status = 'PAID' AND settled_at IS NOT NULL)
         OR (status = 'OUTSTANDING' AND settled_at IS NULL)
     ),
-    CONSTRAINT uq_owner_debt_quotation_status UNIQUE (quotation_id, status)
+    CONSTRAINT uq_owner_debt_quotation UNIQUE (quotation_id)
 );
 
 CREATE INDEX ix_owner_debts_owner ON owner_debts (owner_user_id, status, created_at DESC);

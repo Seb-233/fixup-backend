@@ -86,6 +86,14 @@ class PostgresSimulatedPaymentCoreIT {
         debts.update(debt.settle(now.plusSeconds(1)));
         assertThat(debtDirectory.hasOutstandingDebt(owner)).isFalse();
         assertThat(debts.findById(debt.id()).orElseThrow().status()).isEqualTo(DebtStatus.PAID);
+        assertThatThrownBy(() -> debts.create(OwnerDebt.outstanding(UUID.randomUUID(), owner, fixer,
+                UUID.randomUUID(), debt.quotationId(), 40_000, now.plusSeconds(2))))
+                .isInstanceOf(DataIntegrityViolationException.class);
+
+        UUID outstandingBalancePaymentId = UUID.randomUUID();
+        payments.create(RepairPayment.pending(outstandingBalancePaymentId, quotation, UUID.randomUUID(), owner,
+                fixer, 10_000, RepairPaymentMethod.TRANSFER, PaymentPurpose.OUTSTANDING_BALANCE, now));
+        assertThat(payments.findById(outstandingBalancePaymentId)).isPresent();
     }
 
     private RepairPayment payment(UUID quotation, UUID request, UUID owner, UUID fixer, UUID id) {
