@@ -306,6 +306,23 @@ abstract class RemodelingHttpContract {
         assertThat(jdbc.queryForObject("SELECT count(*) FROM remodeling_requirements "
                 + "WHERE project_id = ? AND request_id IN (?, ?)", Integer.class,
                 projectId, plumbingRequest, electricalRequest)).isEqualTo(2);
+
+        UUID transferPayment = jdbc.queryForObject("SELECT id FROM repair_payments WHERE request_id = ?",
+                UUID.class, plumbingRequest);
+        mvc.perform(post("/payments/" + transferPayment + "/simulate").with(identity(ownerSubject))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"outcome\":\"APPROVED\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("APPROVED"));
+
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM jobs WHERE fixer_user_id = ? AND status = 'ASSIGNED'",
+                Integer.class, fixerId)).isEqualTo(2);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM fixer_earnings WHERE quotation_id = ? "
+                + "AND status = 'HELD'", Integer.class, plumbingQuotation)).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM fixer_earnings WHERE quotation_id = ?",
+                Integer.class, electricalQuotation)).isZero();
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM remodeling_requirements "
+                + "WHERE project_id = ? AND request_id IN (?, ?)", Integer.class,
+                projectId, plumbingRequest, electricalRequest)).isEqualTo(2);
     }
 
     void assertProjectStatus(String ownerSubject, UUID projectId, String expected,

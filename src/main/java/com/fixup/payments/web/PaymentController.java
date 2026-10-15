@@ -6,9 +6,13 @@ import com.fixup.payments.api.PayoutStatus;
 import com.fixup.payments.application.EarningLine;
 import com.fixup.payments.application.EarningsSummary;
 import com.fixup.payments.application.GetEarningsSummary;
+import com.fixup.payments.application.GetRepairPayment;
 import com.fixup.payments.application.ListOwnPayouts;
+import com.fixup.payments.application.PaymentDetail;
 import com.fixup.payments.application.PayoutSummary;
 import com.fixup.payments.application.RequestPayout;
+import com.fixup.payments.application.SimulateRepairPayment;
+import com.fixup.payments.api.PaymentSimulationOutcome;
 import com.fixup.shared.errors.ErrorResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -17,13 +21,17 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotNull;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
@@ -37,11 +45,11 @@ import org.springframework.web.bind.annotation.RestController;
             content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
     @ApiResponse(responseCode = "401", description = "Missing or invalid bearer token",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-    @ApiResponse(responseCode = "403", description = "Inactive account or missing FIXER role",
+    @ApiResponse(responseCode = "403", description = "The caller cannot perform this payment operation",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-    @ApiResponse(responseCode = "404", description = "The account has no payment record",
+    @ApiResponse(responseCode = "404", description = "The requested financial resource does not exist",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-    @ApiResponse(responseCode = "409", description = "There is no available balance to transfer",
+    @ApiResponse(responseCode = "409", description = "The requested financial transition conflicts with current state",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
 })
 class PaymentController {
@@ -49,13 +57,35 @@ class PaymentController {
     private final GetEarningsSummary getEarnings;
     private final RequestPayout requestPayout;
     private final ListOwnPayouts listPayouts;
+    private final GetRepairPayment getPayment;
+    private final SimulateRepairPayment simulatePayment;
 
     PaymentController(CurrentActorProvider actors, GetEarningsSummary getEarnings,
-            RequestPayout requestPayout, ListOwnPayouts listPayouts) {
+            RequestPayout requestPayout, ListOwnPayouts listPayouts, GetRepairPayment getPayment,
+            SimulateRepairPayment simulatePayment) {
         this.actors = actors;
         this.getEarnings = getEarnings;
         this.requestPayout = requestPayout;
         this.listPayouts = listPayouts;
+        this.getPayment = getPayment;
+        this.simulatePayment = simulatePayment;
+    }
+
+    @GetMapping("/{paymentId}")
+    @Operation(summary = "Read a service payment",
+            description = "Owners, the assigned fixer and platform administrators can audit a payment they may see.")
+    @ApiResponse(responseCode = "200", description = "Authoritative payment state")
+    PaymentDetail payment(@PathVariable UUID paymentId) {
+        return getPayment.execute(actors.currentActor(), paymentId);
+    }
+
+    @PostMapping("/{paymentId}/simulate")
+    @Operation(summary = "Simulate the provider outcome of an owner's transfer payment",
+            description = "Academic simulator only. APPROVED atomically creates the held earning and assigned job; "
+                    + "DECLINED, PENDING and ERROR remain retryable and create neither.")
+    @ApiResponse(responseCode = "200", description = "Authoritative payment state after the simulated outcome")
+    PaymentDetail simulate(@PathVariable UUID paymentId, @Valid @RequestBody SimulationRequest request) {
+        return simulatePayment.execute(actors.currentActor(), paymentId, request.outcome());
     }
 
     @GetMapping("/me/earnings")
@@ -123,5 +153,9 @@ class PaymentController {
             return new PayoutResponse(summary.id(), summary.amount(), summary.earningCount(),
                     summary.status(), summary.requestedAt());
         }
+    }
+
+    @Schema(requiredProperties = {"outcome"})
+    record SimulationRequest(@NotNull PaymentSimulationOutcome outcome) {
     }
 }

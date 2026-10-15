@@ -1,6 +1,9 @@
 package com.fixup.payments.domain;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 /** Internal, canonical representation of the request payment-method name. */
+@Schema(name = "PaymentMethod", enumAsRef = true)
 public enum RepairPaymentMethod {
     TRANSFER,
     CASH;

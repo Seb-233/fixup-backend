@@ -1,6 +1,6 @@
 package com.fixup.jobs.api;
 
-/** Opens the assigned job that belongs to an accepted cash quotation. */
+/** Opens the assigned job authorized by the payment/quotation workflow. */
 public interface JobOpening {
     void open(JobOpeningCommand command);
 }

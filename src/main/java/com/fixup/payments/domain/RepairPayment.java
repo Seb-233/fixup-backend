@@ -54,6 +54,10 @@ public record RepairPayment(UUID id, UUID quotationId, UUID requestId, UUID owne
         return transition(PaymentStatus.ERROR, now);
     }
 
+    public RepairPayment keepPending(Instant now) {
+        return transition(PaymentStatus.PENDING, now);
+    }
+
     private RepairPayment transition(PaymentStatus target, Instant now) {
         Objects.requireNonNull(now, "now must not be null");
         if (status == PaymentStatus.APPROVED) {

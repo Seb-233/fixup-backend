@@ -61,6 +61,16 @@ class RepairPaymentTest {
     }
 
     @Test
+    void pendingOutcomeCanRestoreARetryablePaymentToPending() {
+        var pendingAgain = payment(RepairPaymentMethod.TRANSFER)
+                .decline(NOW.plusSeconds(1)).keepPending(NOW.plusSeconds(2));
+
+        assertThat(pendingAgain.status()).isEqualTo(PaymentStatus.PENDING);
+        assertThat(pendingAgain.completedAt()).isNull();
+        assertThat(pendingAgain.updatedAt()).isEqualTo(NOW.plusSeconds(2));
+    }
+
+    @Test
     void attemptsRetainEveryAuditedValue() {
         var attempt = new SimulatedPaymentAttempt(UUID.randomUUID(), ID, PaymentStatus.DECLINED,
                 PaymentStatus.DECLINED, OWNER, NOW);
