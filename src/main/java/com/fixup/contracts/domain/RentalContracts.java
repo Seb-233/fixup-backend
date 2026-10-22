@@ -12,4 +12,5 @@ public interface RentalContracts {
     List<RentalContract> findExpiringWithinDays(int daysFromNow, LocalDate today);
     List<UUID> findOverlappingActiveContractIds(UUID propertyId, LocalDate start, LocalDate end);
     List<RentalContract> findActiveEndingBetween(LocalDate fromInclusive, LocalDate toInclusive);
+    List<UUID> findActivePropertyIdsForTenant(UUID tenantUserId, LocalDate on);
 }

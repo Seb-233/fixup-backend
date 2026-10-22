@@ -28,6 +28,7 @@ class RepairPaymentEntity {
     @Column(name = "created_at", nullable = false, updatable = false) private Instant createdAt;
     @Column(name = "updated_at", nullable = false) private Instant updatedAt;
     @Column(name = "completed_at") private Instant completedAt;
+    @Column(name = "manager_user_id", updatable = false) private UUID managerUserId;
 
     protected RepairPaymentEntity() { }
 
@@ -36,6 +37,7 @@ class RepairPaymentEntity {
         entity.id = payment.id(); entity.quotationId = payment.quotationId(); entity.requestId = payment.requestId();
         entity.ownerUserId = payment.ownerUserId(); entity.fixerUserId = payment.fixerUserId();
         entity.amount = payment.amount(); entity.paymentMethod = payment.paymentMethod(); entity.purpose = payment.purpose();
+        entity.managerUserId = payment.managerUserId();
         entity.createdAt = payment.createdAt(); entity.apply(payment);
         return entity;
     }
@@ -43,5 +45,5 @@ class RepairPaymentEntity {
     void apply(RepairPayment payment) { status = payment.status(); updatedAt = payment.updatedAt(); completedAt = payment.completedAt(); }
 
     RepairPayment toDomain() { return new RepairPayment(id, quotationId, requestId, ownerUserId, fixerUserId,
-            amount, paymentMethod, purpose, status, createdAt, updatedAt, completedAt); }
+            amount, paymentMethod, purpose, status, createdAt, updatedAt, completedAt, managerUserId); }
 }

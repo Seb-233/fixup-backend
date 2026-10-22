@@ -1,13 +1,15 @@
 package com.fixup.properties.infrastructure;
 
+import com.fixup.properties.domain.CatalogQuery;
 import com.fixup.properties.domain.GeographicBoundingBox;
 import com.fixup.properties.domain.OwnershipScope;
 import com.fixup.properties.domain.Properties;
 import com.fixup.properties.domain.Property;
 import com.fixup.properties.domain.PropertySearchMatch;
+import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Component;
-
 import java.math.BigDecimal;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Optional;
@@ -23,7 +25,13 @@ class JpaProperties implements Properties {
 
     @Override
     public Property save(Property property) {
-        return repository.save(new PropertyEntity(property)).toDomain();
+        var entity = repository.findById(property.id())
+                .map(existing -> {
+                    existing.apply(property);
+                    return existing;
+                })
+                .orElseGet(() -> new PropertyEntity(property));
+        return repository.saveAndFlush(entity).toDomain();
     }
 
     @Override
@@ -35,6 +43,25 @@ class JpaProperties implements Properties {
     @Override
     public Optional<Property> findById(UUID id) {
         return repository.findById(id).map(PropertyEntity::toDomain);
+    }
+
+    @Override
+    public List<Property> findAllById(Collection<UUID> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return List.of();
+        }
+        return repository.findAllById(ids).stream().map(PropertyEntity::toDomain).toList();
+    }
+
+    @Override
+    public List<Property> findControlledBy(UUID userId) {
+        return repository.findControlledBy(userId).stream().map(PropertyEntity::toDomain).toList();
+    }
+
+    @Override
+    public Page<Property> searchCatalog(CatalogQuery query) {
+        return repository.findAll(CatalogSpecification.of(query), CatalogSpecification.pageRequest(query))
+                .map(PropertyEntity::toDomain);
     }
 
     @Override

@@ -1,0 +1,906 @@
+[
+ {
+  "file": "propiedad/apartamento-01.jpg",
+  "category": "propiedad",
+  "tag": "apartamento",
+  "bytes": 82957,
+  "width": 1024,
+  "height": 681
+ },
+ {
+  "file": "propiedad/apartamento-02.jpg",
+  "category": "propiedad",
+  "tag": "apartamento",
+  "bytes": 95550,
+  "width": 1024,
+  "height": 681
+ },
+ {
+  "file": "propiedad/apartamento-03.jpg",
+  "category": "propiedad",
+  "tag": "apartamento",
+  "bytes": 96572,
+  "width": 1024,
+  "height": 681
+ },
+ {
+  "file": "propiedad/apartamento-04.jpg",
+  "category": "propiedad",
+  "tag": "apartamento",
+  "bytes": 128894,
+  "width": 1024,
+  "height": 683
+ },
+ {
+  "file": "propiedad/apartamento-05.jpg",
+  "category": "propiedad",
+  "tag": "apartamento",
+  "bytes": 64447,
+  "width": 1024,
+  "height": 567
+ },
+ {
+  "file": "propiedad/apartamento-06.jpg",
+  "category": "propiedad",
+  "tag": "apartamento",
+  "bytes": 105005,
+  "width": 1023,
+  "height": 685
+ },
+ {
+  "file": "propiedad/apartamento-07.jpg",
+  "category": "propiedad",
+  "tag": "apartamento",
+  "bytes": 106854,
+  "width": 1024,
+  "height": 768
+ },
+ {
+  "file": "propiedad/apartamento-08.jpg",
+  "category": "propiedad",
+  "tag": "apartamento",
+  "bytes": 52266,
+  "width": 1024,
+  "height": 683
+ },
+ {
+  "file": "propiedad/apartamento-09.jpg",
+  "category": "propiedad",
+  "tag": "apartamento",
+  "bytes": 118954,
+  "width": 1024,
+  "height": 768
+ },
+ {
+  "file": "propiedad/apartamento-10.jpg",
+  "category": "propiedad",
+  "tag": "apartamento",
+  "bytes": 112881,
+  "width": 1024,
+  "height": 619
+ },
+ {
+  "file": "propiedad/apartamento-11.jpg",
+  "category": "propiedad",
+  "tag": "apartamento",
+  "bytes": 130246,
+  "width": 1024,
+  "height": 768
+ },
+ {
+  "file": "propiedad/casa-01.jpg",
+  "category": "propiedad",
+  "tag": "casa",
+  "bytes": 103625,
+  "width": 1023,
+  "height": 741
+ },
+ {
+  "file": "propiedad/casa-02.jpg",
+  "category": "propiedad",
+  "tag": "casa",
+  "bytes": 102124,
+  "width": 1024,
+  "height": 683
+ },
+ {
+  "file": "propiedad/casa-03.jpg",
+  "category": "propiedad",
+  "tag": "casa",
+  "bytes": 97316,
+  "width": 1024,
+  "height": 683
+ },
+ {
+  "file": "propiedad/casa-04.jpg",
+  "category": "propiedad",
+  "tag": "casa",
+  "bytes": 104403,
+  "width": 1024,
+  "height": 800
+ },
+ {
+  "file": "propiedad/casa-05.jpg",
+  "category": "propiedad",
+  "tag": "casa",
+  "bytes": 103716,
+  "width": 1024,
+  "height": 680
+ },
+ {
+  "file": "propiedad/casa-06.jpg",
+  "category": "propiedad",
+  "tag": "casa",
+  "bytes": 48213,
+  "width": 1024,
+  "height": 768
+ },
+ {
+  "file": "propiedad/casa-07.jpg",
+  "category": "propiedad",
+  "tag": "casa",
+  "bytes": 84690,
+  "width": 1024,
+  "height": 768
+ },
+ {
+  "file": "propiedad/casa-08.jpg",
+  "category": "propiedad",
+  "tag": "casa",
+  "bytes": 111607,
+  "width": 1024,
+  "height": 683
+ },
+ {
+  "file": "propiedad/casa-09.jpg",
+  "category": "propiedad",
+  "tag": "casa",
+  "bytes": 77625,
+  "width": 1024,
+  "height": 768
+ },
+ {
+  "file": "propiedad/casa-10.jpg",
+  "category": "propiedad",
+  "tag": "casa",
+  "bytes": 117371,
+  "width": 820,
+  "height": 1024
+ },
+ {
+  "file": "propiedad/casa-11.jpg",
+  "category": "propiedad",
+  "tag": "casa",
+  "bytes": 166335,
+  "width": 1018,
+  "height": 1024
+ },
+ {
+  "file": "propiedad/casa-12.jpg",
+  "category": "propiedad",
+  "tag": "casa",
+  "bytes": 122064,
+  "width": 1024,
+  "height": 768
+ },
+ {
+  "file": "propiedad/casa-13.jpg",
+  "category": "propiedad",
+  "tag": "casa",
+  "bytes": 108806,
+  "width": 1024,
+  "height": 768
+ },
+ {
+  "file": "propiedad/casa-14.jpg",
+  "category": "propiedad",
+  "tag": "casa",
+  "bytes": 88037,
+  "width": 1024,
+  "height": 768
+ },
+ {
+  "file": "propiedad/casa-15.jpg",
+  "category": "propiedad",
+  "tag": "casa",
+  "bytes": 163710,
+  "width": 887,
+  "height": 1024
+ },
+ {
+  "file": "propiedad/casa-16.jpg",
+  "category": "propiedad",
+  "tag": "casa",
+  "bytes": 159662,
+  "width": 1024,
+  "height": 768
+ },
+ {
+  "file": "propiedad/casa-17.jpg",
+  "category": "propiedad",
+  "tag": "casa",
+  "bytes": 200689,
+  "width": 1024,
+  "height": 768
+ },
+ {
+  "file": "propiedad/casa-18.jpg",
+  "category": "propiedad",
+  "tag": "casa",
+  "bytes": 152870,
+  "width": 1024,
+  "height": 831
+ },
+ {
+  "file": "propiedad/casa-19.jpg",
+  "category": "propiedad",
+  "tag": "casa",
+  "bytes": 132626,
+  "width": 1024,
+  "height": 683
+ },
+ {
+  "file": "propiedad/casa-20.jpg",
+  "category": "propiedad",
+  "tag": "casa",
+  "bytes": 128581,
+  "width": 1024,
+  "height": 683
+ },
+ {
+  "file": "propiedad/casa-21.jpg",
+  "category": "propiedad",
+  "tag": "casa",
+  "bytes": 145950,
+  "width": 1024,
+  "height": 1024
+ },
+ {
+  "file": "propiedad/oficina-01.jpg",
+  "category": "propiedad",
+  "tag": "oficina",
+  "bytes": 90392,
+  "width": 576,
+  "height": 1024
+ },
+ {
+  "file": "propiedad/sala-01.jpg",
+  "category": "propiedad",
+  "tag": "sala",
+  "bytes": 59342,
+  "width": 1024,
+  "height": 768
+ },
+ {
+  "file": "propiedad/sala-02.jpg",
+  "category": "propiedad",
+  "tag": "sala",
+  "bytes": 52673,
+  "width": 1024,
+  "height": 771
+ },
+ {
+  "file": "propiedad/sala-03.jpg",
+  "category": "propiedad",
+  "tag": "sala",
+  "bytes": 86048,
+  "width": 1024,
+  "height": 768
+ },
+ {
+  "file": "propiedad/sala-04.jpg",
+  "category": "propiedad",
+  "tag": "sala",
+  "bytes": 64778,
+  "width": 1023,
+  "height": 707
+ },
+ {
+  "file": "propiedad/sala-05.jpg",
+  "category": "propiedad",
+  "tag": "sala",
+  "bytes": 44239,
+  "width": 1023,
+  "height": 645
+ },
+ {
+  "file": "propiedad/sala-06.jpg",
+  "category": "propiedad",
+  "tag": "sala",
+  "bytes": 49943,
+  "width": 1024,
+  "height": 587
+ },
+ {
+  "file": "propiedad/sala-07.jpg",
+  "category": "propiedad",
+  "tag": "sala",
+  "bytes": 62466,
+  "width": 1024,
+  "height": 587
+ },
+ {
+  "file": "propiedad/sala-08.jpg",
+  "category": "propiedad",
+  "tag": "sala",
+  "bytes": 71841,
+  "width": 1024,
+  "height": 683
+ },
+ {
+  "file": "propiedad/sala-09.jpg",
+  "category": "propiedad",
+  "tag": "sala",
+  "bytes": 56435,
+  "width": 1024,
+  "height": 683
+ },
+ {
+  "file": "propiedad/sala-10.jpg",
+  "category": "propiedad",
+  "tag": "sala",
+  "bytes": 86664,
+  "width": 1024,
+  "height": 683
+ },
+ {
+  "file": "propiedad/cocina-01.jpg",
+  "category": "propiedad",
+  "tag": "cocina",
+  "bytes": 81709,
+  "width": 1023,
+  "height": 682
+ },
+ {
+  "file": "propiedad/cocina-02.jpg",
+  "category": "propiedad",
+  "tag": "cocina",
+  "bytes": 80486,
+  "width": 1024,
+  "height": 684
+ },
+ {
+  "file": "propiedad/cocina-03.jpg",
+  "category": "propiedad",
+  "tag": "cocina",
+  "bytes": 89559,
+  "width": 1024,
+  "height": 768
+ },
+ {
+  "file": "propiedad/cocina-04.jpg",
+  "category": "propiedad",
+  "tag": "cocina",
+  "bytes": 64862,
+  "width": 1024,
+  "height": 641
+ },
+ {
+  "file": "propiedad/cocina-05.jpg",
+  "category": "propiedad",
+  "tag": "cocina",
+  "bytes": 72599,
+  "width": 1024,
+  "height": 683
+ },
+ {
+  "file": "propiedad/habitacion-01.jpg",
+  "category": "propiedad",
+  "tag": "habitacion",
+  "bytes": 45325,
+  "width": 1024,
+  "height": 587
+ },
+ {
+  "file": "propiedad/habitacion-02.jpg",
+  "category": "propiedad",
+  "tag": "habitacion",
+  "bytes": 111103,
+  "width": 1024,
+  "height": 768
+ },
+ {
+  "file": "propiedad/habitacion-03.jpg",
+  "category": "propiedad",
+  "tag": "habitacion",
+  "bytes": 43442,
+  "width": 1024,
+  "height": 587
+ },
+ {
+  "file": "propiedad/habitacion-04.jpg",
+  "category": "propiedad",
+  "tag": "habitacion",
+  "bytes": 54373,
+  "width": 1024,
+  "height": 683
+ },
+ {
+  "file": "propiedad/habitacion-05.jpg",
+  "category": "propiedad",
+  "tag": "habitacion",
+  "bytes": 81427,
+  "width": 1024,
+  "height": 768
+ },
+ {
+  "file": "propiedad/bano-01.jpg",
+  "category": "propiedad",
+  "tag": "bano",
+  "bytes": 79812,
+  "width": 1024,
+  "height": 768
+ },
+ {
+  "file": "propiedad/bano-02.jpg",
+  "category": "propiedad",
+  "tag": "bano",
+  "bytes": 69914,
+  "width": 1024,
+  "height": 587
+ },
+ {
+  "file": "propiedad/bano-03.jpg",
+  "category": "propiedad",
+  "tag": "bano",
+  "bytes": 46906,
+  "width": 1024,
+  "height": 683
+ },
+ {
+  "file": "propiedad/bano-04.jpg",
+  "category": "propiedad",
+  "tag": "bano",
+  "bytes": 49335,
+  "width": 1023,
+  "height": 681
+ },
+ {
+  "file": "propiedad/bano-05.jpg",
+  "category": "propiedad",
+  "tag": "bano",
+  "bytes": 59749,
+  "width": 1024,
+  "height": 683
+ },
+ {
+  "file": "propiedad/comedor-01.jpg",
+  "category": "propiedad",
+  "tag": "comedor",
+  "bytes": 63093,
+  "width": 1024,
+  "height": 768
+ },
+ {
+  "file": "propiedad/comedor-02.jpg",
+  "category": "propiedad",
+  "tag": "comedor",
+  "bytes": 78150,
+  "width": 1024,
+  "height": 688
+ },
+ {
+  "file": "propiedad/comedor-03.jpg",
+  "category": "propiedad",
+  "tag": "comedor",
+  "bytes": 54228,
+  "width": 1023,
+  "height": 599
+ },
+ {
+  "file": "propiedad/comedor-04.jpg",
+  "category": "propiedad",
+  "tag": "comedor",
+  "bytes": 64912,
+  "width": 1024,
+  "height": 683
+ },
+ {
+  "file": "propiedad/zona-comun-01.jpg",
+  "category": "propiedad",
+  "tag": "zona-comun",
+  "bytes": 110739,
+  "width": 1024,
+  "height": 768
+ },
+ {
+  "file": "solicitud/plumbing-01.jpg",
+  "category": "solicitud",
+  "tag": "PLUMBING",
+  "bytes": 45332,
+  "width": 1024,
+  "height": 768
+ },
+ {
+  "file": "solicitud/plumbing-02.jpg",
+  "category": "solicitud",
+  "tag": "PLUMBING",
+  "bytes": 36736,
+  "width": 1024,
+  "height": 678
+ },
+ {
+  "file": "solicitud/plumbing-03.jpg",
+  "category": "solicitud",
+  "tag": "PLUMBING",
+  "bytes": 28549,
+  "width": 1024,
+  "height": 678
+ },
+ {
+  "file": "solicitud/plumbing-04.jpg",
+  "category": "solicitud",
+  "tag": "PLUMBING",
+  "bytes": 35165,
+  "width": 1024,
+  "height": 698
+ },
+ {
+  "file": "solicitud/plumbing-05.jpg",
+  "category": "solicitud",
+  "tag": "PLUMBING",
+  "bytes": 55623,
+  "width": 1024,
+  "height": 682
+ },
+ {
+  "file": "solicitud/plumbing-06.jpg",
+  "category": "solicitud",
+  "tag": "PLUMBING",
+  "bytes": 145347,
+  "width": 1024,
+  "height": 768
+ },
+ {
+  "file": "solicitud/plumbing-07.jpg",
+  "category": "solicitud",
+  "tag": "PLUMBING",
+  "bytes": 140090,
+  "width": 1024,
+  "height": 768
+ },
+ {
+  "file": "solicitud/plumbing-08.jpg",
+  "category": "solicitud",
+  "tag": "PLUMBING",
+  "bytes": 284839,
+  "width": 1024,
+  "height": 768
+ },
+ {
+  "file": "solicitud/plumbing-09.jpg",
+  "category": "solicitud",
+  "tag": "PLUMBING",
+  "bytes": 115770,
+  "width": 1024,
+  "height": 674
+ },
+ {
+  "file": "solicitud/plumbing-10.jpg",
+  "category": "solicitud",
+  "tag": "PLUMBING",
+  "bytes": 89632,
+  "width": 1023,
+  "height": 987
+ },
+ {
+  "file": "solicitud/painting-01.jpg",
+  "category": "solicitud",
+  "tag": "PAINTING",
+  "bytes": 156374,
+  "width": 1024,
+  "height": 768
+ },
+ {
+  "file": "solicitud/painting-02.jpg",
+  "category": "solicitud",
+  "tag": "PAINTING",
+  "bytes": 120967,
+  "width": 1024,
+  "height": 768
+ },
+ {
+  "file": "solicitud/painting-03.jpg",
+  "category": "solicitud",
+  "tag": "PAINTING",
+  "bytes": 120931,
+  "width": 1024,
+  "height": 681
+ },
+ {
+  "file": "solicitud/painting-04.jpg",
+  "category": "solicitud",
+  "tag": "PAINTING",
+  "bytes": 183767,
+  "width": 1024,
+  "height": 768
+ },
+ {
+  "file": "solicitud/painting-05.jpg",
+  "category": "solicitud",
+  "tag": "PAINTING",
+  "bytes": 224846,
+  "width": 1024,
+  "height": 680
+ },
+ {
+  "file": "solicitud/painting-06.jpg",
+  "category": "solicitud",
+  "tag": "PAINTING",
+  "bytes": 146497,
+  "width": 1023,
+  "height": 685
+ },
+ {
+  "file": "solicitud/masonry-01.jpg",
+  "category": "solicitud",
+  "tag": "MASONRY",
+  "bytes": 167071,
+  "width": 1024,
+  "height": 685
+ },
+ {
+  "file": "solicitud/masonry-02.jpg",
+  "category": "solicitud",
+  "tag": "MASONRY",
+  "bytes": 85730,
+  "width": 1024,
+  "height": 681
+ },
+ {
+  "file": "solicitud/masonry-03.jpg",
+  "category": "solicitud",
+  "tag": "MASONRY",
+  "bytes": 57262,
+  "width": 1024,
+  "height": 819
+ },
+ {
+  "file": "solicitud/masonry-04.jpg",
+  "category": "solicitud",
+  "tag": "MASONRY",
+  "bytes": 134580,
+  "width": 1024,
+  "height": 703
+ },
+ {
+  "file": "solicitud/electrical-01.jpg",
+  "category": "solicitud",
+  "tag": "ELECTRICAL",
+  "bytes": 27954,
+  "width": 1024,
+  "height": 682
+ },
+ {
+  "file": "solicitud/electrical-02.jpg",
+  "category": "solicitud",
+  "tag": "ELECTRICAL",
+  "bytes": 67161,
+  "width": 1024,
+  "height": 768
+ },
+ {
+  "file": "obra/plumbing-01.jpg",
+  "category": "obra",
+  "tag": "PLUMBING",
+  "bytes": 61775,
+  "width": 1024,
+  "height": 683
+ },
+ {
+  "file": "obra/plumbing-02.jpg",
+  "category": "obra",
+  "tag": "PLUMBING",
+  "bytes": 49001,
+  "width": 1024,
+  "height": 683
+ },
+ {
+  "file": "obra/plumbing-03.jpg",
+  "category": "obra",
+  "tag": "PLUMBING",
+  "bytes": 49140,
+  "width": 1024,
+  "height": 768
+ },
+ {
+  "file": "obra/plumbing-04.jpg",
+  "category": "obra",
+  "tag": "PLUMBING",
+  "bytes": 54325,
+  "width": 1024,
+  "height": 768
+ },
+ {
+  "file": "obra/plumbing-05.jpg",
+  "category": "obra",
+  "tag": "PLUMBING",
+  "bytes": 102922,
+  "width": 819,
+  "height": 1024
+ },
+ {
+  "file": "obra/electrical-01.jpg",
+  "category": "obra",
+  "tag": "ELECTRICAL",
+  "bytes": 66239,
+  "width": 1024,
+  "height": 683
+ },
+ {
+  "file": "obra/electrical-02.jpg",
+  "category": "obra",
+  "tag": "ELECTRICAL",
+  "bytes": 81104,
+  "width": 1024,
+  "height": 683
+ },
+ {
+  "file": "obra/electrical-03.jpg",
+  "category": "obra",
+  "tag": "ELECTRICAL",
+  "bytes": 87823,
+  "width": 1024,
+  "height": 683
+ },
+ {
+  "file": "obra/electrical-04.jpg",
+  "category": "obra",
+  "tag": "ELECTRICAL",
+  "bytes": 115401,
+  "width": 1024,
+  "height": 683
+ },
+ {
+  "file": "obra/painting-01.jpg",
+  "category": "obra",
+  "tag": "PAINTING",
+  "bytes": 42667,
+  "width": 1024,
+  "height": 768
+ },
+ {
+  "file": "obra/painting-02.jpg",
+  "category": "obra",
+  "tag": "PAINTING",
+  "bytes": 35035,
+  "width": 1024,
+  "height": 768
+ },
+ {
+  "file": "obra/carpentry-01.jpg",
+  "category": "obra",
+  "tag": "CARPENTRY",
+  "bytes": 93702,
+  "width": 1024,
+  "height": 680
+ },
+ {
+  "file": "obra/carpentry-02.jpg",
+  "category": "obra",
+  "tag": "CARPENTRY",
+  "bytes": 92360,
+  "width": 1024,
+  "height": 680
+ },
+ {
+  "file": "obra/carpentry-03.jpg",
+  "category": "obra",
+  "tag": "CARPENTRY",
+  "bytes": 56421,
+  "width": 1024,
+  "height": 768
+ },
+ {
+  "file": "obra/carpentry-04.jpg",
+  "category": "obra",
+  "tag": "CARPENTRY",
+  "bytes": 92396,
+  "width": 1024,
+  "height": 848
+ },
+ {
+  "file": "obra/carpentry-05.jpg",
+  "category": "obra",
+  "tag": "CARPENTRY",
+  "bytes": 99571,
+  "width": 1024,
+  "height": 680
+ },
+ {
+  "file": "obra/carpentry-06.jpg",
+  "category": "obra",
+  "tag": "CARPENTRY",
+  "bytes": 80576,
+  "width": 1024,
+  "height": 768
+ },
+ {
+  "file": "obra/carpentry-07.jpg",
+  "category": "obra",
+  "tag": "CARPENTRY",
+  "bytes": 57279,
+  "width": 1024,
+  "height": 681
+ },
+ {
+  "file": "obra/carpentry-08.jpg",
+  "category": "obra",
+  "tag": "CARPENTRY",
+  "bytes": 79038,
+  "width": 1024,
+  "height": 723
+ },
+ {
+  "file": "obra/carpentry-09.jpg",
+  "category": "obra",
+  "tag": "CARPENTRY",
+  "bytes": 83120,
+  "width": 1024,
+  "height": 819
+ },
+ {
+  "file": "obra/carpentry-10.jpg",
+  "category": "obra",
+  "tag": "CARPENTRY",
+  "bytes": 66177,
+  "width": 1024,
+  "height": 640
+ },
+ {
+  "file": "obra/carpentry-11.jpg",
+  "category": "obra",
+  "tag": "CARPENTRY",
+  "bytes": 92311,
+  "width": 1024,
+  "height": 917
+ },
+ {
+  "file": "obra/carpentry-12.jpg",
+  "category": "obra",
+  "tag": "CARPENTRY",
+  "bytes": 73120,
+  "width": 1024,
+  "height": 821
+ },
+ {
+  "file": "obra/masonry-01.jpg",
+  "category": "obra",
+  "tag": "MASONRY",
+  "bytes": 104297,
+  "width": 1024,
+  "height": 680
+ },
+ {
+  "file": "obra/masonry-02.jpg",
+  "category": "obra",
+  "tag": "MASONRY",
+  "bytes": 53259,
+  "width": 1024,
+  "height": 768
+ },
+ {
+  "file": "obra/general-01.jpg",
+  "category": "obra",
+  "tag": "GENERAL",
+  "bytes": 56604,
+  "width": 1024,
+  "height": 683
+ },
+ {
+  "file": "obra/general-02.jpg",
+  "category": "obra",
+  "tag": "GENERAL",
+  "bytes": 175930,
+  "width": 1024,
+  "height": 768
+ },
+ {
+  "file": "obra/general-03.jpg",
+  "category": "obra",
+  "tag": "GENERAL",
+  "bytes": 125751,
+  "width": 1024,
+  "height": 681
+ }
+]

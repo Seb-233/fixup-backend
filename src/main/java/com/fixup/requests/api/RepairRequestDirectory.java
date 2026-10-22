@@ -2,6 +2,8 @@ package com.fixup.requests.api;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -15,6 +17,9 @@ public interface RepairRequestDirectory {
 
     /** Batch view for project composition; missing identifiers are omitted from the result. */
     List<ProjectRepairRequestSnapshot> findAll(Collection<UUID> requestIds);
+
+    /** FR-UC-13: the requests behind a set of payments, by id; the ones the caller cannot see are left out. */
+    Map<UUID, RepairRequestSnapshot> snapshots(Collection<UUID> requestIds);
 
     /**
      * Locks the repair request row with PESSIMISTIC_WRITE for a decision.
@@ -30,4 +35,15 @@ public interface RepairRequestDirectory {
      * @throws RepairRequestConflictException when the request no longer admits an assignment.
      */
     void assign(UUID requestId, UUID fixerUserId);
+
+    /**
+     * FR-UC-19: closes the request when its job is completed, inside the caller's transaction. The
+     * SLA alert states count as assigned; an already completed request is left as it is.
+     *
+     * @throws RepairRequestConflictException when the request has no active assignment.
+     */
+    void markCompleted(UUID requestId);
+
+    /** FR-UC-11: technicians a manager already invited to quote the request. */
+    Set<UUID> invitedFixers(UUID requestId);
 }

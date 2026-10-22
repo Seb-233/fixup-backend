@@ -11,6 +11,15 @@ final class PaymentAccess {
     private PaymentAccess() {
     }
 
+    /** FR-UC-05: paga el propietario del inmueble o el administrador inmobiliario que lo gestiona. */
+    static void requireActivePayer(CurrentActor actor) {
+        if (actor.status() != UserStatus.ACTIVE
+                || (!actor.hasRole(Role.OWNER) && !actor.hasRole(Role.REAL_ESTATE_MANAGER)
+                    && !actor.hasRole(Role.PLATFORM_ADMIN))) {
+            throw new PaymentAccessDeniedException();
+        }
+    }
+
     static void requireActiveFixer(CurrentActor actor) {
         if (actor.status() != UserStatus.ACTIVE || !actor.hasRole(Role.FIXER)) {
             throw new PaymentAccessDeniedException();
@@ -20,7 +29,7 @@ final class PaymentAccess {
     static void requireCanRead(CurrentActor actor, RepairPayment payment) {
         requireActive(actor);
         if (!actor.hasRole(Role.PLATFORM_ADMIN)
-                && !payment.ownerUserId().equals(actor.internalUserId())
+                && !payment.isPayableBy(actor.internalUserId())
                 && !payment.fixerUserId().equals(actor.internalUserId())) {
             throw new PaymentAccessDeniedException();
         }
@@ -28,7 +37,10 @@ final class PaymentAccess {
 
     static void requireCanSimulate(CurrentActor actor, RepairPayment payment) {
         requireActive(actor);
-        if (!actor.hasRole(Role.OWNER) || !payment.ownerUserId().equals(actor.internalUserId())) {
+        var owner = actor.hasRole(Role.OWNER) && payment.ownerUserId().equals(actor.internalUserId());
+        var manager = actor.hasRole(Role.REAL_ESTATE_MANAGER) && payment.managerUserId() != null
+                && payment.managerUserId().equals(actor.internalUserId());
+        if (!owner && !manager) {
             throw new PaymentAccessDeniedException();
         }
     }

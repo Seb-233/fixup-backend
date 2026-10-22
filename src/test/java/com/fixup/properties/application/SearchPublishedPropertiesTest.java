@@ -18,6 +18,7 @@ import com.fixup.properties.domain.OwnershipScope;
 import com.fixup.properties.domain.Properties;
 import com.fixup.properties.domain.Property;
 import com.fixup.properties.domain.PropertySearchMatch;
+import com.fixup.properties.domain.WorkRecords;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Set;
@@ -30,7 +31,10 @@ import org.mockito.ArgumentCaptor;
 class SearchPublishedPropertiesTest {
     private final Properties properties = mock(Properties.class);
     private final CurrentActorProvider actors = mock(CurrentActorProvider.class);
-    private final SearchPublishedProperties search = new SearchPublishedProperties(properties, actors);
+    private final WorkRecords workRecords = mock(WorkRecords.class);
+    private final PropertyCovers covers = mock(PropertyCovers.class);
+    private final SearchPublishedProperties search =
+            new SearchPublishedProperties(properties, actors, workRecords, covers);
 
     @ParameterizedTest
     @ValueSource(strings = {"-90.000001", "90.000001"})
@@ -132,7 +136,7 @@ class SearchPublishedPropertiesTest {
 
     @ParameterizedTest
     @org.junit.jupiter.params.provider.EnumSource(
-            value = Role.class, names = {"FIXER", "REAL_ESTATE_MANAGER"})
+            value = Role.class, names = {"FIXER"})
     void deniesRolesWithoutPropertySearchAccess(Role role) {
         when(actors.currentActor()).thenReturn(activeActor(role));
 

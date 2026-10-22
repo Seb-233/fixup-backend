@@ -1,6 +1,8 @@
 package com.fixup.payments.application;
 
 import com.fixup.identityaccess.api.CurrentActor;
+import com.fixup.notifications.api.NotificationRequested;
+import com.fixup.notifications.api.NotificationType;
 import com.fixup.payments.api.PaymentApproved;
 import com.fixup.payments.api.ApprovedPaymentPurpose;
 import com.fixup.payments.api.PaymentConflictException;
@@ -79,8 +81,34 @@ public class SimulateRepairPayment {
             events.publishEvent(new PaymentApproved(updated.id(), updated.quotationId(),
                     updated.requestId(), updated.ownerUserId(), updated.fixerUserId(), updated.amount(),
                     ApprovedPaymentPurpose.valueOf(updated.purpose().name()), now));
+            notifyApproval(actor, updated);
+        } else if (updated.status() == PaymentStatus.DECLINED || updated.status() == PaymentStatus.ERROR) {
+            events.publishEvent(NotificationRequested.of(actor.internalUserId(), NotificationType.PAYMENT_DECLINED,
+                    "Pago rechazado", "La transferencia simulada no se aprobó. Puedes intentarlo de nuevo.",
+                    "/payments/" + updated.id(), updated.id(), "PAYMENT"));
         }
         return PaymentDetail.from(updated);
+    }
+
+    private void notifyApproval(CurrentActor actor, RepairPayment payment) {
+        if (payment.purpose() == PaymentPurpose.SERVICE) {
+            events.publishEvent(NotificationRequested.of(payment.fixerUserId(), NotificationType.PAYMENT_APPROVED,
+                    "El cliente pagó el trabajo",
+                    "Recibimos la transferencia. El trabajo ya aparece en Mis trabajos y el dinero queda "
+                            + "retenido hasta que lo cierres.",
+                    "/jobs/me", payment.id(), "PAYMENT"));
+        } else {
+            events.publishEvent(NotificationRequested.of(payment.fixerUserId(), NotificationType.PAYMENT_APPROVED,
+                    "Te pagaron un saldo pendiente",
+                    "El propietario pagó lo que faltaba de un trabajo en efectivo. Ya está disponible en tus ingresos.",
+                    "/payments/earnings", payment.id(), "PAYMENT"));
+        }
+        if (!payment.ownerUserId().equals(actor.internalUserId())) {
+            events.publishEvent(NotificationRequested.of(payment.ownerUserId(), NotificationType.PAYMENT_APPROVED,
+                    "Se pagó una reparación de tu inmueble",
+                    "Tu administrador inmobiliario pagó la reparación por transferencia.",
+                    "/requests/" + payment.requestId(), payment.id(), "PAYMENT"));
+        }
     }
 
     private void requireSupported(RepairPayment payment) {

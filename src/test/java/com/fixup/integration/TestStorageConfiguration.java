@@ -42,6 +42,11 @@ public class TestStorageConfiguration {
             this.simulateFailureOnDelete = simulate;
         }
 
+        @Override
+        public void putObject(String objectKey, String contentType, byte[] bytes) {
+            put(objectKey, bytes, contentType);
+        }
+
         public boolean exists(String objectKey) {
             return storage.containsKey(objectKey);
         }

@@ -503,8 +503,9 @@ class PostgresRowLevelSecurityIT {
         UUID tenant = provisionWithRole("auth0|rls-prop-tenant", "TENANT");
         assertThat(visiblePropertyIds(tenant, "TENANT")).containsExactlyInAnyOrder(propA, propB);
 
+        // FR-UC-11: a real estate manager browses the published catalog like a tenant, never drafts.
         UUID manager = provisionWithRole("auth0|rls-prop-manager", "REAL_ESTATE_MANAGER");
-        assertThat(visiblePropertyIds(manager, "REAL_ESTATE_MANAGER")).isEmpty();
+        assertThat(visiblePropertyIds(manager, "REAL_ESTATE_MANAGER")).containsExactlyInAnyOrder(propA, propB);
 
         UUID admin = provisionAdmin("auth0|rls-prop-admin");
         assertThat(visiblePropertyIds(admin, "PLATFORM_ADMIN"))

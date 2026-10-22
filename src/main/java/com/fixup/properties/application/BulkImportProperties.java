@@ -19,6 +19,8 @@ import java.io.InputStreamReader;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.List;
 import java.util.UUID;
 
@@ -27,6 +29,9 @@ import java.util.UUID;
 public class BulkImportProperties {
 
     private static final int CHUNK_SIZE = 100;
+    private static final List<String> OPTIONAL_COLUMNS = List.of("listingType", "propertyType", "price",
+        "adminFee", "bedrooms", "bathrooms", "parkingSpots", "stratum", "neighborhood", "description",
+        "latitude", "longitude");
 
     private final BulkPropertyValidator validator;
     private final Properties properties;
@@ -65,12 +70,17 @@ public class BulkImportProperties {
             int end = Math.min(i + CHUNK_SIZE, validRows.size());
             List<BulkPropertyRow> chunk = validRows.subList(i, end);
             List<Property> toCreate = chunk.stream()
-                .map(row -> Property.create(
+                .map(row -> Property.register(
                     actor.internalUserId(),
                     row.name(),
                     row.address(),
                     row.city(),
-                    new BigDecimal(row.areaM2Str().trim())
+                    new BigDecimal(row.areaM2Str().trim()),
+                    row.latitude(),
+                    row.longitude(),
+                    row.listing(),
+                    true,
+                    null
                 ))
                 .toList();
             List<Property> saved = properties.saveAll(toCreate);
@@ -101,10 +111,13 @@ public class BulkImportProperties {
 
     private List<BulkPropertyRow> parseRows(MultipartFile file) throws IOException {
         List<BulkPropertyRow> rows = new ArrayList<>();
+        // The first line names the columns: the original four stay mandatory and in any order, and
+        // the listing columns (FR-UC-02) are optional, so a file made with the old template still works.
         CSVFormat format = CSVFormat.DEFAULT
             .builder()
-            .setHeader("name", "address", "city", "areaM2")
+            .setHeader()
             .setSkipHeaderRecord(true)
+            .setAllowMissingColumnNames(true)
             .setCommentMarker('#')
             .setIgnoreEmptyLines(true)
             .setTrim(true)
@@ -119,7 +132,14 @@ public class BulkImportProperties {
                 String address = safeGet(record, "address");
                 String city = safeGet(record, "city");
                 String areaM2Str = safeGet(record, "areaM2");
-                rows.add(new BulkPropertyRow(rowNumber, name, address, city, areaM2Str));
+                Map<String, String> extras = new HashMap<>();
+                for (String column : OPTIONAL_COLUMNS) {
+                    String value = safeGet(record, column);
+                    if (!value.isBlank()) {
+                        extras.put(column, value);
+                    }
+                }
+                rows.add(new BulkPropertyRow(rowNumber, name, address, city, areaM2Str, extras));
                 recordIndex++;
             }
         }
@@ -127,10 +147,10 @@ public class BulkImportProperties {
     }
 
     private String safeGet(CSVRecord record, String header) {
-        try {
-            return record.get(header);
-        } catch (IllegalArgumentException e) {
+        if (!record.isMapped(header) || !record.isSet(header)) {
             return "";
         }
+        String value = record.get(header);
+        return value == null ? "" : value;
     }
 }

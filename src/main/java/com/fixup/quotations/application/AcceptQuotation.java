@@ -1,6 +1,8 @@
 package com.fixup.quotations.application;
 
 import com.fixup.identityaccess.api.CurrentActor;
+import com.fixup.notifications.api.NotificationRequested;
+import com.fixup.notifications.api.NotificationType;
 import com.fixup.payments.api.PaymentInitiation;
 import com.fixup.payments.api.PaymentInitiationCommand;
 import com.fixup.quotations.api.QuotationAccepted;
@@ -10,15 +12,18 @@ import com.fixup.quotations.domain.Quotation;
 import com.fixup.quotations.domain.Quotations;
 import com.fixup.requests.api.PaymentMethod;
 import com.fixup.requests.api.RepairRequestDirectory;
-import java.time.Instant;
-import java.util.UUID;
+import com.fixup.requests.api.RepairRequestSnapshot;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import java.time.Instant;
+import java.util.UUID;
 
 /**
- * FR-UC-18: el propietario elige una cotización. La aceptada, el rechazo de las demás y el cierre
- * de la solicitud ocurren en la misma transacción: nunca queda una solicitud con dos ganadores.
+ * FR-UC-18: el propietario o su administrador elige una cotización. La aceptada, el rechazo de las
+ * demás y la asignación de la solicitud ocurren en la misma transacción: nunca queda una solicitud
+ * con dos ganadores. Con transferencia nace el pago pendiente (FR-UC-05) y el trabajo se abre al
+ * aprobarse; con efectivo el trabajo se abre en esta misma transacción.
  */
 @Service
 public class AcceptQuotation {
@@ -53,8 +58,8 @@ public class AcceptQuotation {
                     "The repair request was already assigned");
         }
 
-        // 4. Verify ownership.
-        request.requireOwnedBy(actor.internalUserId());
+        // 4. Verify that the caller decides on the property: its owner or its manager (FR-UC-11).
+        request.requireDecidedBy(actor.internalUserId());
 
         // 5. Lock all quotations of that request in a consistent order.
         var allOffers = quotations.findByRequestForUpdate(requestId);
@@ -76,10 +81,11 @@ public class AcceptQuotation {
         quotations.update(accepted);
 
         // 8. Reject the remaining submitted offers.
-        allOffers.stream()
+        var rejected = allOffers.stream()
                 .filter(offer -> !offer.id().equals(quotationId))
                 .filter(Quotation::isSubmitted)
-                .forEach(offer -> quotations.update(offer.reject(now)));
+                .toList();
+        rejected.forEach(offer -> quotations.update(offer.reject(now)));
 
         // 9. Assign the request.
         requests.assign(requestId, accepted.fixerUserId());
@@ -88,7 +94,7 @@ public class AcceptQuotation {
         if (request.paymentMethod() == PaymentMethod.TRANSFER) {
             paymentId = paymentInitiation.initiate(new PaymentInitiationCommand(accepted.id(),
                     accepted.requestId(), request.ownerUserId(), accepted.fixerUserId(),
-                    accepted.amount(), request.paymentMethod().name(), now)).paymentId();
+                    accepted.amount(), request.paymentMethod().name(), now, request.managerUserId())).paymentId();
         }
 
         // 10. Publish event.
@@ -96,6 +102,30 @@ public class AcceptQuotation {
                 accepted.fixerUserId(), request.ownerUserId(), accepted.amount(), now,
                 request.paymentMethod()));
 
+        notifyDecision(request, accepted, rejected);
         return new AcceptedQuotation(accepted.id(), accepted.requestId(), request.paymentMethod(), paymentId);
+    }
+
+    private void notifyDecision(RepairRequestSnapshot request, Quotation accepted, java.util.List<Quotation> rejected) {
+        var title = request.title() == null ? "la solicitud" : "\"" + request.title() + "\"";
+        var cash = request.paymentMethod() == PaymentMethod.CASH;
+        events.publishEvent(NotificationRequested.of(accepted.fixerUserId(), NotificationType.QUOTATION_ACCEPTED,
+                "Aceptaron tu cotización",
+                cash ? "Tu oferta para " + title + " fue aceptada con pago en efectivo. El trabajo ya aparece "
+                        + "en Mis trabajos; al cerrarlo registras lo que recibiste."
+                        : "Tu oferta para " + title + " fue aceptada. El trabajo se abre en cuanto el cliente "
+                        + "complete el pago por transferencia.",
+                cash ? "/jobs/me" : "/quotations/me", accepted.id(), "QUOTATION"));
+        for (Quotation offer : rejected) {
+            events.publishEvent(NotificationRequested.of(offer.fixerUserId(), NotificationType.QUOTATION_REJECTED,
+                    "Eligieron otra oferta", "El cliente eligió otra cotización para " + title + ".",
+                    "/quotations/me", offer.id(), "QUOTATION"));
+        }
+        if (request.requestedByUserId() != null && !request.isDecidedBy(request.requestedByUserId())) {
+            events.publishEvent(NotificationRequested.of(request.requestedByUserId(), NotificationType.JOB_ASSIGNED,
+                    "Ya hay técnico para tu reporte",
+                    "Se asignó un técnico a " + title + ". Puedes escribirle desde la solicitud.",
+                    "/requests/" + request.requestId(), request.requestId(), "REQUEST"));
+        }
     }
 }

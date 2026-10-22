@@ -4,15 +4,18 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fixup.fixers.api.Specialty;
 import com.fixup.identityaccess.api.CurrentActorProvider;
 import com.fixup.jobs.api.JobStatus;
+import com.fixup.remodelings.api.RemodelingGoal;
 import com.fixup.remodelings.api.RemodelingProgressStatus;
 import com.fixup.remodelings.application.CreateRemodeling;
 import com.fixup.remodelings.application.GetRemodeling;
 import com.fixup.remodelings.application.ListOwnRemodelings;
 import com.fixup.remodelings.application.NewRemodeling;
 import com.fixup.remodelings.application.NewRemodelingRequirement;
+import com.fixup.remodelings.application.PublishRemodelingListing;
 import com.fixup.remodelings.application.RemodelingProjectDetail;
 import com.fixup.remodelings.application.RemodelingProjectSummary;
 import com.fixup.remodelings.application.RemodelingRequirementSummary;
+import com.fixup.remodelings.domain.RemodelingPlan;
 import com.fixup.requests.api.RepairRequestStatus;
 import com.fixup.requests.api.PaymentMethod;
 import com.fixup.requests.api.UrgencyLevel;
@@ -28,10 +31,6 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
-import java.time.Instant;
-import java.util.HashSet;
-import java.util.List;
-import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -41,6 +40,10 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import java.time.Instant;
+import java.util.HashSet;
+import java.util.List;
+import java.util.UUID;
 
 @RestController
 @RequestMapping(value = "/remodelings", produces = MediaType.APPLICATION_JSON_VALUE)
@@ -62,13 +65,23 @@ class RemodelingController {
     private final CreateRemodeling create;
     private final ListOwnRemodelings listOwn;
     private final GetRemodeling get;
+    private final PublishRemodelingListing publishListing;
 
     RemodelingController(CurrentActorProvider actors, CreateRemodeling create,
-            ListOwnRemodelings listOwn, GetRemodeling get) {
+            ListOwnRemodelings listOwn, GetRemodeling get, PublishRemodelingListing publishListing) {
         this.actors = actors;
         this.create = create;
         this.listOwn = listOwn;
         this.get = get;
+        this.publishListing = publishListing;
+    }
+
+    @PostMapping("/{projectId}/publish-listing")
+    @Operation(summary = "Publish the property for rent at the target rent (FR-UC-26)",
+            description = "Only for a pre-rental remodeling whose requirements are all completed.")
+    @ApiResponse(responseCode = "200", description = "Listing published")
+    ProjectResponse publishListing(@PathVariable UUID projectId) {
+        return ProjectResponse.of(publishListing.execute(actors.currentActor(), projectId));
     }
 
     @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
@@ -85,7 +98,7 @@ class RemodelingController {
                 .toList();
         return ProjectResponse.of(create.execute(actors.currentActor(),
                 new NewRemodeling(body.propertyId(), body.title(), body.description(),
-                        requirements)));
+                        requirements, new RemodelingPlan(body.goal(), body.targetRent(), body.targetReadyDate(), null))));
     }
 
     @GetMapping("/me")
@@ -111,7 +124,10 @@ class RemodelingController {
     record CreateProjectRequest(@NotNull UUID propertyId,
             @NotBlank @Size(max = 150) String title,
             @Size(max = 2000) String description,
-            @NotEmpty List<@Valid RequirementRequest> requirements) {
+            @NotEmpty List<@Valid RequirementRequest> requirements,
+            RemodelingGoal goal,
+            @jakarta.validation.constraints.Positive Long targetRent,
+            java.time.LocalDate targetReadyDate) {
     }
 
     @Schema(additionalProperties = Schema.AdditionalPropertiesValue.FALSE)
@@ -131,11 +147,14 @@ class RemodelingController {
         "requirementCount", "assignedCount", "completedCount", "createdAt"})
     record ProjectSummaryResponse(UUID id, UUID propertyId, String title,
             RemodelingProgressStatus progressStatus, int requirementCount, int assignedCount,
-            int completedCount, Instant createdAt) {
+            int completedCount, Instant createdAt, RemodelingGoal goal,
+            @Schema(types = {"integer", "null"}) Long targetRent,
+            @Schema(types = {"string", "null"}) Instant listingPublishedAt) {
         static ProjectSummaryResponse of(RemodelingProjectSummary summary) {
             return new ProjectSummaryResponse(summary.id(), summary.propertyId(), summary.title(),
                     summary.progressStatus(), summary.requirementCount(), summary.assignedCount(),
-                    summary.completedCount(), summary.createdAt());
+                    summary.completedCount(), summary.createdAt(), summary.goal(), summary.targetRent(),
+                    summary.listingPublishedAt());
         }
     }
 
@@ -146,13 +165,16 @@ class RemodelingController {
             @Schema(types = {"string", "null"}) String description,
             RemodelingProgressStatus status, int requirementCount, int assignedCount,
             int completedCount, List<RequirementResponse> requirements, Instant createdAt,
-            Instant updatedAt) {
+            Instant updatedAt, RemodelingGoal goal, @Schema(types = {"integer", "null"}) Long targetRent,
+            @Schema(types = {"string", "null"}) java.time.LocalDate targetReadyDate,
+            @Schema(types = {"string", "null"}) Instant listingPublishedAt, boolean readyToPublish) {
         static ProjectResponse of(RemodelingProjectDetail detail) {
             return new ProjectResponse(detail.id(), detail.propertyId(), detail.ownerUserId(),
                     detail.title(), detail.description(), detail.progressStatus(),
                     detail.requirementCount(), detail.assignedCount(), detail.completedCount(),
                     detail.requirements().stream().map(RequirementResponse::of).toList(),
-                    detail.createdAt(), detail.updatedAt());
+                    detail.createdAt(), detail.updatedAt(), detail.goal(), detail.targetRent(),
+                    detail.targetReadyDate(), detail.listingPublishedAt(), detail.readyToPublish());
         }
     }
 

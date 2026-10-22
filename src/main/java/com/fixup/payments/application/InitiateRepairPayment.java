@@ -43,7 +43,7 @@ class InitiateRepairPayment implements PaymentInitiation {
 
         var payment = RepairPayment.pending(UUID.randomUUID(), command.quotationId(), command.requestId(),
                 command.ownerUserId(), command.fixerUserId(), command.amount(), method,
-                PaymentPurpose.SERVICE, command.occurredAt());
+                PaymentPurpose.SERVICE, command.occurredAt()).managedBy(command.managerUserId());
         payments.create(payment);
         return result(payment);
     }

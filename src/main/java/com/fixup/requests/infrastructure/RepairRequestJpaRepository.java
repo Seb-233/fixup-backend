@@ -48,4 +48,15 @@ interface RepairRequestJpaRepository extends JpaRepository<RepairRequestEntity, 
     @Query("update RepairRequestEntity request set request.status = :status, request.updatedAt = :now where request.id = :id")
     int updateStatusById(@Param("id") UUID id, @Param("status") RepairRequestStatus status,
             @Param("now") java.time.Instant now);
+
+    @Query("""
+            select request from RepairRequestEntity request
+            where request.ownerUserId = :userId or request.requestedByUserId = :userId
+               or request.managerUserId = :userId
+            order by request.createdAt desc
+            """)
+    List<RepairRequestEntity> findByParticipant(@Param("userId") UUID userId);
+
+    List<RepairRequestEntity> findByManagerUserIdOrderByCreatedAtDesc(UUID managerUserId);
+
 }
