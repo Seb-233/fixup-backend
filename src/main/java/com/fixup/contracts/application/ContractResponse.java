@@ -21,8 +21,20 @@ public record ContractResponse(
     int renewalNoticeDays,
     String notes,
     Instant createdAt,
-    Instant updatedAt
+    Instant updatedAt,
+    String propertyName,
+    String propertyAddress,
+    String propertyCity,
+    String ownerName,
+    String tenantName
 ) {
+    public ContractResponse withContext(String propertyName, String propertyAddress, String propertyCity,
+            String ownerName, String tenantName) {
+        return new ContractResponse(id, propertyId, ownerUserId, tenantUserId, startDate, endDate, monthlyRentAmount,
+                depositAmount, paymentDayOfMonth, status, renewalNoticeDays, notes, createdAt, updatedAt,
+                propertyName, propertyAddress, propertyCity, ownerName, tenantName);
+    }
+
     public static ContractResponse from(RentalContract contract) {
         return new ContractResponse(
             contract.id(),
@@ -38,7 +50,8 @@ public record ContractResponse(
             contract.renewalNoticeDays(),
             contract.notes(),
             contract.createdAt(),
-            contract.updatedAt()
+            contract.updatedAt(),
+            null, null, null, null, null
         );
     }
 }

@@ -56,4 +56,9 @@ class JpaRentalContracts implements RentalContracts {
             .map(RentalContractEntity::toDomain)
             .toList();
     }
+
+    @Override
+    public List<UUID> findActivePropertyIdsForTenant(UUID tenantUserId, LocalDate on) {
+        return repository.findActivePropertyIdsForTenant(tenantUserId, on);
+    }
 }

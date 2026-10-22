@@ -56,11 +56,11 @@ class PostgresRentalContractIT extends RentalContractHttpContract {
             assertThat(applied).contains("16")
                     .doesNotContain("16.1", "17", "18", "19", "20", "21");
             var flyway = Flyway.configure().dataSource(dataSource).schemas(schema).locations(locations).load();
-            assertThat(flyway.migrate().migrationsExecuted).isEqualTo(12);
+            assertThat(flyway.migrate().migrationsExecuted).isEqualTo(24);
             flyway.validate();
             assertThat(jdbc.queryForList("SELECT version FROM " + schema + ".flyway_schema_history WHERE success ORDER BY installed_rank", String.class))
-                    .containsSequence("16", "16.1", "17", "18", "19", "20", "21", "24", "25", "26",
-                            "27", "28", "29");
+                    .containsSequence("16", "16.1", "17", "18", "19", "20", "21", "24", "25", "26", "27", "28", "29",
+                            "30", "31", "32", "33", "34", "35", "36", "37", "38", "39", "40", "41");
         } finally {
             jdbc.execute("DROP SCHEMA IF EXISTS " + schema + " CASCADE");
         }

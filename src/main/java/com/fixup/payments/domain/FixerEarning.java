@@ -6,15 +6,25 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * Lo que el ciclo financiero le deja al técnico. TRANSFER lo crea retenido solo después de
- * aprobar el pago; aceptar cualquiera de los métodos no crea un earning.
+ * FR-UC-20: lo que un trabajo le deja al técnico. Con TRANSFER nace retenido cuando se aprueba el
+ * pago (FR-UC-05) y se libera cuando el trabajo se cierra; el saldo de un trabajo en efectivo que el
+ * propietario paga después nace ya liberado. Aceptar una cotización no crea ingreso. Sale de la
+ * cuenta cuando se transfiere.
  *
  * El monto bruto, la comisión y el neto se guardan los tres: recalcularlos después significaría
  * que un cambio de tarifa reescribe la historia.
  */
 public record FixerEarning(UUID id, UUID quotationId, UUID fixerUserId, long grossAmount,
         long commissionAmount, long netAmount, int commissionRateBasisPoints, EarningStatus status,
-        Instant createdAt, Instant releasedAt, Instant paidOutAt, Instant updatedAt) {
+        Instant createdAt, Instant releasedAt, Instant paidOutAt, Instant updatedAt,
+        Instant fundedAt, Instant jobCompletedAt) {
+
+    public FixerEarning(UUID id, UUID quotationId, UUID fixerUserId, long grossAmount,
+            long commissionAmount, long netAmount, int commissionRateBasisPoints, EarningStatus status,
+            Instant createdAt, Instant releasedAt, Instant paidOutAt, Instant updatedAt) {
+        this(id, quotationId, fixerUserId, grossAmount, commissionAmount, netAmount, commissionRateBasisPoints,
+                status, createdAt, releasedAt, paidOutAt, updatedAt, null, null);
+    }
 
     public FixerEarning {
         if (commissionAmount + netAmount != grossAmount) {
@@ -23,13 +33,13 @@ public record FixerEarning(UUID id, UUID quotationId, UUID fixerUserId, long gro
         }
     }
 
-    /** El dinero queda comprometido pero todavía no es del técnico: el trabajo no se ha hecho. */
+    /** El pago entró pero el dinero todavía no es del técnico: el trabajo no se ha cerrado. */
     public static FixerEarning held(UUID id, UUID quotationId, UUID fixerUserId, long grossAmount,
             Instant now) {
         var commission = CommissionPolicy.commissionFor(grossAmount);
         return new FixerEarning(id, quotationId, fixerUserId, grossAmount, commission,
                 grossAmount - commission, CommissionPolicy.RATE_BASIS_POINTS, EarningStatus.HELD,
-                now, null, null, now);
+                now, null, null, now, now, null);
     }
 
     public FixerEarning release(Instant now) {
@@ -38,7 +48,8 @@ public record FixerEarning(UUID id, UUID quotationId, UUID fixerUserId, long gro
                     "Only an earning still in escrow can be released");
         }
         return new FixerEarning(id, quotationId, fixerUserId, grossAmount, commissionAmount,
-                netAmount, commissionRateBasisPoints, EarningStatus.AVAILABLE, createdAt, now, null, now);
+                netAmount, commissionRateBasisPoints, EarningStatus.AVAILABLE, createdAt, now, null, now,
+                fundedAt, jobCompletedAt == null ? now : jobCompletedAt);
     }
 
     public FixerEarning payOut(Instant now) {
@@ -48,7 +59,7 @@ public record FixerEarning(UUID id, UUID quotationId, UUID fixerUserId, long gro
         }
         return new FixerEarning(id, quotationId, fixerUserId, grossAmount, commissionAmount,
                 netAmount, commissionRateBasisPoints, EarningStatus.PAID_OUT, createdAt, releasedAt,
-                now, now);
+                now, now, fundedAt, jobCompletedAt);
     }
 
     public boolean isAvailable() {

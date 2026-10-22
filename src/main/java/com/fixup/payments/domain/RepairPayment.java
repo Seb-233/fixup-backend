@@ -5,10 +5,21 @@ import java.time.Instant;
 import java.util.Objects;
 import java.util.UUID;
 
-/** Persistent payment state; individual simulator decisions are retained as immutable attempts. */
+/**
+ * Persistent payment state; individual simulator decisions are retained as immutable attempts. The
+ * owner owes the payment; when the property is delegated, its real-estate manager may pay it too
+ * (FR-UC-11), so the manager is kept with the payment.
+ */
 public record RepairPayment(UUID id, UUID quotationId, UUID requestId, UUID ownerUserId, UUID fixerUserId,
         long amount, RepairPaymentMethod paymentMethod, PaymentPurpose purpose, PaymentStatus status,
-        Instant createdAt, Instant updatedAt, Instant completedAt) {
+        Instant createdAt, Instant updatedAt, Instant completedAt, UUID managerUserId) {
+
+    public RepairPayment(UUID id, UUID quotationId, UUID requestId, UUID ownerUserId, UUID fixerUserId,
+            long amount, RepairPaymentMethod paymentMethod, PaymentPurpose purpose, PaymentStatus status,
+            Instant createdAt, Instant updatedAt, Instant completedAt) {
+        this(id, quotationId, requestId, ownerUserId, fixerUserId, amount, paymentMethod, purpose, status,
+                createdAt, updatedAt, completedAt, null);
+    }
 
     public RepairPayment {
         Objects.requireNonNull(id, "id must not be null");
@@ -38,6 +49,17 @@ public record RepairPayment(UUID id, UUID quotationId, UUID requestId, UUID owne
                 purpose, PaymentStatus.PENDING, now, now, null);
     }
 
+    /** The delegated manager of the property, who may pay on the owner's behalf. */
+    public RepairPayment managedBy(UUID managerUserId) {
+        return new RepairPayment(id, quotationId, requestId, ownerUserId, fixerUserId, amount, paymentMethod,
+                purpose, status, createdAt, updatedAt, completedAt, managerUserId);
+    }
+
+    /** Only the owner, or the manager the payment was opened for, settles it. */
+    public boolean isPayableBy(UUID userId) {
+        return ownerUserId.equals(userId) || (managerUserId != null && managerUserId.equals(userId));
+    }
+
     /** Repeating approval is deliberately a no-op so future HTTP retries cannot duplicate effects. */
     public RepairPayment approve(Instant now) {
         if (status == PaymentStatus.APPROVED) {
@@ -64,6 +86,6 @@ public record RepairPayment(UUID id, UUID quotationId, UUID requestId, UUID owne
             throw new PaymentConflictException("PAYMENT_ALREADY_APPROVED", "An approved payment cannot change status");
         }
         return new RepairPayment(id, quotationId, requestId, ownerUserId, fixerUserId, amount, paymentMethod,
-                purpose, target, createdAt, now, target == PaymentStatus.APPROVED ? now : null);
+                purpose, target, createdAt, now, target == PaymentStatus.APPROVED ? now : null, managerUserId);
     }
 }

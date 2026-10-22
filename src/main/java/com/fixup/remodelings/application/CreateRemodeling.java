@@ -61,7 +61,7 @@ public class CreateRemodeling {
         }
         Instant now = Instant.now(clock);
         var project = RemodelingProject.create(projectId, draft.propertyId(),
-                actor.internalUserId(), draft.title(), draft.description(), requirements, now);
+                actor.internalUserId(), draft.title(), draft.description(), requirements, draft.plan(), now);
         projects.create(project);
         return views.detail(project, actor);
     }

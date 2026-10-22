@@ -4,7 +4,6 @@ import com.fixup.contracts.domain.RentalContract;
 import com.fixup.contracts.domain.RentalContracts;
 import com.fixup.identityaccess.api.CurrentActor;
 import com.fixup.identityaccess.api.CurrentActorProvider;
-import com.fixup.identityaccess.api.Role;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -24,23 +23,8 @@ public class ListMyContracts {
 
     public List<ContractResponse> execute() {
         CurrentActor actor = currentActorProvider.currentActor();
-        List<RentalContract> result;
-
-        if (actor.hasRole(Role.PLATFORM_ADMIN) || actor.hasRole(Role.REAL_ESTATE_MANAGER)) {
-            result = contracts.findByOwnerOrTenant(actor.internalUserId(), actor.internalUserId());
-        } else if (actor.hasRole(Role.OWNER)) {
-            result = contracts.findByOwnerOrTenant(actor.internalUserId(), actor.internalUserId())
-                .stream()
-                .filter(c -> c.ownerUserId().equals(actor.internalUserId()))
-                .toList();
-        } else if (actor.hasRole(Role.TENANT)) {
-            result = contracts.findByOwnerOrTenant(actor.internalUserId(), actor.internalUserId())
-                .stream()
-                .filter(c -> c.tenantUserId().equals(actor.internalUserId()))
-                .toList();
-        } else {
-            result = List.of();
-        }
+        // A person can rent one home and own another: every contract where they are a party is theirs to see.
+        List<RentalContract> result = contracts.findByOwnerOrTenant(actor.internalUserId(), actor.internalUserId());
 
         return result.stream().map(ContractResponse::from).toList();
     }

@@ -45,6 +45,7 @@ class OpenApiContractTest {
                 "/media/me/portfolio/publish", "/media/me/portfolio/unpublish",
                 "/media/me/portfolio/pieces/{pieceId}", "/media/me/portfolio/pieces/{pieceId}/hide",
                 "/media/me/portfolio/pieces/{pieceId}/show", "/media/fixers/{fixerUserId}/portfolio",
+                "/media/portfolio/feed",
                 "/analytics/zones/{zone}/market-indicators",
                 "/requests", "/requests/me", "/requests/open", "/requests/{requestId}",
                 "/requests/{requestId}/messages",
@@ -61,9 +62,26 @@ class OpenApiContractTest {
                 "/notifications/me", "/notifications/{id}/read", "/notifications/read-all",
                 "/notifications/me/unread-count", "/notifications/device-token",
                 "/contracts", "/contracts/me", "/contracts/{id}", "/contracts/{id}/renew",
-                "/contracts/{id}/terminate", "/contracts/expiring",
+                "/contracts/{id}/terminate", "/contracts/expiring", "/contracts/tenant-lookup",
                 "/administration/sla-board/requests", "/administration/sla-board/requests/{id}/reassign",
-                "/administration/sla-board/requests/{id}/acknowledge");
+                "/administration/sla-board/requests/{id}/acknowledge",
+                "/properties/{propertyId}/publish", "/properties/{propertyId}/unpublish",
+                "/properties/{propertyId}/manager", "/properties/managers", "/properties/catalog",
+                "/properties/{propertyId}/listing",
+                "/fixers/directory", "/fixers/{fixerUserId}/profile", "/fixers/me/profile",
+                "/fixers/verification/pending",
+                "/requests/reportable-properties", "/requests/{requestId}/cancel",
+                "/management/requests", "/management/requests/{requestId}/invitations",
+                "/management/requests/{requestId}/candidates",
+                "/jobs/{jobId}", "/jobs/for-request/{requestId}", "/jobs/{jobId}/schedule",
+                "/jobs/{jobId}/start", "/jobs/{jobId}/evidence",
+                "/visits", "/visits/me", "/visits/{visitId}", "/visits/{visitId}/confirm",
+                "/visits/{visitId}/reschedule", "/visits/{visitId}/cancel", "/visits/{visitId}/complete",
+                "/visits/{visitId}/no-show",
+                "/payments/me",
+                "/ratings", "/ratings/jobs/{jobId}", "/ratings/fixers/{fixerUserId}",
+                "/analytics/expenses", "/analytics/expenses/csv",
+                "/remodelings/{projectId}/publish-listing");
         assertThat(paths.fieldNames()).toIterable().doesNotContain(
                 "/demo/token", "/demo/token/{role}",
                 "/media/me/portfolio/{pieceId}",
@@ -88,6 +106,7 @@ class OpenApiContractTest {
                 {"/media/me/portfolio/pieces/{pieceId}/hide", "post", "200"},
                 {"/media/me/portfolio/pieces/{pieceId}/show", "post", "200"},
                 {"/media/fixers/{fixerUserId}/portfolio", "get", "200"},
+                {"/media/portfolio/feed", "get", "200"},
                 {"/requests", "post", "201"}, {"/requests/me", "get", "200"},
                 {"/requests/open", "get", "200"}, {"/requests/{requestId}", "get", "200"},
                 {"/requests/{requestId}/messages", "post", "201"},
@@ -104,7 +123,8 @@ class OpenApiContractTest {
                 {"/payments/debts/{debtId}/pay", "post", "201"},
                 {"/payments/cash-settlements/jobs/{jobId}", "get", "200"},
                 {"/payments/{paymentId}", "get", "200"},
-                {"/payments/{paymentId}/simulate", "post", "200"}}) {
+                {"/payments/{paymentId}/simulate", "post", "200"},
+                {"/payments/me", "get", "200"}}) {
             var operation = paths.get(endpoint[0]).get(endpoint[1]);
             assertThat(operation.get("security").toString()).contains("bearerAuth");
             for (String code : new String[]{endpoint[2], "400", "401", "403", "409"}) {
@@ -148,8 +168,9 @@ class OpenApiContractTest {
                         "requestStatus", "paymentMethod", "assignedFixerUserId", "jobId", "jobStatus");
         assertThat(contract.at("/components/schemas/OpenRequest/properties").toString())
                 .contains("paymentMethod");
+        // The owner or the manager must state it; a tenant's report omits it and is paid by transfer.
         assertThat(contract.at("/components/schemas/OpenRequest/required").toString())
-                .contains("paymentMethod");
+                .doesNotContain("paymentMethod");
         assertThat(contract.at("/components/schemas/RequestDetailResponse/properties").toString())
                 .contains("paymentMethod");
         assertThat(contract.at("/components/schemas/PaymentMethod/enum").toString())
@@ -322,6 +343,17 @@ class OpenApiContractTest {
                 .doesNotContain("ownerUserId", "fixerUserId", "card", "bank");
         assertThat(contract.at("/components/schemas/SimulationRequest/properties").toString())
                 .contains("outcome").doesNotContain("ownerUserId", "paymentMethod");
+        // springdoc lists Pageable's fields in reflection order, which differs between JVMs (macOS gives
+        // page, size, sort; the Linux CI gives size, sort, page). Fix the CI order so docs/openapi.json
+        // regenerated on any machine matches the drift check.
+        if (contract.at("/components/schemas/Pageable/properties") instanceof com.fasterxml.jackson.databind.node.ObjectNode pageable) {
+            var ordered = mapper.createObjectNode();
+            for (String field : java.util.List.of("size", "sort", "page")) {
+                if (pageable.has(field)) ordered.set(field, pageable.get(field));
+            }
+            pageable.fields().forEachRemaining(entry -> ordered.putIfAbsent(entry.getKey(), entry.getValue()));
+            pageable.removeAll().setAll(ordered);
+        }
         Files.createDirectories(Path.of("target"));
         Files.createDirectories(Path.of("docs"));
         String json = mapper.writerWithDefaultPrettyPrinter().writeValueAsString(contract) + System.lineSeparator();

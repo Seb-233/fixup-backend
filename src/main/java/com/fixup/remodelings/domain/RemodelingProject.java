@@ -10,7 +10,7 @@ import java.util.UUID;
 
 public record RemodelingProject(UUID id, UUID propertyId, UUID ownerUserId, String title,
         String description, List<RemodelingRequirement> requirements, Instant createdAt,
-        Instant updatedAt) {
+        Instant updatedAt, RemodelingPlan plan) {
 
     public static final int MAX_TITLE_LENGTH = 150;
     public static final int MAX_DESCRIPTION_LENGTH = 2000;
@@ -31,12 +31,35 @@ public record RemodelingProject(UUID id, UUID propertyId, UUID ownerUserId, Stri
                 .sorted(Comparator.comparingInt(RemodelingRequirement::position))
                 .toList();
         validateRequirements(id, requirements);
+        plan = plan == null ? RemodelingPlan.IMPROVEMENT : plan;
+    }
+
+    public RemodelingProject(UUID id, UUID propertyId, UUID ownerUserId, String title, String description,
+            List<RemodelingRequirement> requirements, Instant createdAt, Instant updatedAt) {
+        this(id, propertyId, ownerUserId, title, description, requirements, createdAt, updatedAt,
+                RemodelingPlan.IMPROVEMENT);
     }
 
     public static RemodelingProject create(UUID id, UUID propertyId, UUID ownerUserId,
             String title, String description, List<RemodelingRequirement> requirements, Instant now) {
-        return new RemodelingProject(id, propertyId, ownerUserId, title, description,
-                requirements, now, now);
+        return create(id, propertyId, ownerUserId, title, description, requirements, RemodelingPlan.IMPROVEMENT, now);
+    }
+
+    public static RemodelingProject create(UUID id, UUID propertyId, UUID ownerUserId, String title,
+            String description, List<RemodelingRequirement> requirements, RemodelingPlan plan, Instant now) {
+        return new RemodelingProject(id, propertyId, ownerUserId, title, description, requirements, now, now, plan);
+    }
+
+    /** FR-UC-26: publicar en arriendo es un hecho único del proyecto pre-arriendo terminado. */
+    public RemodelingProject markListingPublished(Instant now) {
+        if (plan.goal() != com.fixup.remodelings.api.RemodelingGoal.PRE_RENTAL) {
+            throw new RemodelingConflictException("NOT_PRE_RENTAL", "Only a pre-rental remodeling publishes a listing");
+        }
+        if (plan.listingPublishedAt() != null) {
+            throw new RemodelingConflictException("LISTING_ALREADY_PUBLISHED", "The listing was already published");
+        }
+        return new RemodelingProject(id, propertyId, ownerUserId, title, description, requirements, createdAt, now,
+                plan.published(now));
     }
 
     private static String normalizeTitle(String value) {

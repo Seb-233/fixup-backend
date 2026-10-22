@@ -46,6 +46,15 @@ springdoc:
 fixup:
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS}
+  # Datos de demostración de Colombia (DemoDataSeedRunner). Apagado salvo que se pida: en la VM se
+  # enciende con FIXUP_SEED_ENABLED=true y los subjects de las cuentas reales de Auth0.
+  seed:
+    enabled: ${FIXUP_SEED_ENABLED:false}
+    owner-subject: ${FIXUP_SEED_OWNER_SUBJECT:auth0|demo-owner}
+    tenant-subject: ${FIXUP_SEED_TENANT_SUBJECT:auth0|demo-tenant}
+    fixer-subject: ${FIXUP_SEED_FIXER_SUBJECT:auth0|demo-fixer}
+    manager-subject: ${FIXUP_SEED_MANAGER_SUBJECT:auth0|demo-real_estate_manager}
+    admin-subject: ${FIXUP_SEED_ADMIN_SUBJECT:auth0|demo-platform_admin}
   geocoding:
     enabled: ${FIXUP_GEOCODING_ENABLED:true}
     base-url: ${FIXUP_GEOCODING_BASE_URL:https://nominatim.openstreetmap.org}

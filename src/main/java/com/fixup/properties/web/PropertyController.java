@@ -1,7 +1,18 @@
 package com.fixup.properties.web;
 
 import com.fixup.identityaccess.api.CurrentActorProvider;
+import com.fixup.properties.api.ListingType;
+import com.fixup.properties.api.PropertyType;
+import com.fixup.properties.application.AssignPropertyManager;
+import com.fixup.properties.application.BrowseCatalog;
 import com.fixup.properties.application.BulkImportProperties;
+import com.fixup.properties.application.CatalogPage;
+import com.fixup.properties.application.ChangePropertyPublication;
+import com.fixup.properties.application.GetPublicListing;
+import com.fixup.properties.application.PropertyChanges;
+import com.fixup.properties.application.PublicListingView;
+import com.fixup.properties.application.UpdateProperty;
+import com.fixup.properties.domain.CatalogQuery;
 import com.fixup.properties.application.BulkImportResult;
 import com.fixup.properties.application.BulkValidationResult;
 import com.fixup.properties.application.CreateProperty;
@@ -40,16 +51,29 @@ class PropertyController {
     private final SearchPublishedProperties searchPublishedProperties;
     private final BulkImportProperties bulkImportProperties;
     private final CurrentActorProvider currentActorProvider;
+    private final UpdateProperty updateProperty;
+    private final ChangePropertyPublication publication;
+    private final AssignPropertyManager assignManager;
+    private final BrowseCatalog browseCatalog;
+    private final GetPublicListing getPublicListing;
 
     PropertyController(CreateProperty createProperty, ListOwnProperties listOwnProperties, GetProperty getProperty,
                        SearchPublishedProperties searchPublishedProperties,
-                       BulkImportProperties bulkImportProperties, CurrentActorProvider currentActorProvider) {
+                       BulkImportProperties bulkImportProperties, CurrentActorProvider currentActorProvider,
+                       UpdateProperty updateProperty, ChangePropertyPublication publication,
+                       AssignPropertyManager assignManager, BrowseCatalog browseCatalog,
+                       GetPublicListing getPublicListing) {
         this.createProperty = createProperty;
         this.listOwnProperties = listOwnProperties;
         this.getProperty = getProperty;
         this.searchPublishedProperties = searchPublishedProperties;
         this.bulkImportProperties = bulkImportProperties;
         this.currentActorProvider = currentActorProvider;
+        this.updateProperty = updateProperty;
+        this.publication = publication;
+        this.assignManager = assignManager;
+        this.browseCatalog = browseCatalog;
+        this.getPublicListing = getPublicListing;
     }
 
     @PostMapping
@@ -90,6 +114,73 @@ class PropertyController {
     @GetMapping("/{propertyId}")
     public PropertySummary get(@PathVariable UUID propertyId) {
         return getProperty.execute(propertyId);
+    }
+
+    @PutMapping("/{propertyId}")
+    @Operation(summary = "Edit a property and its listing (FR-UC-02)",
+            description = "Only the owner, the delegated real estate manager or a platform admin may edit. "
+                    + "photoMediaIds replaces the gallery in the given order.")
+    public PropertySummary update(@PathVariable UUID propertyId, @Valid @RequestBody PropertyChanges changes) {
+        return updateProperty.execute(propertyId, changes);
+    }
+
+    @PostMapping("/{propertyId}/publish")
+    @Operation(summary = "Publish a draft or withdrawn property in the free catalog (FR-UC-02)")
+    public PropertySummary publish(@PathVariable UUID propertyId) {
+        return publication.publish(propertyId);
+    }
+
+    @PostMapping("/{propertyId}/unpublish")
+    @Operation(summary = "Withdraw a published property from the catalog without deleting it (FR-UC-02)")
+    public PropertySummary unpublish(@PathVariable UUID propertyId) {
+        return publication.unpublish(propertyId);
+    }
+
+    @PutMapping("/{propertyId}/manager")
+    @Operation(summary = "Delegate the property to a real estate manager, or revoke it with null (FR-UC-11)")
+    public PropertySummary delegate(@PathVariable UUID propertyId, @RequestBody ManagerAssignment body) {
+        return assignManager.execute(propertyId, body.managerUserId());
+    }
+
+    @GetMapping("/managers")
+    @Operation(summary = "Active real estate managers an owner can delegate to (FR-UC-11)")
+    public List<ManagerOption> managers() {
+        return assignManager.availableManagers().stream()
+                .map(card -> new ManagerOption(card.id(), card.displayName()))
+                .toList();
+    }
+
+    @GetMapping(value = "/catalog", produces = MediaType.APPLICATION_JSON_VALUE)
+    @Operation(summary = "Browse published properties with filters (FR-UC-06, FR-UC-07)")
+    public CatalogPage catalog(
+            @RequestParam(required = false) String city,
+            @RequestParam(required = false) ListingType listingType,
+            @RequestParam(required = false) PropertyType propertyType,
+            @RequestParam(required = false) Long minPrice,
+            @RequestParam(required = false) Long maxPrice,
+            @RequestParam(required = false) Integer minBedrooms,
+            @RequestParam(required = false) Integer stratum,
+            @RequestParam(defaultValue = "false") boolean sealOnly,
+            @RequestParam(required = false) String q,
+            @RequestParam(defaultValue = "NEWEST") CatalogQuery.CatalogSort sort,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "12") int size) {
+        return browseCatalog.execute(new CatalogQuery(city, listingType, propertyType, minPrice, maxPrice,
+                minBedrooms, stratum, sealOnly, q, sort, page, size));
+    }
+
+    @GetMapping("/{propertyId}/listing")
+    @Operation(summary = "Public listing with photos, Fix&Rent seal and work history (FR-UC-02, FR-UC-07)")
+    public PublicListingView listing(@PathVariable UUID propertyId) {
+        return getPublicListing.execute(propertyId);
+    }
+
+    @Schema(additionalProperties = Schema.AdditionalPropertiesValue.FALSE)
+    record ManagerAssignment(@Schema(types = {"string", "null"}) UUID managerUserId) {
+    }
+
+    @Schema(requiredProperties = {"id", "displayName"})
+    record ManagerOption(UUID id, String displayName) {
     }
 
     @PostMapping(value = "/bulk/validate", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)

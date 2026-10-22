@@ -2,6 +2,7 @@ package com.fixup.media.web;
 
 import com.fixup.identityaccess.api.CurrentActorProvider;
 import com.fixup.media.api.PortfolioVisibility;
+import com.fixup.media.application.BrowsePortfolioFeed;
 import com.fixup.media.application.ChangePieceVisibility;
 import com.fixup.media.application.DeletePortfolioPiece;
 import com.fixup.media.application.GetPublicPortfolio;
@@ -36,6 +37,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -68,6 +70,7 @@ class PortfolioController {
     private final UnpublishPortfolio unpublishPortfolio;
     private final DeletePortfolioPiece deletePiece;
     private final PortfolioViewResolver resolver;
+    private final BrowsePortfolioFeed feed;
 
     PortfolioController(
             CurrentActorProvider actors,
@@ -78,7 +81,8 @@ class PortfolioController {
             PublishPortfolio publishPortfolio,
             UnpublishPortfolio unpublishPortfolio,
             DeletePortfolioPiece deletePiece,
-            PortfolioViewResolver resolver) {
+            PortfolioViewResolver resolver,
+            BrowsePortfolioFeed feed) {
         this.actors = actors;
         this.publishPiece = publishPiece;
         this.listOwn = listOwn;
@@ -88,6 +92,7 @@ class PortfolioController {
         this.unpublishPortfolio = unpublishPortfolio;
         this.deletePiece = deletePiece;
         this.resolver = resolver;
+        this.feed = feed;
     }
 
     @PostMapping("/me/portfolio/pieces")
@@ -161,6 +166,42 @@ class PortfolioController {
     @ApiResponse(responseCode = "200", description = "The public portfolio of that fixer")
     List<PieceResponse> portfolioOf(@PathVariable UUID fixerUserId) {
         return publicPortfolio.execute(actors.currentActor(), fixerUserId).stream().map(PieceResponse::of).toList();
+    }
+
+    @GetMapping("/portfolio/feed")
+    @Operation(summary = "Browse the public pieces of every published portfolio",
+            description = "Ideas feed for clients. Interleaves fixers (every first piece, then every second one) "
+                    + "in a stable order. fixerUserIds narrows it to those fixers; size is capped at 48.")
+    @ApiResponse(responseCode = "200", description = "One page of the feed")
+    PortfolioFeedResponse feed(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "24") int size,
+            @RequestParam(required = false) List<UUID> fixerUserIds) {
+        var result = feed.execute(actors.currentActor(), page, size, fixerUserIds);
+        return new PortfolioFeedResponse(
+                result.items().stream().map(item -> FeedPieceResponse.of(item.fixerUserId(), item.piece())).toList(),
+                result.page(),
+                result.hasMore());
+    }
+
+    @Schema(requiredProperties = {"items", "page", "hasMore"})
+    record PortfolioFeedResponse(List<FeedPieceResponse> items, int page, boolean hasMore) {
+    }
+
+    @Schema(requiredProperties = {"id", "fixerUserId", "title", "readUrl", "readUrlExpiresAt"})
+    record FeedPieceResponse(
+            UUID id,
+            UUID fixerUserId,
+            String title,
+            @Schema(types = {"string", "null"}) String description,
+            String readUrl,
+            Instant readUrlExpiresAt,
+            Instant createdAt) {
+
+        static FeedPieceResponse of(UUID fixerUserId, PortfolioPieceView view) {
+            return new FeedPieceResponse(view.id(), fixerUserId, view.title(), view.description(),
+                    view.readUrl(), view.readUrlExpiresAt(), view.createdAt());
+        }
     }
 
     @Schema(additionalProperties = Schema.AdditionalPropertiesValue.FALSE)

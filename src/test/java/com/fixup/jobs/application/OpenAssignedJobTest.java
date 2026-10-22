@@ -2,6 +2,8 @@ package com.fixup.jobs.application;
 
 import com.fixup.jobs.api.JobOpeningCommand;
 import com.fixup.jobs.domain.Job;
+import com.fixup.jobs.domain.JobLogEntry;
+import com.fixup.jobs.domain.JobRecords;
 import com.fixup.jobs.domain.Jobs;
 import java.time.Instant;
 import java.util.UUID;
@@ -24,9 +26,10 @@ class OpenAssignedJobTest {
     @Test
     void opensAssignedJobWithTheAcceptedQuotationData() {
         var jobs = mock(Jobs.class);
+        var records = mock(JobRecords.class);
         when(jobs.existsByQuotation(QUOTATION)).thenReturn(false);
 
-        new OpenAssignedJob(jobs).open(command());
+        new OpenAssignedJob(jobs, records).open(command());
 
         var captured = ArgumentCaptor.forClass(Job.class);
         verify(jobs).create(captured.capture());
@@ -34,6 +37,10 @@ class OpenAssignedJobTest {
         assertThat(captured.getValue().requestId()).isEqualTo(REQUEST);
         assertThat(captured.getValue().fixerUserId()).isEqualTo(FIXER);
         assertThat(captured.getValue().ownerUserId()).isEqualTo(OWNER);
+        var entry = ArgumentCaptor.forClass(JobLogEntry.class);
+        verify(records).log(entry.capture());
+        assertThat(entry.getValue().jobId()).isEqualTo(captured.getValue().id());
+        assertThat(entry.getValue().note()).contains("efectivo");
     }
 
     @Test
@@ -41,7 +48,7 @@ class OpenAssignedJobTest {
         var jobs = mock(Jobs.class);
         when(jobs.existsByQuotation(QUOTATION)).thenReturn(true);
 
-        new OpenAssignedJob(jobs).open(command());
+        new OpenAssignedJob(jobs, mock(JobRecords.class)).open(command());
 
         verify(jobs, never()).create(org.mockito.ArgumentMatchers.any());
     }

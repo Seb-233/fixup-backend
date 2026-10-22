@@ -116,7 +116,8 @@ public abstract class PortfolioHttpContract {
                 delete("/media/me/portfolio/pieces/" + UUID.randomUUID()),
                 post("/media/me/portfolio/pieces/" + UUID.randomUUID() + "/hide"),
                 post("/media/me/portfolio/pieces/" + UUID.randomUUID() + "/show"),
-                get("/media/fixers/" + UUID.randomUUID() + "/portfolio"))) {
+                get("/media/fixers/" + UUID.randomUUID() + "/portfolio"),
+                get("/media/portfolio/feed"))) {
             mvc.perform(request).andExpect(status().isUnauthorized())
                     .andExpect(header().string("WWW-Authenticate", "Bearer"))
                     .andExpect(jsonPath("$.code").value("UNAUTHENTICATED"));
@@ -729,5 +730,76 @@ public abstract class PortfolioHttpContract {
                 .andExpect(jsonPath("$..storageKey").doesNotExist())
                 .andExpect(jsonPath("$..objectKey").doesNotExist())
                 .andExpect(jsonPath("$..bucket").doesNotExist());
+    }
+
+    private UUID publishedPortfolio(String subject, String... titles) throws Exception {
+        var fixerId = verifiedFixer(subject);
+        for (var title : titles) {
+            publish(subject, title).andExpect(status().isCreated());
+        }
+        mvc.perform(post("/media/me/portfolio/publish").with(identity(subject))).andExpect(status().isOk());
+        return fixerId;
+    }
+
+    @Test
+    void theFeedInterleavesPublishedPortfoliosAndSkipsDraftsAndHiddenPieces() throws Exception {
+        var ana = publishedPortfolio("auth0|feed-ana", "A1", "A2", "A3");
+        // Four pieces so hiding one keeps three visible and the portfolio stays published.
+        var beto = publishedPortfolio("auth0|feed-beto", "B1", "B2", "B3", "B4");
+        var hidden = mvc.perform(get("/media/me/portfolio").with(identity("auth0|feed-beto")))
+                .andExpect(status().isOk()).andReturn();
+        var hiddenId = mapper.readTree(hidden.getResponse().getContentAsString()).get("pieces").get(3).get("id").asText();
+        mvc.perform(post("/media/me/portfolio/pieces/" + hiddenId + "/hide").with(identity("auth0|feed-beto")))
+                .andExpect(status().isOk());
+        verifiedFixer("auth0|feed-draft");
+        publish("auth0|feed-draft", "Borrador").andExpect(status().isCreated());
+
+        var first = mvc.perform(get("/media/portfolio/feed").param("size", "2").with(identity("auth0|feed-ana")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.page").value(0))
+                .andExpect(jsonPath("$.hasMore").value(true))
+                .andExpect(jsonPath("$.items.length()").value(2))
+                .andExpect(jsonPath("$..objectKey").doesNotExist())
+                .andReturn();
+        var firstPage = mapper.readTree(first.getResponse().getContentAsString()).get("items");
+        var owners = new ArrayList<String>();
+        firstPage.forEach(item -> owners.add(item.get("fixerUserId").asText()));
+        assertThat(owners).containsExactlyInAnyOrder(ana.toString(), beto.toString());
+
+        var all = mvc.perform(get("/media/portfolio/feed").param("size", "48").with(identity("auth0|feed-ana")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.hasMore").value(false))
+                .andReturn();
+        var titles = new ArrayList<String>();
+        mapper.readTree(all.getResponse().getContentAsString()).get("items")
+                .forEach(item -> titles.add(item.get("title").asText()));
+        assertThat(titles).containsExactlyInAnyOrder("A1", "A2", "A3", "B1", "B2", "B3");
+    }
+
+    @Test
+    void theFeedCanBeNarrowedToSomeFixers() throws Exception {
+        var ana = publishedPortfolio("auth0|narrow-ana", "A1", "A2", "A3");
+        publishedPortfolio("auth0|narrow-beto", "B1", "B2", "B3");
+
+        mvc.perform(get("/media/portfolio/feed").param("fixerUserIds", ana.toString()).with(identity("auth0|narrow-ana")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(3))
+                .andExpect(jsonPath("$.items[*].fixerUserId", org.hamcrest.Matchers.everyItem(
+                        org.hamcrest.Matchers.is(ana.toString()))));
+        mvc.perform(get("/media/portfolio/feed").param("fixerUserIds", UUID.randomUUID().toString())
+                        .with(identity("auth0|narrow-ana")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(0))
+                .andExpect(jsonPath("$.hasMore").value(false));
+    }
+
+    @Test
+    void aSuspendedUserCannotBrowseTheFeed() throws Exception {
+        var readerId = verifiedFixer("auth0|feed-suspended");
+        jdbc.update("UPDATE users SET status = 'SUSPENDED' WHERE id = ?", readerId);
+
+        mvc.perform(get("/media/portfolio/feed").with(identity("auth0|feed-suspended")))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
     }
 }

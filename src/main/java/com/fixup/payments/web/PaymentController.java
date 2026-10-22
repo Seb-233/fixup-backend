@@ -12,6 +12,7 @@ import com.fixup.payments.application.CashSettlementDetail;
 import com.fixup.payments.application.InitiateDebtPayment;
 import com.fixup.payments.application.ListOwnDebts;
 import com.fixup.payments.application.OwnerDebtDetail;
+import com.fixup.payments.application.ListOwnPayments;
 import com.fixup.payments.application.ListOwnPayouts;
 import com.fixup.payments.application.PaymentDetail;
 import com.fixup.payments.application.PayoutSummary;
@@ -28,9 +29,6 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
-import java.time.Instant;
-import java.util.List;
-import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -40,8 +38,14 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import java.time.Instant;
+import java.util.List;
+import java.util.UUID;
 
-/** FR-UC-20: monitoreo de ingresos del técnico. Controllers stay thin and never touch JPA. */
+/**
+ * FR-UC-05 y FR-UC-20: pagos simulados del propietario y monitoreo de ingresos del técnico.
+ * Controllers stay thin and never touch JPA.
+ */
 @RestController
 @RequestMapping(value = "/payments", produces = MediaType.APPLICATION_JSON_VALUE)
 @SecurityRequirement(name = "bearerAuth")
@@ -67,11 +71,13 @@ class PaymentController {
     private final ListOwnDebts listDebts;
     private final InitiateDebtPayment initiateDebtPayment;
     private final GetCashSettlement getCashSettlement;
+    private final ListOwnPayments listPayments;
 
     PaymentController(CurrentActorProvider actors, GetEarningsSummary getEarnings,
             RequestPayout requestPayout, ListOwnPayouts listPayouts, GetRepairPayment getPayment,
             SimulateRepairPayment simulatePayment, ListOwnDebts listDebts,
-            InitiateDebtPayment initiateDebtPayment, GetCashSettlement getCashSettlement) {
+            InitiateDebtPayment initiateDebtPayment, GetCashSettlement getCashSettlement,
+            ListOwnPayments listPayments) {
         this.actors = actors;
         this.getEarnings = getEarnings;
         this.requestPayout = requestPayout;
@@ -81,6 +87,15 @@ class PaymentController {
         this.listDebts = listDebts;
         this.initiateDebtPayment = initiateDebtPayment;
         this.getCashSettlement = getCashSettlement;
+        this.listPayments = listPayments;
+    }
+
+    @GetMapping("/me")
+    @Operation(summary = "List the payments the current owner or delegated manager owes or made",
+            description = "Newest first. A PENDING, DECLINED or ERROR transfer can be retried from here.")
+    @ApiResponse(responseCode = "200", description = "Payments of the current payer")
+    List<PaymentDetail> myPayments() {
+        return listPayments.execute(actors.currentActor());
     }
 
     @GetMapping("/cash-settlements/jobs/{jobId}")
@@ -171,12 +186,15 @@ class PaymentController {
     record EarningResponse(UUID id, UUID quotationId, long grossAmount, long commissionAmount,
             long netAmount, int commissionRateBasisPoints, EarningStatus status, Instant createdAt,
             @Schema(types = {"string", "null"}) Instant releasedAt,
-            @Schema(types = {"string", "null"}) Instant paidOutAt) {
+            @Schema(types = {"string", "null"}) Instant paidOutAt,
+            @Schema(types = {"string", "null"}) Instant fundedAt,
+            @Schema(types = {"string", "null"}) Instant jobCompletedAt) {
 
         static EarningResponse of(EarningLine line) {
             return new EarningResponse(line.id(), line.quotationId(), line.grossAmount(),
                     line.commissionAmount(), line.netAmount(), line.commissionRateBasisPoints(),
-                    line.status(), line.createdAt(), line.releasedAt(), line.paidOutAt());
+                    line.status(), line.createdAt(), line.releasedAt(), line.paidOutAt(), line.fundedAt(),
+                    line.jobCompletedAt());
         }
     }
 

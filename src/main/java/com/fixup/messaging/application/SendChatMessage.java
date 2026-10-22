@@ -2,23 +2,26 @@ package com.fixup.messaging.application;
 
 import com.fixup.identityaccess.api.CurrentActor;
 import com.fixup.messaging.api.ChatConflictException;
-import com.fixup.notifications.api.NotificationStatus;
-import com.fixup.notifications.api.ChatNotifications;
 import com.fixup.messaging.domain.ChatMessage;
 import com.fixup.messaging.domain.ChatMessages;
-import com.fixup.notifications.api.PushNotificationGateway;
+import com.fixup.notifications.api.NotificationRequested;
+import com.fixup.notifications.api.NotificationStatus;
+import com.fixup.notifications.api.NotificationType;
 import com.fixup.notifications.api.PushNotificationGateway.PushNotification;
+import com.fixup.notifications.api.PushNotificationGateway;
 import com.fixup.requests.api.RepairRequestDirectory;
-import java.time.Instant;
-import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import java.time.Instant;
+import java.util.Map;
+import java.util.UUID;
 
 /**
- * FR-UC-24: the chat opens the moment a fixer is assigned to the request, and only for the two
- * people that assignment names. The push notification to the other participant is best-effort: it
+ * FR-UC-24: the chat opens the moment a fixer is assigned to the request, for the people who take
+ * part in it (owner, reporter, manager and fixer). The push notification to the other participant is best-effort: it
  * is attempted before the message is persisted so the final, real outcome is what gets stored, but
  * a failing or unavailable provider never stops the message itself from sending.
  *
@@ -34,35 +37,44 @@ public class SendChatMessage {
     private final ChatMessages messages;
     private final RepairRequestDirectory requests;
     private final PushNotificationGateway pushGateway;
-    private final ChatNotifications chatNotifications;
+    private final ApplicationEventPublisher events;
 
-    SendChatMessage(ChatMessages messages, RepairRequestDirectory requests,
-            PushNotificationGateway pushGateway, ChatNotifications chatNotifications) {
+    SendChatMessage(ChatMessages messages, RepairRequestDirectory requests, PushNotificationGateway pushGateway,
+            ApplicationEventPublisher events) {
         this.messages = messages;
         this.requests = requests;
         this.pushGateway = pushGateway;
-        this.chatNotifications = chatNotifications;
+        this.events = events;
     }
 
     @Transactional
     public ChatMessageSummary execute(CurrentActor actor, UUID requestId, NewChatMessage draft) {
         ChatAccess.requireActive(actor);
         var request = requests.require(requestId);
+        // The chat is writable while a fixer is assigned and the work is active; a completed CASH request
+        // stays writable because a balance may still be pending (FR-UC-05). It mirrors
+        // chat_messages_insert in the RLS migrations. History is never gated.
         if (!request.allowsChat()) {
             throw new ChatConflictException("REQUEST_NOT_ASSIGNED",
                     "The chat requires an assigned fixer");
         }
         ChatAccess.requireParticipant(actor, request);
 
-        var recipientId = actor.internalUserId().equals(request.ownerUserId())
-                ? request.assignedFixerUserId() : request.ownerUserId();
-        var notificationStatus = attemptNotification(recipientId, draft.body());
+        var recipients = request.participants().stream()
+                .filter(participant -> !participant.equals(actor.internalUserId()))
+                .toList();
+        var notificationStatus = NotificationStatus.SKIPPED;
+        for (var recipientId : recipients) {
+            notificationStatus = attemptNotification(recipientId, draft.body());
+            events.publishEvent(new NotificationRequested(recipientId, NotificationType.CHAT_MESSAGE_RECEIVED,
+                    "Nuevo mensaje", preview(draft.body()), "/requests/" + requestId + "/messages", requestId,
+                    "REQUEST", Map.of("requestId", requestId.toString(),
+                            "senderId", actor.internalUserId().toString())));
+        }
 
         var message = ChatMessage.sent(UUID.randomUUID(), requestId, actor.internalUserId(), draft.body(),
                 Instant.now(), notificationStatus);
         messages.save(message);
-        chatNotifications.messageReceived(message.id(), requestId, actor.internalUserId(),
-                recipientId, preview(draft.body()), message.sentAt());
         return ChatMessageSummary.of(message);
     }
 

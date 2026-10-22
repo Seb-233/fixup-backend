@@ -5,9 +5,17 @@ import java.time.Instant;
 import java.util.Objects;
 import java.util.UUID;
 
-/** Complete, immutable input for starting a repair-payment lifecycle. */
+/**
+ * Complete, immutable input for starting a repair-payment lifecycle. {@code managerUserId} is the
+ * real-estate manager of a delegated property, or null.
+ */
 public record PaymentInitiationCommand(UUID quotationId, UUID requestId, UUID ownerUserId,
-        UUID fixerUserId, long amount, String paymentMethod, Instant occurredAt) {
+        UUID fixerUserId, long amount, String paymentMethod, Instant occurredAt, UUID managerUserId) {
+
+    public PaymentInitiationCommand(UUID quotationId, UUID requestId, UUID ownerUserId,
+            UUID fixerUserId, long amount, String paymentMethod, Instant occurredAt) {
+        this(quotationId, requestId, ownerUserId, fixerUserId, amount, paymentMethod, occurredAt, null);
+    }
 
     public PaymentInitiationCommand {
         Objects.requireNonNull(quotationId, "quotationId must not be null");
