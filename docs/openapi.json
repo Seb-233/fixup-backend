@@ -5609,6 +5609,109 @@
         } ]
       }
     },
+    "/media/portfolio/feed" : {
+      "get" : {
+        "tags" : [ "portfolio-controller" ],
+        "summary" : "Browse the public pieces of every published portfolio",
+        "description" : "Ideas feed for clients. Interleaves fixers (every first piece, then every second one) in a stable order. fixerUserIds narrows it to those fixers; size is capped at 48.",
+        "operationId" : "feed",
+        "parameters" : [ {
+          "name" : "page",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "default" : 0
+          }
+        }, {
+          "name" : "size",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "default" : 24
+          }
+        }, {
+          "name" : "fixerUserIds",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string",
+              "format" : "uuid"
+            }
+          }
+        } ],
+        "responses" : {
+          "400" : {
+            "description" : "Missing or invalid field",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Inactive account, or the fixer is not verified",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "PIECE_NOT_FOUND, media or portfolio not found",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "A publication or media rule rejected the operation",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "200" : {
+            "description" : "One page of the feed",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PortfolioFeedResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
     "/media/me/portfolio" : {
       "get" : {
         "tags" : [ "portfolio-controller" ],
@@ -9654,6 +9757,56 @@
         },
         "required" : [ "content", "page", "size", "totalElements", "totalPages" ]
       },
+      "FeedPieceResponse" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "fixerUserId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "title" : {
+            "type" : "string"
+          },
+          "description" : {
+            "type" : [ "string", "null" ]
+          },
+          "readUrl" : {
+            "type" : "string"
+          },
+          "readUrlExpiresAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "createdAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          }
+        },
+        "required" : [ "fixerUserId", "id", "readUrl", "readUrlExpiresAt", "title" ]
+      },
+      "PortfolioFeedResponse" : {
+        "type" : "object",
+        "properties" : {
+          "items" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/FeedPieceResponse"
+            }
+          },
+          "page" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "hasMore" : {
+            "type" : "boolean"
+          }
+        },
+        "required" : [ "hasMore", "items", "page" ]
+      },
       "OwnPortfolioResponse" : {
         "type" : "object",
         "properties" : {
@@ -9966,6 +10119,11 @@
       "Pageable" : {
         "type" : "object",
         "properties" : {
+          "page" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 0
+          },
           "size" : {
             "type" : "integer",
             "format" : "int32",
@@ -9976,11 +10134,6 @@
             "items" : {
               "type" : "string"
             }
-          },
-          "page" : {
-            "type" : "integer",
-            "format" : "int32",
-            "minimum" : 0
           }
         }
       },
