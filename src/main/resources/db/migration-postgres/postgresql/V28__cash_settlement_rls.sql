@@ -1,14 +1,9 @@
 ALTER TABLE cash_settlements ENABLE ROW LEVEL SECURITY;
 ALTER TABLE cash_settlements FORCE ROW LEVEL SECURITY;
--- El administrador inmobiliario ve el efectivo de las solicitudes de los inmuebles que administra.
 CREATE POLICY cash_settlements_select ON cash_settlements FOR SELECT USING (
     app_current_user_has_role('PLATFORM_ADMIN')
     OR owner_user_id = app_current_user_id()
     OR fixer_user_id = app_current_user_id()
-    OR EXISTS (
-        SELECT 1 FROM repair_requests r
-        WHERE r.id = cash_settlements.request_id AND r.manager_user_id = app_current_user_id()
-    )
 );
 CREATE POLICY cash_settlements_insert ON cash_settlements FOR INSERT WITH CHECK (
     app_current_user_has_role('PLATFORM_ADMIN')

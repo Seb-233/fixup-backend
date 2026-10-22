@@ -51,7 +51,7 @@ class PostgresEntregaCompletaIT extends EntregaCompletaHttpContract {
     @Test
     void newTablesAreInstalledWithForcedRowLevelSecurity() {
         assertThat(jdbc.queryForObject("SELECT count(*) FROM flyway_schema_history "
-                + "WHERE version IN ('22','23','24','25','26','27','28','29','30') AND success = true",
+                + "WHERE version IN ('30','31','32','33','34','35','36','37','38') AND success = true",
                 Integer.class)).isEqualTo(9);
         for (String table : List.of("property_photos", "property_work_history", "request_invitations",
                 "technical_visits", "visit_checklist_items", "repair_payments", "service_ratings")) {

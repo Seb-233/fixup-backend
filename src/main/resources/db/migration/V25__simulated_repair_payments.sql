@@ -4,8 +4,6 @@ CREATE TABLE repair_payments (
     request_id UUID NOT NULL,
     owner_user_id UUID NOT NULL,
     fixer_user_id UUID NOT NULL,
-    -- FR-UC-11: el administrador inmobiliario del inmueble delegado, que también puede pagarlo.
-    manager_user_id UUID,
     amount BIGINT NOT NULL,
     payment_method VARCHAR(16) NOT NULL,
     purpose VARCHAR(32) NOT NULL,
@@ -26,7 +24,6 @@ CREATE TABLE repair_payments (
 
 CREATE INDEX ix_repair_payments_owner ON repair_payments (owner_user_id, created_at DESC);
 CREATE INDEX ix_repair_payments_fixer ON repair_payments (fixer_user_id, created_at DESC);
-CREATE INDEX ix_repair_payments_manager ON repair_payments (manager_user_id, created_at DESC);
 CREATE INDEX ix_repair_payments_request ON repair_payments (request_id);
 CREATE INDEX ix_repair_payments_quotation ON repair_payments (quotation_id);
 CREATE INDEX ix_repair_payments_status ON repair_payments (status);

@@ -1,5 +1,5 @@
 -- FR-UC-05: el pago de reparaciones queda en un solo modelo, repair_payments (transferencia o
--- efectivo). Los cobros al propietario de owner_payments (V26) pasan a pagos por transferencia del
+-- efectivo). Los cobros al propietario de owner_payments (V34) pasan a pagos por transferencia del
 -- servicio, con su mismo estado, y la tabla anterior se retira.
 INSERT INTO repair_payments (id, quotation_id, request_id, owner_user_id, fixer_user_id, manager_user_id, amount,
         payment_method, purpose, status, created_at, updated_at, completed_at)
