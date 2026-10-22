@@ -343,6 +343,17 @@ class OpenApiContractTest {
                 .doesNotContain("ownerUserId", "fixerUserId", "card", "bank");
         assertThat(contract.at("/components/schemas/SimulationRequest/properties").toString())
                 .contains("outcome").doesNotContain("ownerUserId", "paymentMethod");
+        // springdoc lists Pageable's fields in reflection order, which differs between JVMs (macOS gives
+        // page, size, sort; the Linux CI gives size, sort, page). Fix the CI order so docs/openapi.json
+        // regenerated on any machine matches the drift check.
+        if (contract.at("/components/schemas/Pageable/properties") instanceof com.fasterxml.jackson.databind.node.ObjectNode pageable) {
+            var ordered = mapper.createObjectNode();
+            for (String field : java.util.List.of("size", "sort", "page")) {
+                if (pageable.has(field)) ordered.set(field, pageable.get(field));
+            }
+            pageable.fields().forEachRemaining(entry -> ordered.putIfAbsent(entry.getKey(), entry.getValue()));
+            pageable.removeAll().setAll(ordered);
+        }
         Files.createDirectories(Path.of("target"));
         Files.createDirectories(Path.of("docs"));
         String json = mapper.writerWithDefaultPrettyPrinter().writeValueAsString(contract) + System.lineSeparator();
