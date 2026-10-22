@@ -13,6 +13,11 @@ Marcadores que reemplaza DemoDataSeedRunner al ejecutar el script:
   {{W:3:540}}  -> TIMESTAMP de "hoy" más N días a esa hora de reloj en Colombia (minutos desde medianoche)
 Así los datos siempre se ven recientes, sin importar cuándo se cargue la base.
 
+También genera seed/actividad.sql: actividad de las últimas horas y de las próximas semanas que se
+carga una sola vez sobre una base ya sembrada (DemoDataSeedRunner), para que la app se vea viva en una
+demostración. Va en un archivo aparte para que colombia.sql no cambie y una base existente lo reciba sin
+recrearse.
+
 Uso: python3 scripts/seed/generar_seed_colombia.py
 """
 import json
@@ -593,7 +598,7 @@ def business_time(base):
 
 
 def create_request(prop, status, created, specialty=None, reporter=None, urgency=None, title_desc=None,
-                   fixer=None, rated=None, project=None):
+                   fixer=None, rated=None, project=None, method=None, paid=None, job_state=None):
     specialty = specialty or rng.choices(SPECIALTIES, weights=[30, 20, 15, 12, 10, 13])[0]
     title, description = title_desc or rng.choice(CATALOG[specialty])
     counters["request"] += 1
@@ -604,10 +609,14 @@ def create_request(prop, status, created, specialty=None, reporter=None, urgency
     # FR-UC-05: quien paga (dueño o administrador) acuerda transferencia o efectivo al abrirla; el
     # reporte de un arrendatario queda por transferencia.
     payer_reports = reporter is owner or (prop["manager"] is not None and reporter is prop["manager"])
-    payment_method = ("CASH" if rng.random() < 0.3 else "TRANSFER") if payer_reports else "TRANSFER"
+    # method, paid y job_state fijan el desenlace en la actividad reciente; sin ellos todo sale del azar.
+    if method is not None:
+        payment_method = method
+    else:
+        payment_method = ("CASH" if rng.random() < 0.3 else "TRANSFER") if payer_reports else "TRANSFER"
     record = {"id": request_id, "property": prop, "owner": owner, "reporter": reporter, "specialty": specialty,
               "title": title, "status": status, "created": created, "manager": prop["manager"],
-              "payment_method": payment_method}
+              "payment_method": payment_method, "force_paid": paid, "job_state": job_state}
     candidates = [f for f in fixers_for(specialty, prop["city"]) if f["id"] != owner["id"]]
     # Una solicitud abierta de menos de 12 horas aún no tiene ofertas; las de las cuentas protagonistas
     # tienen varias para poder comparar en la demostración.
@@ -737,7 +746,7 @@ def create_job(request, accepted, completed_at, rated):
         # FR-UC-05: un trabajo TRANSFER solo existe con el pago aprobado. Los cerrados se pagaron; de los
         # asignados, unos esperan todavía el pago (pendiente o rechazado) y no tienen trabajo.
         payment_id = uid("payment", quotation_id)
-        paid = completed or rng.random() < 0.7
+        paid = completed or (rng.random() < 0.7 if request["force_paid"] is None else request["force_paid"])
         upper = completed_at - 2 * HOUR if completed else -HOUR
         paid_at = max(accept_time + 300, min(accept_time + rng.randint(1, 48) * HOUR, upper))
         status = "APPROVED" if paid else rng.choice(["PENDING", "PENDING", "DECLINED"])
@@ -761,7 +770,8 @@ def create_job(request, accepted, completed_at, rated):
         origin = f"Cotización aceptada por {money}, pago en efectivo"
     counters["job"] += 1
     job_id = uid("job", counters["job"])
-    job_status = "COMPLETED" if completed else rng.choice(["ASSIGNED", "SCHEDULED", "SCHEDULED", "IN_PROGRESS"])
+    job_status = "COMPLETED" if completed else (
+        request["job_state"] or rng.choice(["ASSIGNED", "SCHEDULED", "SCHEDULED", "IN_PROGRESS"]))
     scheduled_for = None
     started_at = None
     log = [("ASSIGNED", origin, payer if method == "TRANSFER" else owner, job_created)]
@@ -858,7 +868,7 @@ def create_job(request, accepted, completed_at, rated):
                 "comment": rng.choice(REVIEWS[work_rating]), "created_at": T(completed_at + rng.randint(2, 40) * HOUR)})
             fixer["ratings"].append(work_rating)
             notify(fixer, "RATING_RECEIVED", f"Recibiste una calificación de {work_rating} de 5",
-                   f"Un cliente calificó tu trabajo en \"{request['title']}\".", f"/fixers/{fixer['id']}/profile",
+                   f"Un cliente calificó tu trabajo en \"{request['title']}\".", profile_link(fixer),
                    uid("rating", job_id), "RATING", completed_at + 3 * HOUR)
         sql.add("property_work_history", {
             "id": uid("work", job_id), "property_id": request["property"]["id"], "job_id": job_id,
@@ -873,6 +883,12 @@ def create_job(request, accepted, completed_at, rated):
                                           "stage": stage, "caption": rng.choice(["Antes de intervenir", "Trabajo terminado",
                                                                                  "Detalle del arreglo", None]),
                                           "created_at": T(completed_at - HOUR)})
+
+
+def profile_link(fixer):
+    # El id de una cuenta protagonista es un marcador {{U:...}} que solo se resuelve como literal SQL, no
+    # dentro de un texto: su aviso lleva a su portafolio, que es la página de su perfil público.
+    return "/fixers/portfolio" if isinstance(fixer["id"], Raw) else f"/fixers/{fixer['id']}/profile"
 
 
 def property_owned(owner, status="PUBLISHED"):
@@ -1137,3 +1153,153 @@ json.dump(summary, open(os.path.join(RESOURCES, "resumen.json"), "w"), indent=1)
 for table in sql.order:
     print(f"{table:32s} {summary[table]:6d}")
 print("total filas", sum(summary.values()))
+
+# ---------------------------------------------------------------- actividad reciente (actividad.sql)
+# Todo lo de aquí en adelante sale en otro archivo y después de escribir colombia.sql, así que la
+# semilla principal no cambia. Los contadores siguen corriendo, de modo que ningún identificador choca.
+main_summary = summary
+sql = Sql()
+notifications = []
+first_activity_request = uid("request", counters["request"] + 1)
+owner, tenant, fixer_p, manager = users["owner"], users["tenant"], users["fixer"], users["manager"]
+fixer_specs = fixer_p["specialties"]
+managed = [p for p in published if p["manager"] is manager and p["owner"] is not manager]
+managed_bogota = [p for p in managed if p["city"] == "Bogotá"] or managed
+bogota = [p for p in published if p["city"] == "Bogotá" and not p["owner"].get("protagonist")]
+fresh = []
+
+# Propietaria: ofertas que llegaron esta mañana, un pago por hacer, un trabajo en curso y una remodelación nueva.
+fresh.append(create_request(home_b, "OPEN", -14 * HOUR, "PLUMBING", owner, "HIGH", CATALOG["PLUMBING"][1]))
+fresh.append(create_request(home_d, "OPEN", -5 * HOUR, "PAINTING", owner, "MEDIUM", CATALOG["PAINTING"][3]))
+fresh.append(create_request(home_c, "ASSIGNED", -26 * HOUR, "GENERAL", owner, "MEDIUM", CATALOG["GENERAL"][2],
+                            fixer=fixer_p, method="TRANSFER", paid=False))
+fresh.append(create_request(home_b, "ASSIGNED", -3 * DAY, "ELECTRICAL", owner, "HIGH", CATALOG["ELECTRICAL"][1],
+                            fixer=fixer_p, method="CASH", job_state="IN_PROGRESS"))
+fresh.append(create_request(home_e, "COMPLETED", -5 * DAY, "PLUMBING", owner, "MEDIUM", CATALOG["PLUMBING"][2],
+                            fixer=fixer_p, rated=False, method="TRANSFER"))
+create_remodeling(owner, properties[4], "Baño nuevo antes de renovar el contrato", "IMPROVEMENT",
+                  [("MASONRY", CATALOG["MASONRY"][1]), ("PLUMBING", CATALOG["PLUMBING"][5])], "new", -9 * HOUR)
+
+# Arrendatario: un reporte de hoy, un arreglo agendado en su casa y otro esperando técnico.
+fresh.append(create_request(home_a, "OPEN", -3 * HOUR, "PLUMBING", tenant, "MEDIUM", CATALOG["PLUMBING"][3]))
+fresh.append(create_request(home_a, "OPEN", -30 * HOUR, "CARPENTRY", tenant, "LOW", CATALOG["CARPENTRY"][0]))
+fresh.append(create_request(home_a, "ASSIGNED", -2 * DAY, "GENERAL", tenant, "HIGH", CATALOG["GENERAL"][0],
+                            fixer=fixer_p, paid=True, job_state="SCHEDULED"))
+
+# Inmobiliaria: plazos en riesgo y reportes de arrendatarios en sus inmuebles administrados.
+for status, created in [("SLA_WARNING", -41 * HOUR), ("SLA_WARNING", -44 * HOUR), ("SLA_BREACHED", -55 * HOUR)]:
+    prop = rng.choice(managed)
+    fresh.append(create_request(prop, status, created, rng.choice(SPECIALTIES), manager, "URGENT"))
+for hours in (6, 18, 33):
+    prop = rng.choice(managed_bogota)
+    fresh.append(create_request(prop, "OPEN", -hours * HOUR, rng.choice(fixer_specs), tenant_of(prop) or manager))
+
+# Técnico protagonista: trabajos agendados esta semana y solicitudes nuevas de sus especialidades.
+for days in (1, 2, 4):
+    prop = rng.choice(bogota)
+    fresh.append(create_request(prop, "ASSIGNED", -days * DAY - 5 * HOUR, rng.choice(fixer_specs), None, None,
+                                fixer=fixer_p, paid=True, job_state="SCHEDULED"))
+for hours in (2, 7, 15, 22, 40, 52):
+    prop = rng.choice(bogota)
+    fresh.append(create_request(prop, "OPEN", -hours * HOUR, rng.choice(fixer_specs)))
+
+# Resto de la plataforma: lo que pasó en los últimos tres días.
+life = {"OPEN": 40, "ASSIGNED": 30, "COMPLETED": 12, "SLA_WARNING": 5, "SLA_BREACHED": 4, "CANCELLED": 3}
+for _ in range(80):
+    status = rng.choices(list(life), weights=list(life.values()))[0]
+    prop = rng.choice(bogota) if rng.random() < 0.5 else rng.choice(published)
+    if status == "OPEN":
+        created = -rng.randint(1, 72) * HOUR
+    elif status == "ASSIGNED":
+        created = -rng.randint(26, 6 * 24) * HOUR
+    elif status == "COMPLETED":
+        created = -rng.randint(4, 7) * DAY
+    elif status == "SLA_WARNING":
+        created = -rng.randint(38, 46) * HOUR
+    elif status == "SLA_BREACHED":
+        created = -rng.randint(50, 70) * HOUR
+    else:
+        created = -rng.randint(1, 3) * DAY
+    reporter = tenant_of(prop) if rng.random() < 0.4 else None
+    urgency = "URGENT" if status.startswith("SLA") else None
+    fresh.append(create_request(prop, status, created, None, reporter, urgency,
+                                rated=False if status == "COMPLETED" else None))
+
+# Invitaciones de la inmobiliaria al técnico protagonista en lo que acaba de llegar.
+for request in [r for r in fresh if r["status"] == "OPEN" and r["manager"] is manager][:4]:
+    if fixer_p in request["quoted"] or request["specialty"] not in fixer_specs:
+        continue
+    when = min(request["created"] + 2 * HOUR, -HOUR)
+    sql.add("request_invitations", {"id": uid("invitation", request["id"], fixer_p["id"]),
+                                    "request_id": request["id"], "fixer_user_id": fixer_p["id"],
+                                    "invited_by_user_id": manager["id"], "note": "Necesitamos visita esta semana.",
+                                    "created_at": T(when)})
+    notify(fixer_p, "REQUEST_INVITATION", "Te invitaron a cotizar",
+           f"\"{request['title']}\" en {request['property']['city']}.", f"/requests/{request['id']}",
+           request["id"], "REQUEST", when)
+
+# Agenda de las próximas tres semanas: ejecuciones de los trabajos y diagnósticos de lo que se está cotizando.
+for request in fresh:
+    fixer = request.get("assigned")
+    if fixer is not None and request.get("job_status") in ("ASSIGNED", "SCHEDULED"):
+        day = round(request["scheduled_for"].day) if isinstance(request.get("scheduled_for"), BizTime) \
+            else rng.randint(1, 21)
+        status = "CONFIRMED" if request.get("job_status") == "SCHEDULED" else "PROPOSED"
+        add_visit(request, fixer, fixer, "EXECUTION", status, business_time(day * DAY), 90)
+        notify(request["reporter"], "VISIT_PROPOSED" if status == "PROPOSED" else "VISIT_CONFIRMED",
+               "El técnico propuso una visita" if status == "PROPOSED" else "Visita confirmada",
+               f"Para \"{request['title']}\".", "/visits", request["id"], "VISIT",
+               min(request["created"] + 3 * HOUR, -HOUR))
+    elif request["status"] == "OPEN" and request["quoted"] and rng.random() < 0.6:
+        quoting = request["quoted"][0]
+        kind = "KITCHEN_ASSESSMENT" if request["specialty"] in ("CARPENTRY", "MASONRY") and rng.random() < 0.4 \
+            else "DIAGNOSTIC"
+        status = rng.choice(["PROPOSED", "CONFIRMED"])
+        add_visit(request, quoting, request["reporter"], kind, status, business_time(rng.randint(1, 14) * DAY),
+                  rng.choice([60, 90]))
+        notify(quoting, "VISIT_PROPOSED", "Te propusieron una visita técnica",
+               f"Visita para \"{request['title']}\".", "/visits", request["id"], "VISIT",
+               min(request["created"] + 4 * HOUR, -HOUR))
+# Visitas de seguimiento más adelante en el mes para el técnico protagonista.
+for request in [r for r in fresh if r.get("assigned") is fixer_p
+                and r.get("job_status") in ("ASSIGNED", "SCHEDULED", "IN_PROGRESS")][:4]:
+    add_visit(request, fixer_p, request["reporter"], "DIAGNOSTIC", "PROPOSED",
+              business_time(rng.randint(15, 28) * DAY), 60)
+
+for request in [r for r in fresh if r["status"] in ("SLA_WARNING", "SLA_BREACHED")]:
+    kind = "REQUEST_SLA_BREACHED" if request["status"] == "SLA_BREACHED" else "REQUEST_SLA_WARNING"
+    for recipient in [request["owner"]] + ([request["manager"]] if request["manager"] else []) + admins:
+        notify(recipient, kind, "SLA incumplido" if kind.endswith("BREACHED") else "SLA por vencer",
+               f"\"{request['title']}\" necesita atención.", f"/requests/{request['id']}", request["id"], "REQUEST",
+               request["created"] + 40 * HOUR, read=False)
+# Mensajes de las últimas horas en las conversaciones abiertas del técnico protagonista.
+LATE_CHAT = [("tecnico", "Voy en camino, llego en unos 20 minutos."), ("cliente", "Perfecto, lo espero."),
+             ("tecnico", "Ya compré los materiales, mañana arranco temprano."),
+             ("cliente", "¿Me confirma si necesita que esté alguien en la casa?")]
+for request in [r for r in fresh if r.get("assigned") is fixer_p
+                and r.get("job_status") in ("ASSIGNED", "SCHEDULED", "IN_PROGRESS")]:
+    client = request["reporter"]
+    for index, (side, body) in enumerate(LATE_CHAT[: rng.randint(2, 4)]):
+        counters["message"] += 1
+        sql.add("chat_messages", {"id": uid("message", counters["message"]), "request_id": request["id"],
+                                  "sender_user_id": (fixer_p if side == "tecnico" else client)["id"], "body": body,
+                                  "sent_at": T(-(4 - index) * 25 * 60), "notification_status": "SKIPPED"})
+    notify(client, "CHAT_MESSAGE_RECEIVED", "Nuevo mensaje del técnico", f"En \"{request['title']}\".",
+           f"/requests/{request['id']}/messages", request["id"], "REQUEST", -40 * 60, read=False)
+for row in notifications:
+    sql.add("notifications", row)
+
+sql.order = [t for t in ORDER if t in sql.tables] + [t for t in sql.order if t not in ORDER]
+with open(os.path.join(RESOURCES, "actividad.sql"), "w") as fh:
+    # La primera línea nombra una solicitud de este archivo: si ya existe, la actividad ya se cargó.
+    fh.write(f"-- actividad:{first_activity_request}\n")
+    fh.write(sql.render())
+    # Bases sembradas antes de profile_link: sus avisos de calificación al protagonista quedaron con un enlace roto.
+    fh.write("UPDATE notifications SET navigate_to = '/fixers/portfolio' WHERE navigate_to LIKE '/fixers/<%';\n")
+activity = {table: len(rows) for table, rows in sql.tables.items()}
+json.dump({"colombia": main_summary, "actividad": activity}, open(os.path.join(RESOURCES, "resumen.json"), "w"),
+          indent=1)
+print("\nactividad reciente")
+for table in sql.order:
+    print(f"{table:32s} {activity[table]:6d}")
+print("total filas", sum(activity.values()))

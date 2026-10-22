@@ -93,6 +93,21 @@ class SeedDataContextTest {
         assertThat(count("SELECT count(*) FROM technical_visits v JOIN repair_requests r ON r.id = v.request_id "
                 + "WHERE v.status IN ('PROPOSED', 'CONFIRMED') AND r.status IN ('COMPLETED', 'CANCELLED')")).isZero();
 
+        // The recent activity loads on top: the app looks alive for every protagonist on demo day.
+        assertThat(count("SELECT count(*) FROM repair_requests WHERE created_at > CURRENT_TIMESTAMP - INTERVAL '1' DAY"))
+                .isGreaterThan(20);
+        assertThat(count("SELECT count(*) FROM technical_visits WHERE status IN ('PROPOSED', 'CONFIRMED') "
+                + "AND scheduled_at < CURRENT_TIMESTAMP + INTERVAL '7' DAY")).isGreaterThan(15);
+        for (var subject : java.util.List.of("auth0|demo-owner", "auth0|demo-tenant", "auth0|demo-fixer",
+                "auth0|demo-real_estate_manager", "auth0|demo-platform_admin")) {
+            assertThat(count("SELECT count(*) FROM notifications n JOIN users u ON u.id = n.recipient_user_id "
+                    + "WHERE u.auth0_subject = '" + subject + "' AND n.read_at IS NULL "
+                    + "AND n.created_at > CURRENT_TIMESTAMP - INTERVAL '2' DAY")).as(subject).isPositive();
+        }
+        assertThat(count("SELECT count(*) FROM technical_visits v JOIN users u ON u.id = v.requested_by_user_id "
+                + "WHERE u.auth0_subject = 'auth0|demo-tenant' AND v.scheduled_at > CURRENT_TIMESTAMP")).isPositive();
+        assertThat(count("SELECT count(*) FROM notifications WHERE navigate_to LIKE '%<%'")).isZero();
+
         // Every seeded photo reached the storage.
         var keys = jdbc.queryForList("SELECT object_key FROM media_assets WHERE object_key LIKE 'seed/%'", String.class);
         assertThat(keys).hasSizeGreaterThan(500);

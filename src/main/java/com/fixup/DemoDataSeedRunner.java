@@ -45,6 +45,11 @@ import org.springframework.transaction.support.TransactionTemplate;
  * despliegue lo pide de forma explícita (FIXUP_SEED_ENABLED=true). Es idempotente: si ya existen
  * usuarios {@code seed|...} no vuelve a insertar nada, y solo sube las fotos que falten.
  *
+ * <p>Después carga una sola vez seed/actividad.sql: lo que pasó en las últimas horas y lo agendado para
+ * las próximas semanas, con fechas relativas al momento de cargarlo. Así una base sembrada días atrás
+ * recibe actividad reciente sin recrearse; la primera línea del archivo nombra una solicitud que sirve
+ * de marca de que ya se cargó.
+ *
  * <p>Las cinco cuentas protagonistas se resuelven por su subject del proveedor de identidad: en
  * local son las cuentas del perfil demo y en un despliegue con Auth0 se configuran los subjects de
  * las cuentas reales de demostración, de modo que al iniciar sesión vean sus propios datos. Vive en
@@ -60,6 +65,7 @@ class DemoDataSeedRunner implements ApplicationRunner {
     private static final Pattern DATE = Pattern.compile("\\{\\{D:(-?\\d+)\\}\\}");
     private static final Pattern WALL = Pattern.compile("\\{\\{W:(-?\\d+):(\\d+)\\}\\}");
     private static final Pattern USER = Pattern.compile("\\{\\{U:(\\w+)\\}\\}");
+    private static final Pattern ACTIVITY_MARK = Pattern.compile("^-- actividad:([0-9a-f-]{36})");
     private static final DateTimeFormatter TIMESTAMP = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
             .withZone(ZoneOffset.UTC);
     private static final ZoneId COLOMBIA = ZoneId.of("America/Bogota");
@@ -105,7 +111,29 @@ class DemoDataSeedRunner implements ApplicationRunner {
             new TransactionTemplate(transactionManager).executeWithoutResult(status -> load());
             log.info("Demo data loaded in {} ms.", System.currentTimeMillis() - started);
         }
+        loadRecentActivity();
         uploadPhotos();
+    }
+
+    private void loadRecentActivity() {
+        var script = read("seed/actividad.sql");
+        var mark = ACTIVITY_MARK.matcher(script);
+        if (!mark.find()) {
+            throw new IllegalStateException("seed/actividad.sql must start with its activity mark");
+        }
+        Integer present = jdbc.queryForObject("SELECT count(*) FROM repair_requests WHERE id = ?", Integer.class,
+                UUID.fromString(mark.group(1)));
+        if (present != null && present > 0) {
+            log.info("Recent demo activity already present.");
+            return;
+        }
+        var started = System.currentTimeMillis();
+        new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
+            var ids = new LinkedHashMap<String, UUID>();
+            protagonists.forEach((key, protagonist) -> ids.put(key, ensure(protagonist)));
+            execute(resolve(script, ids));
+        });
+        log.info("Recent demo activity loaded in {} ms.", System.currentTimeMillis() - started);
     }
 
     private boolean alreadySeeded() {
@@ -124,7 +152,10 @@ class DemoDataSeedRunner implements ApplicationRunner {
         jdbc.update("DELETE FROM fixer_specialties WHERE fixer_user_id = ?", fixer);
         jdbc.update("DELETE FROM fixer_profiles WHERE user_id = ?", fixer);
 
-        var script = resolve(read("seed/colombia.sql"), ids);
+        execute(resolve(read("seed/colombia.sql"), ids));
+    }
+
+    private void execute(String script) {
         var connection = DataSourceUtils.getConnection(dataSource);
         try {
             ScriptUtils.executeSqlScript(connection, new EncodedResource(
