@@ -1,5 +1,6 @@
 package com.fixup.media.domain;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -23,6 +24,9 @@ public interface PortfolioPieces {
 
     /** Only the pieces the fixer chose to show, in publication order. */
     List<PortfolioPiece> findPublicOfFixer(UUID fixerUserId);
+
+    /** One stable page of public pieces from published portfolios. */
+    PortfolioFeedSlice findPublishedFeed(Collection<UUID> fixerFilter, int page, int size);
 
     void delete(UUID pieceId);
 }

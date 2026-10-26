@@ -38,6 +38,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 @Import(TestJwtConfiguration.class)
+@org.springframework.test.annotation.DirtiesContext
 @Testcontainers
 class MinioStorageIT {
     private static final byte[] VALID_JPEG = new byte[] {(byte) 0xFF, (byte) 0xD8, (byte) 0xFF, 0x01, 0x02, 0x03, 0x04, 0x05};

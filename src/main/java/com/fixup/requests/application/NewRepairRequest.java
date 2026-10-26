@@ -9,7 +9,11 @@ public record NewRepairRequest(UUID propertyId, String title, String description
         List<UUID> mediaIds, UrgencyLevel urgencyLevel, PaymentMethod paymentMethod) {
 
     public NewRepairRequest {
-        java.util.Objects.requireNonNull(paymentMethod, "paymentMethod must not be null");
+        PaymentMethod.requireDigitalCreation(paymentMethod);
+    }
+
+    public NewRepairRequest(UUID propertyId, String title, String description, List<UUID> mediaIds, UrgencyLevel urgencyLevel) {
+        this(propertyId, title, description, mediaIds, urgencyLevel, PaymentMethod.TRANSFER);
     }
 
     public UrgencyLevel urgencyLevel() {

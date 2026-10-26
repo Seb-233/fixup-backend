@@ -10,15 +10,26 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class GetRepairPayment {
     private final RepairPayments payments;
+    private final PaymentAuthorization authorization;
+    private final com.fixup.payments.domain.SimulatedPaymentAttempts attempts;
 
-    GetRepairPayment(RepairPayments payments) {
+    GetRepairPayment(RepairPayments payments, PaymentAuthorization authorization,
+            com.fixup.payments.domain.SimulatedPaymentAttempts attempts) {
         this.payments = payments;
+        this.authorization = authorization;
+        this.attempts = attempts;
     }
 
     @Transactional(readOnly = true)
     public PaymentDetail execute(CurrentActor actor, UUID paymentId) {
         var payment = payments.findById(paymentId).orElseThrow(PaymentNotFoundException::new);
-        PaymentAccess.requireCanRead(actor, payment);
-        return PaymentDetail.from(payment);
+        authorization.requireReader(actor, payment);
+        return PaymentDetail.from(payment, authorization.context(payment.quotationId()));
+    }
+
+    @Transactional(readOnly = true)
+    public java.util.List<PaymentAttemptResult> history(CurrentActor actor, UUID paymentId) {
+        execute(actor, paymentId);
+        return attempts.findByPayment(paymentId).stream().map(PaymentAttemptResult::of).toList();
     }
 }

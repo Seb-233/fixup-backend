@@ -22,7 +22,8 @@ public final class CommissionPolicy {
 
     public static long commissionFor(long grossAmount) {
         requirePositive(grossAmount);
-        return grossAmount * RATE_BASIS_POINTS / BASIS_POINTS_DENOMINATOR;
+        return (grossAmount / BASIS_POINTS_DENOMINATOR) * RATE_BASIS_POINTS
+                + (grossAmount % BASIS_POINTS_DENOMINATOR) * RATE_BASIS_POINTS / BASIS_POINTS_DENOMINATOR;
     }
 
     public static long netFor(long grossAmount) {

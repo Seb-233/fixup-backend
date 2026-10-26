@@ -38,4 +38,8 @@ interface RentalContractJpaRepository extends JpaRepository<RentalContractEntity
         @Param("from") LocalDate from,
         @Param("to") LocalDate to
     );
+
+    @Query("SELECT DISTINCT c.propertyId FROM RentalContractEntity c WHERE c.tenantUserId = :tenantUserId " +
+           "AND c.status IN ('ACTIVE', 'RENEWED') AND c.startDate <= :on AND c.endDate >= :on")
+    List<UUID> findActivePropertyIdsForTenant(@Param("tenantUserId") UUID tenantUserId, @Param("on") LocalDate on);
 }

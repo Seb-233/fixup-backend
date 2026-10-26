@@ -102,6 +102,9 @@ class SecurityConfiguration {
                             .requestMatchers("/contracts/**").authenticated()
                             .requestMatchers("/notifications/**").authenticated()
                             .requestMatchers("/administration/**").authenticated()
+                            .requestMatchers("/management/**").authenticated()
+                            .requestMatchers("/visits/**").authenticated()
+                            .requestMatchers("/ratings/**").authenticated()
                             .requestMatchers("/users/**").authenticated()
                             .requestMatchers("/portfolio/**").authenticated()
                             .requestMatchers("/earnings/**").authenticated()
@@ -123,7 +126,7 @@ class SecurityConfiguration {
         cors.setAllowedOrigins(Arrays.stream(configuredOrigins.split(","))
                 .map(String::trim).filter(origin -> !origin.isEmpty()).toList());
         cors.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-        cors.setAllowedHeaders(List.of("Authorization", "Content-Type", "Accept"));
+        cors.setAllowedHeaders(List.of("Authorization", "Content-Type", "Accept", "Idempotency-Key"));
         cors.setExposedHeaders(List.of("X-Data-Attribution"));
         cors.setAllowCredentials(false);
         cors.setMaxAge(3600L);

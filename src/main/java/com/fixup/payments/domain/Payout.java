@@ -12,7 +12,17 @@ import java.util.UUID;
  * REQUESTED rows remain readable. No banking provider is called.
  */
 public record Payout(UUID id, UUID fixerUserId, long amount, int earningCount, PayoutStatus status,
-        Instant requestedAt, Instant transferredAt) {
+        Instant requestedAt, Instant transferredAt, UUID operationKey) {
+
+    public Payout(UUID id, UUID fixerUserId, long amount, int earningCount, PayoutStatus status, Instant requestedAt, Instant transferredAt) {
+        this(id, fixerUserId, amount, earningCount, status, requestedAt, transferredAt, null);
+    }
+
+    public static Payout requested(UUID id, UUID fixerUserId, long amount, int earningCount, Instant now, UUID key) {
+        java.util.Objects.requireNonNull(key, "operationKey");
+        var draft = requested(id, fixerUserId, amount, earningCount, now);
+        return new Payout(draft.id(), draft.fixerUserId(), draft.amount(), draft.earningCount(), draft.status(), now, null, key);
+    }
 
     public static Payout requested(UUID id, UUID fixerUserId, long amount, int earningCount,
             Instant now) {
@@ -29,6 +39,6 @@ public record Payout(UUID id, UUID fixerUserId, long amount, int earningCount, P
                     "The simulated payout has already been transferred");
         }
         return new Payout(id, fixerUserId, amount, earningCount, PayoutStatus.TRANSFERRED,
-                requestedAt, now);
+                requestedAt, now, operationKey);
     }
 }

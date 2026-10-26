@@ -12,4 +12,7 @@ class JpaSimulatedPaymentAttempts implements SimulatedPaymentAttempts {
     JpaSimulatedPaymentAttempts(SimulatedPaymentAttemptJpaRepository repository) { this.repository = repository; }
     @Override public List<SimulatedPaymentAttempt> findByPayment(UUID paymentId) { return repository.findByPaymentIdOrderByAttemptedAtAsc(paymentId).stream().map(SimulatedPaymentAttemptEntity::toDomain).toList(); }
     @Override public void create(SimulatedPaymentAttempt attempt) { repository.saveAndFlush(SimulatedPaymentAttemptEntity.from(attempt)); }
+    @Override public java.util.Optional<SimulatedPaymentAttempt> findByOperation(UUID paymentId, UUID operationKey) {
+        return repository.findByPaymentIdAndOperationKey(paymentId, operationKey).map(SimulatedPaymentAttemptEntity::toDomain);
+    }
 }

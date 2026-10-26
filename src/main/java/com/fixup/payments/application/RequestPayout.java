@@ -28,20 +28,32 @@ public class RequestPayout {
     }
 
     @Transactional
-    public PayoutSummary execute(CurrentActor actor) {
+    public PayoutSummary execute(CurrentActor actor, UUID operationKey) {
         PaymentAccess.requireActiveFixer(actor);
+        java.util.Objects.requireNonNull(operationKey, "operationKey");
+        payouts.lockFixer(actor.internalUserId());
+        var previous = payouts.findByOperation(actor.internalUserId(), operationKey);
+        if (previous.isPresent()) {
+            var payout = previous.orElseThrow();
+            return PayoutSummary.of(payout, payouts.entries(payout.id()));
+        }
 
         var available = earnings.findAvailableByFixerForUpdate(actor.internalUserId());
-        var amount = available.stream().mapToLong(FixerEarning::netAmount).sum();
+        final long amount;
+        try { amount = available.stream().mapToLong(FixerEarning::netAmount).reduce(0L, Math::addExact); }
+        catch (ArithmeticException overflow) { throw new com.fixup.payments.api.PaymentConflictException("PAYOUT_AMOUNT_OVERFLOW", "Balance exceeds supported integer precision"); }
 
         // Payout.requested rechaza un saldo de cero: no se registran transferencias vacías.
-        var now = Instant.now();
+        var now = Instant.now().truncatedTo(java.time.temporal.ChronoUnit.MICROS);
         var payout = Payout.requested(UUID.randomUUID(), actor.internalUserId(), amount,
-                available.size(), now).transferred(now);
+                available.size(), now, operationKey).transferred(now);
         payouts.create(payout);
 
-        available.forEach(earning -> earnings.update(earning.payOut(now)));
+        available.forEach(earning -> {
+            payouts.include(payout, earning);
+            earnings.update(earning.payOut(now));
+        });
 
-        return PayoutSummary.of(payout);
+        return PayoutSummary.of(payout, payouts.entries(payout.id()));
     }
 }

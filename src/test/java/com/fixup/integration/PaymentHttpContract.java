@@ -75,6 +75,140 @@ abstract class PaymentHttpContract {
     }
 
     @Test
+    void ownerRecoversOnlyOwnPaymentsWithoutSensitivePaymentPartyFields() throws Exception {
+        var own = acceptedTransfer("history-owner");
+        var foreign = acceptedTransfer("history-foreign");
+
+        mvc.perform(get("/payments/me").with(identity(own.ownerSubject())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items", org.hamcrest.Matchers.hasSize(1)))
+                .andExpect(jsonPath("$.items[0].paymentId").value(own.paymentId().toString()))
+                .andExpect(jsonPath("$.items[0].ownerUserId").doesNotExist())
+                .andExpect(jsonPath("$.items[0].fixerUserId").doesNotExist())
+                .andExpect(jsonPath("$.items[0].card").doesNotExist())
+                .andExpect(jsonPath("$.items[0].bank").doesNotExist())
+                .andExpect(jsonPath("$.page").value(0))
+                .andExpect(jsonPath("$.size").value(20))
+                .andExpect(jsonPath("$.hasMore").value(false));
+        mvc.perform(get("/payments/me").with(identity(foreign.ownerSubject())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[0].paymentId").value(foreign.paymentId().toString()));
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM repair_payments", Integer.class)).isEqualTo(2);
+    }
+
+    @Test
+    void managerVisibilityUsesCurrentDelegationAndTenantCannotEnumeratePayments() throws Exception {
+        var transfer = acceptedTransfer("history-manager");
+        String manager = "auth0|payment-manager-history";
+        UUID managerId = provision(manager);
+        jdbc.update("INSERT INTO user_roles(user_id, role) VALUES (?, 'REAL_ESTATE_MANAGER')", managerId);
+        UUID propertyId = jdbc.queryForObject("SELECT property_id FROM repair_requests WHERE id = ?", UUID.class,
+                transfer.requestId());
+        jdbc.update("UPDATE properties SET manager_user_id = ? WHERE id = ?", managerId, propertyId);
+
+        mvc.perform(get("/payments/me").with(identity(manager)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items", org.hamcrest.Matchers.hasSize(1)))
+                .andExpect(jsonPath("$.items[0].paymentId").value(transfer.paymentId().toString()));
+
+        String otherManager = "auth0|payment-other-manager-history";
+        UUID otherManagerId = provision(otherManager);
+        jdbc.update("INSERT INTO user_roles(user_id, role) VALUES (?, 'REAL_ESTATE_MANAGER')", otherManagerId);
+        mvc.perform(get("/payments/me").with(identity(otherManager)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items", org.hamcrest.Matchers.hasSize(0)));
+
+        jdbc.update("UPDATE properties SET manager_user_id = NULL WHERE id = ?", propertyId);
+        mvc.perform(get("/payments/me").with(identity(manager)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items", org.hamcrest.Matchers.hasSize(0)));
+
+        String tenant = "auth0|payment-tenant-history";
+        provisionWithRole(tenant, "TENANT");
+        mvc.perform(get("/payments/me").with(identity(tenant)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+    }
+
+    @Test
+    void paymentRecoveryFiltersStatusRequestAndPurposeWithoutChangingPaymentState() throws Exception {
+        var pending = acceptedTransfer("history-pending");
+        var declined = acceptedTransfer("history-declined");
+        mvc.perform(simulate(declined.paymentId(), "DECLINED", declined.ownerSubject()))
+                .andExpect(status().isOk());
+
+        mvc.perform(get("/payments/me").param("requestId", pending.requestId().toString())
+                        .param("status", "PENDING").param("purpose", "SERVICE")
+                        .with(identity(pending.ownerSubject())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items", org.hamcrest.Matchers.hasSize(1)))
+                .andExpect(jsonPath("$.items[0].paymentId").value(pending.paymentId().toString()))
+                .andExpect(jsonPath("$.items[0].status").value("PENDING"))
+                .andExpect(jsonPath("$.items[0].purpose").value("SERVICE"));
+        mvc.perform(get("/payments/me").param("requestId", declined.requestId().toString())
+                        .param("status", "DECLINED").param("purpose", "SERVICE")
+                        .with(identity(declined.ownerSubject())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items", org.hamcrest.Matchers.hasSize(1)))
+                .andExpect(jsonPath("$.items[0].paymentId").value(declined.paymentId().toString()))
+                .andExpect(jsonPath("$.items[0].status").value("DECLINED"));
+        var cash = acceptedCash("history-purpose", 50_000L);
+        UUID jobId = jdbc.queryForObject("SELECT id FROM jobs WHERE quotation_id = ?", UUID.class, cash.quotationId());
+        mvc.perform(post("/jobs/" + jobId + "/complete").with(identity(cash.fixerSubject()))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"receivedAmount\":30000}"))
+                .andExpect(status().isOk());
+        UUID debtId = jdbc.queryForObject("SELECT id FROM owner_debts WHERE quotation_id = ?", UUID.class, cash.quotationId());
+        var debtPayment = mvc.perform(post("/payments/debts/" + debtId + "/pay").with(identity(cash.ownerSubject())))
+                .andExpect(status().isCreated()).andReturn();
+        UUID debtPaymentId = UUID.fromString(mapper.readTree(debtPayment.getResponse().getContentAsString())
+                .get("paymentId").asText());
+        mvc.perform(get("/payments/me").param("requestId", cash.requestId().toString())
+                        .param("purpose", "OUTSTANDING_BALANCE").with(identity(cash.ownerSubject())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items", org.hamcrest.Matchers.hasSize(1)))
+                .andExpect(jsonPath("$.items[0].paymentId").value(debtPaymentId.toString()))
+                .andExpect(jsonPath("$.items[0].purpose").value("OUTSTANDING_BALANCE"));
+        assertThat(jdbc.queryForObject("SELECT status FROM repair_payments WHERE id = ?", String.class,
+                pending.paymentId())).isEqualTo("PENDING");
+    }
+
+    @Test
+    void paymentRecoveryHasStablePagesAndRejectsOutOfContractPageBounds() throws Exception {
+        var first = acceptedTransfer("history-page-1");
+        var second = acceptedTransfer("history-page-2");
+        var third = acceptedTransfer("history-page-3");
+        String manager = "auth0|payment-page-manager";
+        UUID managerId = provision(manager);
+        jdbc.update("INSERT INTO user_roles(user_id, role) VALUES (?, 'REAL_ESTATE_MANAGER')", managerId);
+        for (UUID requestId : java.util.List.of(first.requestId(), second.requestId(), third.requestId())) {
+            UUID propertyId = jdbc.queryForObject("SELECT property_id FROM repair_requests WHERE id = ?", UUID.class, requestId);
+            jdbc.update("UPDATE properties SET manager_user_id = ? WHERE id = ?", managerId, propertyId);
+        }
+
+        var firstPage = mvc.perform(get("/payments/me").param("size", "2").with(identity(manager)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items", org.hamcrest.Matchers.hasSize(2)))
+                .andExpect(jsonPath("$.hasMore").value(true)).andReturn();
+        var repeated = mvc.perform(get("/payments/me").param("size", "2").with(identity(manager)))
+                .andExpect(status().isOk()).andReturn();
+        assertThat(mapper.readTree(firstPage.getResponse().getContentAsString()).at("/items").toString())
+                .isEqualTo(mapper.readTree(repeated.getResponse().getContentAsString()).at("/items").toString());
+        mvc.perform(get("/payments/me").param("page", "1").param("size", "2").with(identity(manager)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items", org.hamcrest.Matchers.hasSize(1)))
+                .andExpect(jsonPath("$.hasMore").value(false));
+        for (String page : new String[] {"-1", "not-a-number"}) {
+            mvc.perform(get("/payments/me").param("page", page).with(identity(manager)))
+                    .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
+        }
+        for (String size : new String[] {"0", "51", "not-a-number"}) {
+            mvc.perform(get("/payments/me").param("size", size).with(identity(manager)))
+                    .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
+        }
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM repair_payments", Integer.class)).isEqualTo(3);
+    }
+
+    @Test
     void onlyTheOwningOwnerCanSimulateAndMissingPaymentsReturnNotFound() throws Exception {
         var transfer = acceptedTransfer("authorization");
         String otherOwner = "auth0|payment-other-simulate";
@@ -239,7 +373,7 @@ abstract class PaymentHttpContract {
         String requestBody = """
                 {"propertyId":"%s","title":"Fuga de agua","description":"Reparar tuberia principal",
                  "mediaIds":[],"paymentMethod":"%s"}
-                """.formatted(propertyId, method);
+                """.formatted(propertyId, "TRANSFER");
         var requestResult = mvc.perform(post("/requests").with(identity(owner))
                         .contentType(MediaType.APPLICATION_JSON).content(requestBody))
                 .andExpect(status().isCreated()).andReturn();
@@ -255,6 +389,10 @@ abstract class PaymentHttpContract {
                 .andExpect(status().isCreated()).andReturn();
         UUID quotationId = UUID.fromString(mapper.readTree(quotationResult.getResponse().getContentAsString())
                 .get("id").asText());
+        if (method.equals("CASH")) {
+            com.fixup.testsupport.HistoricalCashFixtures.acceptedJob(jdbc, quotationId);
+            return new AcceptedTransfer(null, quotationId, requestId, ownerId, fixerId, owner, fixer);
+        }
         var acceptance = mvc.perform(post("/quotations/" + quotationId + "/accept").with(identity(owner)))
                 .andExpect(status().isOk()).andReturn();
         UUID paymentId = null;
@@ -294,7 +432,7 @@ abstract class PaymentHttpContract {
                 .andExpect(jsonPath("$[0].status").value("COMPLETED"));
         assertThat(jdbc.queryForObject("SELECT status FROM fixer_earnings WHERE quotation_id = ?",
                 String.class, transfer.quotationId())).isEqualTo("AVAILABLE");
-        mvc.perform(post("/payments/me/payouts").with(identity(transfer.fixerSubject())))
+        mvc.perform(post("/payments/me/payouts").header("Idempotency-Key", UUID.randomUUID()).with(identity(transfer.fixerSubject())))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.status").value("TRANSFERRED"))
                 .andExpect(jsonPath("$.amount").value(405_000))
@@ -390,6 +528,7 @@ abstract class PaymentHttpContract {
     @Test
     void fullCashCompletionCreatesOnlyAnAuditedSettlement() throws Exception {
         var cash = acceptedCash("final-cash-full");
+        UUID priorMessageId = sendMessageBeforeCompletion(cash);
         UUID jobId = jdbc.queryForObject("SELECT id FROM jobs WHERE quotation_id = ?", UUID.class,
                 cash.quotationId());
         mvc.perform(post("/jobs/" + jobId + "/complete").with(identity(cash.fixerSubject())))
@@ -428,11 +567,7 @@ abstract class PaymentHttpContract {
                 Integer.class, cash.quotationId())).isZero();
         assertThat(jdbc.queryForObject("SELECT count(*) FROM fixer_earnings WHERE quotation_id = ?",
                 Integer.class, cash.quotationId())).isZero();
-        mvc.perform(post("/requests/" + cash.requestId() + "/messages")
-                        .with(identity(cash.ownerSubject()))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"body\":\"Confirmemos el saldo pendiente\"}"))
-                .andExpect(status().isCreated());
+        assertCompletedChatIsReadOnly(cash, priorMessageId);
         mvc.perform(post("/jobs/" + jobId + "/complete").with(identity(cash.fixerSubject()))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"receivedAmount\":450000}"))
@@ -461,6 +596,7 @@ abstract class PaymentHttpContract {
     @Test
     void partialCashDebtBlocksCreationThenTransferApprovalUnlocksOwner() throws Exception {
         var cash = acceptedCash("final-cash-partial");
+        UUID priorMessageId = sendMessageBeforeCompletion(cash);
         UUID jobId = jdbc.queryForObject("SELECT id FROM jobs WHERE quotation_id = ?", UUID.class,
                 cash.quotationId());
         mvc.perform(post("/jobs/" + jobId + "/complete").with(identity(cash.fixerSubject()))
@@ -481,11 +617,7 @@ abstract class PaymentHttpContract {
                 .with(identity(unrelatedOwner))).andExpect(status().is4xxClientError());
         assertThat(jdbc.queryForObject("SELECT amount FROM owner_debts WHERE id = ?", Long.class,
                 debtId)).isEqualTo(40_000L);
-        mvc.perform(post("/requests/" + cash.requestId() + "/messages")
-                        .with(identity(cash.ownerSubject()))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"body\":\"Confirmemos el saldo pendiente\"}"))
-                .andExpect(status().isCreated());
+        assertCompletedChatIsReadOnly(cash, priorMessageId);
         assertThat(jdbc.queryForObject("SELECT count(*) FROM fixer_earnings WHERE quotation_id = ?",
                 Integer.class, cash.quotationId())).isZero();
         mvc.perform(get("/payments/me/debts").with(identity(cash.ownerSubject())))
@@ -505,7 +637,7 @@ abstract class PaymentHttpContract {
         String remodelingBody = """
                 {"propertyId":"%s","title":"Proyecto nuevo","requirements":[
                  {"title":"Nueva fuga","description":"Reparar tuberia","mediaIds":[],
-                  "paymentMethod":"CASH"}]}
+                  "paymentMethod":"TRANSFER"}]}
                 """.formatted(propertyId);
         mvc.perform(post("/remodelings").with(identity(cash.ownerSubject()))
                         .contentType(MediaType.APPLICATION_JSON).content(remodelingBody))
@@ -544,11 +676,45 @@ abstract class PaymentHttpContract {
                 Long.class, cash.quotationId())).isEqualTo(36_000L);
         assertThat(jdbc.queryForObject("SELECT status FROM fixer_earnings WHERE quotation_id = ?",
                 String.class, cash.quotationId())).isEqualTo("AVAILABLE");
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM fixer_earnings WHERE quotation_id = ?",
+                Integer.class, cash.quotationId())).isEqualTo(1);
         assertThat(jdbc.queryForObject("SELECT count(*) FROM jobs WHERE quotation_id = ?",
                 Integer.class, cash.quotationId())).isEqualTo(1);
         mvc.perform(post("/requests").with(identity(cash.ownerSubject()))
                         .contentType(MediaType.APPLICATION_JSON).content(requestBody))
                 .andExpect(status().isCreated());
+    }
+
+    private UUID sendMessageBeforeCompletion(AcceptedTransfer cash) throws Exception {
+        var sent = mvc.perform(post("/requests/" + cash.requestId() + "/messages")
+                        .with(identity(cash.ownerSubject()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"body\":\"Coordinemos la reparación\"}"))
+                .andExpect(status().isCreated()).andReturn();
+        return UUID.fromString(mapper.readTree(sent.getResponse().getContentAsString()).get("id").asText());
+    }
+
+    private void assertCompletedChatIsReadOnly(AcceptedTransfer cash, UUID priorMessageId) throws Exception {
+        assertThat(jdbc.queryForObject("SELECT status FROM repair_requests WHERE id = ?",
+                String.class, cash.requestId())).isEqualTo("COMPLETED");
+        var before = jdbc.queryForList("SELECT * FROM chat_messages WHERE request_id = ? ORDER BY sent_at, id",
+                cash.requestId());
+        assertThat(before).hasSize(1);
+        mvc.perform(post("/requests/" + cash.requestId() + "/messages")
+                        .with(identity(cash.ownerSubject()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"body\":\"Confirmemos el saldo pendiente\"}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("REQUEST_NOT_ASSIGNED"));
+        assertThat(jdbc.queryForList("SELECT * FROM chat_messages WHERE request_id = ? ORDER BY sent_at, id",
+                cash.requestId())).isEqualTo(before);
+        for (String participant : java.util.List.of(cash.ownerSubject(), cash.fixerSubject())) {
+            mvc.perform(get("/requests/" + cash.requestId() + "/messages").with(identity(participant)))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$", org.hamcrest.Matchers.hasSize(1)))
+                    .andExpect(jsonPath("$[0].id").value(priorMessageId.toString()))
+                    .andExpect(jsonPath("$[0].body").value("Coordinemos la reparación"));
+        }
     }
 
     private RequestPostProcessor identity(String subject) {

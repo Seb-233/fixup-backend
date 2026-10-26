@@ -1,20 +1,20 @@
 package com.fixup.requests.infrastructure;
 
+import com.fixup.fixers.api.Specialty;
 import com.fixup.requests.api.RepairRequestNotFoundException;
 import com.fixup.requests.api.RepairRequestStatus;
-import com.fixup.fixers.api.Specialty;
 import com.fixup.requests.domain.RepairRequest;
 import com.fixup.requests.domain.RepairRequests;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
-import org.springframework.stereotype.Repository;
-import org.springframework.transaction.annotation.Transactional;
 
 @Repository
 class JpaRepairRequests implements RepairRequests {
@@ -51,6 +51,17 @@ class JpaRepairRequests implements RepairRequests {
     @Override
     public List<RepairRequest> findByOwner(UUID ownerUserId) {
         return repository.findByOwnerUserIdOrderByCreatedAtDesc(ownerUserId).stream()
+                .map(RepairRequestEntity::toDomain).toList();
+    }
+
+    @Override
+    public List<RepairRequest> findByParticipant(UUID userId) {
+        return repository.findByParticipant(userId).stream().map(RepairRequestEntity::toDomain).toList();
+    }
+
+    @Override
+    public List<RepairRequest> findByManager(UUID managerUserId) {
+        return repository.findByManagerUserIdOrderByCreatedAtDesc(managerUserId).stream()
                 .map(RepairRequestEntity::toDomain).toList();
     }
 

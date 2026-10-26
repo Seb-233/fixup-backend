@@ -14,6 +14,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 @Import({TestJwtConfiguration.class, TestStorageConfiguration.class})
+@org.springframework.test.annotation.DirtiesContext
 @Testcontainers
 class PostgresPaymentIT extends PaymentHttpContract {
     @Container static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:17-alpine");

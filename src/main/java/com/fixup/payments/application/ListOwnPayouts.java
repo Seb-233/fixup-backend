@@ -18,6 +18,6 @@ public class ListOwnPayouts {
     @Transactional(readOnly = true)
     public List<PayoutSummary> execute(CurrentActor actor) {
         PaymentAccess.requireActiveFixer(actor);
-        return payouts.findByFixer(actor.internalUserId()).stream().map(PayoutSummary::of).toList();
+        return payouts.findByFixer(actor.internalUserId()).stream().map(p -> PayoutSummary.of(p, payouts.entries(p.id()))).toList();
     }
 }

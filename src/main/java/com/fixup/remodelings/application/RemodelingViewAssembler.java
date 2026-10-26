@@ -4,11 +4,14 @@ import com.fixup.identityaccess.api.CurrentActor;
 import com.fixup.jobs.api.JobDirectory;
 import com.fixup.jobs.api.JobSnapshot;
 import com.fixup.jobs.api.JobStatus;
+import com.fixup.remodelings.api.RemodelingGoal;
+import com.fixup.remodelings.api.RemodelingProgressStatus;
 import com.fixup.remodelings.domain.RemodelingProgress;
 import com.fixup.remodelings.domain.RemodelingProject;
 import com.fixup.remodelings.domain.RemodelingRequirement;
 import com.fixup.requests.api.ProjectRepairRequestSnapshot;
 import com.fixup.requests.api.RepairRequestDirectory;
+import org.springframework.stereotype.Component;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -16,7 +19,6 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
-import org.springframework.stereotype.Component;
 
 @Component
 class RemodelingViewAssembler {
@@ -43,7 +45,8 @@ class RemodelingViewAssembler {
             var progress = progress(project, context);
             return new RemodelingProjectSummary(project.id(), project.propertyId(), project.title(),
                     progress.status(), progress.requirementCount(), progress.assignedCount(),
-                    progress.completedCount(), project.createdAt());
+                    progress.completedCount(), project.createdAt(), project.plan().goal(),
+                    project.plan().targetRent(), project.plan().listingPublishedAt());
         }).toList();
     }
 
@@ -58,10 +61,14 @@ class RemodelingViewAssembler {
                 .filter(view -> view.jobStatus() == JobStatus.COMPLETED)
                 .count();
         var progress = RemodelingProgress.calculate(requirementViews.size(), assigned, completed);
+        var plan = project.plan();
+        boolean readyToPublish = plan.goal() == RemodelingGoal.PRE_RENTAL && plan.listingPublishedAt() == null
+                && progress.status() == RemodelingProgressStatus.COMPLETED;
         return new RemodelingProjectDetail(project.id(), project.propertyId(), project.ownerUserId(),
                 project.title(), project.description(), progress.status(), progress.requirementCount(),
                 progress.assignedCount(), progress.completedCount(), requirementViews,
-                project.createdAt(), project.updatedAt());
+                project.createdAt(), project.updatedAt(), plan.goal(), plan.targetRent(), plan.targetReadyDate(),
+                plan.listingPublishedAt(), readyToPublish);
     }
 
     private RemodelingProgress progress(RemodelingProject project, Context context) {

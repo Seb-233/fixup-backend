@@ -9,6 +9,8 @@ public interface RepairPayments {
     Optional<RepairPayment> findByIdForUpdate(UUID id);
     Optional<RepairPayment> findByQuotationAndPurpose(UUID quotationId, PaymentPurpose purpose);
     List<RepairPayment> findByOwner(UUID ownerUserId);
+    RepairPaymentPage findVisibleForPayer(UUID actorUserId, UUID requestId, PaymentStatus status,
+            PaymentPurpose purpose, int page, int size);
     void create(RepairPayment payment);
     void update(RepairPayment payment);
 }

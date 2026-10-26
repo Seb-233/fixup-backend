@@ -1,9 +1,6 @@
 package com.fixup.payments.application;
 
 import com.fixup.identityaccess.api.CurrentActor;
-import com.fixup.identityaccess.api.Role;
-import com.fixup.identityaccess.api.UserStatus;
-import com.fixup.payments.api.PaymentAccessDeniedException;
 import com.fixup.payments.api.DebtNotFoundException;
 import com.fixup.payments.api.PaymentConflictException;
 import com.fixup.payments.domain.DebtStatus;
@@ -22,23 +19,21 @@ public class InitiateDebtPayment {
     private final OwnerDebts debts;
     private final RepairPayments payments;
     private final Clock clock;
+    private final PaymentAuthorization authorization;
 
-    InitiateDebtPayment(OwnerDebts debts, RepairPayments payments, Clock clock) {
+    InitiateDebtPayment(OwnerDebts debts, RepairPayments payments, Clock clock, PaymentAuthorization authorization) {
         this.debts = debts;
         this.payments = payments;
         this.clock = clock;
+        this.authorization = authorization;
     }
 
     @Transactional
     public PaymentDetail execute(CurrentActor actor, UUID debtId) {
-        if (actor.status() != UserStatus.ACTIVE || !actor.hasRole(Role.OWNER)) {
-            throw new PaymentAccessDeniedException();
-        }
+        var visible = debts.findById(debtId).orElseThrow(DebtNotFoundException::new);
+        authorization.requirePayer(actor, visible.quotationId(), visible.ownerUserId());
         var debt = debts.findByIdForUpdate(debtId)
                 .orElseThrow(DebtNotFoundException::new);
-        if (!debt.ownerUserId().equals(actor.internalUserId())) {
-            throw new PaymentAccessDeniedException();
-        }
         if (debt.status() != DebtStatus.OUTSTANDING) {
             throw new PaymentConflictException("DEBT_ALREADY_PAID", "The debt is already paid");
         }

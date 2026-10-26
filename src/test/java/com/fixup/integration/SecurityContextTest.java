@@ -23,6 +23,7 @@ import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.containsStringIgnoringCase;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -126,6 +127,31 @@ class SecurityContextTest {
         mvc.perform(patch("/notifications/read-all").with(jwt())
                         .header("Origin", "https://untrusted.example.test"))
                 .andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+    }
+
+    @Test
+    void corsAllowsIdempotencyKeyForFinancialPreflightsWithoutBypassingFinancialAuthentication() throws Exception {
+        for (String path : new String[]{"/payments/00000000-0000-0000-0000-000000000001/attempts",
+                "/payments/me/payouts"}) {
+            mvc.perform(options(path).header("Origin", "http://localhost:4200")
+                            .header("Access-Control-Request-Method", "POST")
+                            .header("Access-Control-Request-Headers", "authorization,content-type,idempotency-key"))
+                    .andExpect(status().isOk())
+                    .andExpect(header().string("Access-Control-Allow-Origin", "http://localhost:4200"))
+                    .andExpect(header().string("Access-Control-Allow-Headers", containsStringIgnoringCase("authorization")))
+                    .andExpect(header().string("Access-Control-Allow-Headers", containsStringIgnoringCase("content-type")))
+                    .andExpect(header().string("Access-Control-Allow-Headers", containsStringIgnoringCase("idempotency-key")))
+                    .andExpect(header().string("Access-Control-Allow-Methods", containsStringIgnoringCase("post")));
+        }
+        mvc.perform(options("/payments/me/payouts").header("Origin", "https://untrusted.example.test")
+                        .header("Access-Control-Request-Method", "POST")
+                        .header("Access-Control-Request-Headers", "idempotency-key"))
+                .andExpect(status().isForbidden())
+                .andExpect(header().doesNotExist("Access-Control-Allow-Origin"));
+        mvc.perform(post("/payments/me/payouts").header("Origin", "http://localhost:4200")
+                        .header("Idempotency-Key", "00000000-0000-0000-0000-000000000001"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(header().string("Access-Control-Allow-Origin", "http://localhost:4200"));
     }
 
     @Test

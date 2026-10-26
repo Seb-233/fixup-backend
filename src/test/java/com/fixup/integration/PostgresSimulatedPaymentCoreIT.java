@@ -35,6 +35,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 @Import({TestJwtConfiguration.class, TestStorageConfiguration.class})
+@org.springframework.test.annotation.DirtiesContext
 @Testcontainers
 class PostgresSimulatedPaymentCoreIT {
     @Container static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:17-alpine");
@@ -75,8 +76,10 @@ class PostgresSimulatedPaymentCoreIT {
         payments.create(payment(quotation, UUID.randomUUID(), owner, fixer, UUID.randomUUID()));
         assertThatThrownBy(() -> payments.create(payment(quotation, UUID.randomUUID(), owner, fixer, UUID.randomUUID())))
                 .isInstanceOf(DataIntegrityViolationException.class);
-        assertThatThrownBy(() -> jdbc.update("INSERT INTO repair_payments (id, quotation_id, request_id, owner_user_id, fixer_user_id, amount, payment_method, purpose, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 0, 'CARD', 'SERVICE', 'PENDING', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)", UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), owner, fixer))
-                .isInstanceOf(DataIntegrityViolationException.class);
+        UUID invalidPayment = UUID.randomUUID();
+        String validReference = "FXR-" + invalidPayment.toString().replace("-", "").toUpperCase(java.util.Locale.ROOT);
+        assertThatThrownBy(() -> jdbc.update("INSERT INTO repair_payments (id, quotation_id, request_id, owner_user_id, fixer_user_id, amount, payment_method, purpose, status, created_at, updated_at, reference) VALUES (?, ?, ?, ?, ?, 0, 'TRANSFER', 'SERVICE', 'PENDING', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?)", invalidPayment, UUID.randomUUID(), UUID.randomUUID(), owner, fixer, validReference))
+                .isInstanceOf(DataIntegrityViolationException.class).hasStackTraceContaining("ck_repair_payment_amount");
 
         var debt = OwnerDebt.outstanding(UUID.randomUUID(), owner, fixer, UUID.randomUUID(), UUID.randomUUID(), 20_000, now);
         debts.create(debt);

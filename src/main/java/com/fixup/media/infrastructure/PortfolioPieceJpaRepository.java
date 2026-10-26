@@ -2,8 +2,11 @@ package com.fixup.media.infrastructure;
 
 import com.fixup.media.api.PortfolioVisibility;
 import jakarta.persistence.LockModeType;
+import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Slice;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
@@ -23,4 +26,15 @@ interface PortfolioPieceJpaRepository extends JpaRepository<PortfolioPieceEntity
     @Query("select piece from PortfolioPieceEntity piece where piece.fixerUserId = :fixerUserId "
             + "order by piece.position asc")
     List<PortfolioPieceEntity> lockByFixerUserIdOrderByPositionAsc(@Param("fixerUserId") UUID fixerUserId);
+
+    @Query("select piece from PortfolioPieceEntity piece, FixerPortfolioEntity portfolio "
+            + "where portfolio.fixerUserId = piece.fixerUserId and portfolio.status = 'PUBLISHED' "
+            + "and piece.visibility = 'PUBLIC' order by piece.position asc, piece.id asc")
+    Slice<PortfolioPieceEntity> findPublishedFeed(Pageable pageable);
+
+    @Query("select piece from PortfolioPieceEntity piece, FixerPortfolioEntity portfolio "
+            + "where portfolio.fixerUserId = piece.fixerUserId and portfolio.status = 'PUBLISHED' "
+            + "and piece.visibility = 'PUBLIC' and piece.fixerUserId in :fixers "
+            + "order by piece.position asc, piece.id asc")
+    Slice<PortfolioPieceEntity> findPublishedFeedOf(@Param("fixers") Collection<UUID> fixers, Pageable pageable);
 }
