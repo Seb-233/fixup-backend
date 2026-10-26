@@ -45,6 +45,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 @Import({TestJwtConfiguration.class, TestStorageConfiguration.class})
+@org.springframework.test.annotation.DirtiesContext
 @Testcontainers
 class PostgresRowLevelSecurityIT {
     @Container
@@ -112,8 +113,8 @@ class PostgresRowLevelSecurityIT {
     private UUID createRequest(UUID ownerId, String specialty, String title) {
         UUID propertyId = createProperty(ownerId, title + " Property");
         UUID id = UUID.randomUUID();
-        jdbc.update("INSERT INTO repair_requests (id, property_id, owner_user_id, specialty, title, description, status, "
-                        + "created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'fixture description', 'OPEN', "
+        jdbc.update("INSERT INTO repair_requests (id, property_id, owner_user_id, specialty, title, description, status, payment_method, "
+                        + "created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'fixture description', 'OPEN', 'TRANSFER', "
                         + "CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
                 id, propertyId, ownerId, specialty, title);
         return id;
@@ -150,6 +151,27 @@ class PostgresRowLevelSecurityIT {
 
     private long quotationAmount(UUID quotationId) {
         return jdbc.queryForObject("SELECT amount FROM quotations WHERE id = ?", Long.class, quotationId);
+    }
+
+    private UUID createRepairPayment(UUID ownerId, UUID fixerId) {
+        UUID id = UUID.randomUUID();
+        jdbc.update("INSERT INTO repair_payments (id, quotation_id, request_id, owner_user_id, fixer_user_id, amount, payment_method, purpose, status, created_at, updated_at, reference) VALUES (?, ?, ?, ?, ?, 100000, 'TRANSFER', 'SERVICE', 'PENDING', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?)",
+                id, UUID.randomUUID(), UUID.randomUUID(), ownerId, fixerId,
+                "FXR-"+id.toString().replace("-", "").toUpperCase(java.util.Locale.ROOT));
+        return id;
+    }
+
+    private UUID createOwnerDebt(UUID ownerId, UUID fixerId) {
+        UUID id = UUID.randomUUID();
+        jdbc.update("INSERT INTO owner_debts (id, owner_user_id, fixer_user_id, request_id, quotation_id, amount, status, created_at) VALUES (?, ?, ?, ?, ?, 10000, 'OUTSTANDING', CURRENT_TIMESTAMP)",
+                id, ownerId, fixerId, UUID.randomUUID(), UUID.randomUUID());
+        return id;
+    }
+
+    private UUID createPaymentAttempt(UUID paymentId, UUID actorId) {
+        UUID id = UUID.randomUUID();
+        jdbc.update("INSERT INTO simulated_payment_attempts (id, payment_id, requested_outcome, resulting_status, attempted_by_user_id, attempted_at) VALUES (?, ?, 'DECLINED', 'DECLINED', ?, CURRENT_TIMESTAMP)", id, paymentId, actorId);
+        return id;
     }
 
     // ---------- RLS session helper: exactly what RlsSessionTransactionManager does for a request ----------
@@ -196,6 +218,18 @@ class PostgresRowLevelSecurityIT {
 
     private List<UUID> visibleQuotationIds(UUID userId, String role) {
         return actingAs(userId, role, connection -> queryUuids(connection, "SELECT id FROM quotations"));
+    }
+
+    private List<UUID> visibleRepairPaymentIds(UUID userId, String role) {
+        return actingAs(userId, role, connection -> queryUuids(connection, "SELECT id FROM repair_payments"));
+    }
+
+    private List<UUID> visibleOwnerDebtIds(UUID userId, String role) {
+        return actingAs(userId, role, connection -> queryUuids(connection, "SELECT id FROM owner_debts"));
+    }
+
+    private List<UUID> visiblePaymentAttemptIds(UUID userId, String role) {
+        return actingAs(userId, role, connection -> queryUuids(connection, "SELECT id FROM simulated_payment_attempts"));
     }
 
     private List<UUID> visibleVerificationDocumentMediaIds(UUID userId, String role) {
@@ -359,9 +393,9 @@ class PostgresRowLevelSecurityIT {
     private UUID createAssignedRequest(UUID ownerId, UUID fixerId, String specialty, String title) {
         UUID propertyId = createProperty(ownerId, title + " Property");
         UUID id = UUID.randomUUID();
-        jdbc.update("INSERT INTO repair_requests (id, property_id, owner_user_id, specialty, title, description, status, "
+        jdbc.update("INSERT INTO repair_requests (id, property_id, owner_user_id, specialty, title, description, status, payment_method, "
                         + "assigned_fixer_user_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, "
-                        + "'fixture description', 'ASSIGNED', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
+                        + "'fixture description', 'ASSIGNED', 'TRANSFER', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
                 id, propertyId, ownerId, specialty, title, fixerId);
         return id;
     }
@@ -514,6 +548,70 @@ class PostgresRowLevelSecurityIT {
                 }
             }
         });
+    }
+
+    @Test
+    void paymentsDebtsAndAttemptsFollowOwnerFixerAndAdminVisibility() throws Exception {
+        UUID ownerA = provisionWithRole("auth0|rls-payment-owner-a", "OWNER");
+        UUID ownerB = provisionWithRole("auth0|rls-payment-owner-b", "OWNER");
+        UUID fixerA = provisionVerifiedFixer("auth0|rls-payment-fixer-a", "PLUMBING");
+        UUID fixerB = provisionVerifiedFixer("auth0|rls-payment-fixer-b", "PLUMBING");
+        UUID admin = provisionAdmin("auth0|rls-payment-admin");
+        UUID payment = createRepairPayment(ownerA, fixerA);
+        UUID debt = createOwnerDebt(ownerA, fixerA);
+        UUID attempt = createPaymentAttempt(payment, ownerA);
+
+        assertThat(visibleRepairPaymentIds(ownerA, "OWNER")).containsExactly(payment);
+        assertThat(visibleRepairPaymentIds(ownerB, "OWNER")).isEmpty();
+        assertThat(visibleRepairPaymentIds(fixerA, "FIXER")).containsExactly(payment);
+        assertThat(visibleRepairPaymentIds(fixerB, "FIXER")).isEmpty();
+        assertThat(visibleRepairPaymentIds(admin, "PLATFORM_ADMIN")).containsExactly(payment);
+
+        assertThat(visibleOwnerDebtIds(ownerA, "OWNER")).containsExactly(debt);
+        assertThat(visibleOwnerDebtIds(ownerB, "OWNER")).isEmpty();
+        assertThat(visibleOwnerDebtIds(fixerA, "FIXER")).containsExactly(debt);
+        assertThat(visibleOwnerDebtIds(fixerB, "FIXER")).isEmpty();
+        assertThat(visibleOwnerDebtIds(admin, "PLATFORM_ADMIN")).containsExactly(debt);
+
+        assertThat(visiblePaymentAttemptIds(ownerA, "OWNER")).containsExactly(attempt);
+        assertThat(visiblePaymentAttemptIds(ownerB, "OWNER")).isEmpty();
+        assertThat(visiblePaymentAttemptIds(fixerA, "FIXER")).containsExactly(attempt);
+        assertThat(visiblePaymentAttemptIds(fixerB, "FIXER")).isEmpty();
+        assertThat(visiblePaymentAttemptIds(admin, "PLATFORM_ADMIN")).containsExactly(attempt);
+    }
+
+    @Test
+    void cashSettlementIsVisibleOnlyToItsPartiesAndPlatformAdmin() throws Exception {
+        UUID owner = provisionWithRole("auth0|rls-cash-owner", "OWNER");
+        UUID unrelatedOwner = provisionWithRole("auth0|rls-cash-other", "OWNER");
+        UUID fixer = provisionVerifiedFixer("auth0|rls-cash-fixer", "PLUMBING");
+        UUID unrelatedFixer = provisionVerifiedFixer("auth0|rls-cash-other-fixer", "PLUMBING");
+        UUID admin = provisionAdmin("auth0|rls-cash-admin");
+        UUID request = createRequest(owner, "PLUMBING", "Cash settlement RLS");
+        UUID quotation = createQuotation(request, fixer, 100_000);
+        UUID job = com.fixup.testsupport.HistoricalCashFixtures.acceptedJob(jdbc, quotation);
+        UUID settlement = UUID.randomUUID();
+        jdbc.update("UPDATE jobs SET status='COMPLETED',completed_at=CURRENT_TIMESTAMP WHERE id=?",job);
+        jdbc.update("INSERT INTO cash_settlements (id, job_id, quotation_id, request_id, "
+                + "owner_user_id, fixer_user_id, agreed_amount, received_amount, outstanding_amount, "
+                + "settled_at) VALUES (?, ?, ?, ?, ?, ?, 100000, 60000, 40000, CURRENT_TIMESTAMP)",
+                settlement, job, quotation, request, owner, fixer);
+
+        List<UUID> ownerVisible = actingAs(owner, "OWNER",
+                c -> queryUuids(c, "SELECT id FROM cash_settlements"));
+        List<UUID> fixerVisible = actingAs(fixer, "FIXER",
+                c -> queryUuids(c, "SELECT id FROM cash_settlements"));
+        List<UUID> adminVisible = actingAs(admin, "PLATFORM_ADMIN",
+                c -> queryUuids(c, "SELECT id FROM cash_settlements"));
+        List<UUID> otherOwnerVisible = actingAs(unrelatedOwner, "OWNER",
+                c -> queryUuids(c, "SELECT id FROM cash_settlements"));
+        List<UUID> otherFixerVisible = actingAs(unrelatedFixer, "FIXER",
+                c -> queryUuids(c, "SELECT id FROM cash_settlements"));
+        assertThat(ownerVisible).containsExactly(settlement);
+        assertThat(fixerVisible).containsExactly(settlement);
+        assertThat(adminVisible).containsExactly(settlement);
+        assertThat(otherOwnerVisible).isEmpty();
+        assertThat(otherFixerVisible).isEmpty();
     }
 
     @org.junit.jupiter.api.Test

@@ -25,6 +25,10 @@ class JobEntity {
     private UUID fixerUserId;
     @Column(name = "owner_user_id", nullable = false, updatable = false)
     private UUID ownerUserId;
+    @Column(name = "payment_method", nullable = false, updatable = false, length = 16)
+    private String paymentMethod;
+    @Column(name = "agreed_amount", nullable = false, updatable = false)
+    private long agreedAmount;
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 32)
     private JobStatus status;
@@ -51,6 +55,8 @@ class JobEntity {
         entity.quotationId = job.quotationId();
         entity.fixerUserId = job.fixerUserId();
         entity.ownerUserId = job.ownerUserId();
+        entity.paymentMethod = job.paymentMethod();
+        entity.agreedAmount = job.agreedAmount();
         entity.createdAt = job.createdAt();
         entity.apply(job);
         return entity;
@@ -67,7 +73,8 @@ class JobEntity {
     }
 
     Job toDomain() {
-        return new Job(id, requestId, quotationId, fixerUserId, ownerUserId, status, createdAt,
+        return new Job(id, requestId, quotationId, fixerUserId, ownerUserId, paymentMethod,
+                agreedAmount, status, createdAt,
                 completedAt, updatedAt, scheduledFor, startedAt, progressNote);
     }
 }

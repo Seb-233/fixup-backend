@@ -635,7 +635,7 @@ def create_request(prop, status, created, specialty=None, reporter=None, urgency
         "last_escalation_notified_at": T(sla_deadline) if status in ("SLA_WARNING", "SLA_BREACHED") else None,
         "requested_by_user_id": reporter["id"], "manager_user_id": prop["manager"]["id"] if prop["manager"] else None,
         "property_name": prop["name"], "property_address": prop["address"],
-        "completed_at": T(completed_at) if completed_at else None})
+        "completed_at": T(completed_at) if completed_at else None, "payment_method": "TRANSFER"})
     photo_tag = specialty if ("solicitud", specialty) in images else None
     for order in range(rng.choice([0, 1, 1, 2]) if photo_tag else 0):
         media_id = media(reporter, "REPAIR_REQUEST", "solicitud", photo_tag, created - 600)
@@ -711,7 +711,7 @@ def create_job(request, accepted, completed_at, rated):
     created_job = accept_time
     sql.add("jobs", {"id": job_id, "request_id": request["id"], "quotation_id": quotation_id,
                      "fixer_user_id": fixer["id"], "owner_user_id": owner["id"], "status": job_status,
-                     "created_at": T(created_job),
+                     "created_at": T(created_job), "payment_method": "TRANSFER", "agreed_amount": amount,
                      "completed_at": T(completed_at) if job_status == "COMPLETED" else None,
                      "updated_at": T(log[-1][3]), "scheduled_for": T(scheduled_for) if scheduled_for else None,
                      "started_at": T(started_at) if started_at else None, "progress_note": log[-1][1]})
@@ -720,33 +720,35 @@ def create_job(request, accepted, completed_at, rated):
                                    "note": note, "changed_by_user_id": actor["id"], "changed_at": T(when)})
     notify(fixer, "QUOTATION_ACCEPTED", "Aceptaron tu cotización",
            f"Tu oferta para \"{request['title']}\" fue aceptada.", "/jobs/me", quotation_id, "QUOTATION", accept_time)
-    # Payment: completed jobs are paid; open jobs are paid about half the time.
-    paid = job_status == "COMPLETED" or rng.random() < 0.55
-    charge_id = uid("charge", quotation_id)
-    paid_at = accept_time + rng.randint(1, 48) * HOUR
-    if job_status == "COMPLETED":
-        paid_at = min(paid_at, completed_at - HOUR)
-    paid_at = min(paid_at, -HOUR)
-    reference = "FXR-" + "".join(rng.choice("ABCDEFGHJKLMNPQRSTUVWXYZ23456789") for _ in range(8))
-    sql.add("owner_payments", {
-        "id": charge_id, "quotation_id": quotation_id, "request_id": request["id"],
+    # Every digital job requires an approved canonical payment before opening.
+    payment_id = uid("payment", quotation_id)
+    paid_at = accept_time
+    reference = "FXR-" + payment_id.replace("-", "").upper()
+    sql.add("repair_payment_contexts", {
+        "quotation_id": quotation_id, "request_id": request["id"],
         "property_id": request["property"]["id"], "owner_user_id": owner["id"],
         "manager_user_id": request["manager"]["id"] if request["manager"] else None, "fixer_user_id": fixer["id"],
-        "specialty": request["specialty"], "concept": request["title"], "amount": amount, "reference": reference,
-        "status": "APPROVED" if paid else "PENDING",
-        "method": rng.choice(["SANDBOX_CARD", "SANDBOX_PSE", "SANDBOX_NEQUI"]) if paid else None,
-        "gateway_transaction_id": ("SBX-" + uid("tx", charge_id)[:13].upper()) if paid else None,
-        "failure_reason": None, "attempts": 1 if paid else 0, "paid_by_user_id": payer["id"] if paid else None,
-        "created_at": T(accept_time), "updated_at": T(paid_at if paid else accept_time),
-        "approved_at": T(paid_at) if paid else None})
-    if paid:
-        notify(fixer, "PAYMENT_APPROVED", "El cliente pagó el trabajo",
+        "specialty": request["specialty"], "concept": request["title"],
+        "captured_at": T(accept_time), "source": "ACCEPTANCE"})
+    sql.add("repair_payments", {
+        "id": payment_id, "quotation_id": quotation_id, "request_id": request["id"],
+        "owner_user_id": owner["id"], "fixer_user_id": fixer["id"], "amount": amount,
+        "reference": reference, "payment_method": "TRANSFER", "purpose": "SERVICE", "status": "APPROVED",
+        "created_at": T(accept_time), "updated_at": T(paid_at), "completed_at": T(paid_at)})
+    sql.add("simulated_payment_attempts", {
+        "id": uid("attempt", payment_id), "payment_id": payment_id,
+        "requested_outcome": "APPROVED", "resulting_status": "APPROVED",
+        "attempted_by_user_id": payer["id"], "attempted_at": T(paid_at),
+        "operation_key": uid("payment-operation", payment_id), "payment_reference": reference,
+        "amount": amount, "instrument": rng.choice(["SANDBOX_CARD", "SANDBOX_PSE", "SANDBOX_NEQUI"]),
+        "scenario": "APPROVE", "gateway_transaction_id": "SBX-" + uid("tx", payment_id), "failure_reason": None})
+    notify(fixer, "PAYMENT_APPROVED", "El cliente pagó el trabajo",
                f"Recibimos el pago de \"{request['title']}\". Queda en garantía hasta que cierres el trabajo.",
-               "/payments/earnings", charge_id, "CHARGE", paid_at)
+               "/payments/earnings", payment_id, "PAYMENT", paid_at)
     commission = amount * 1000 // 10000
     earning_status = "HELD"
     released_at = None
-    if job_status == "COMPLETED" and paid:
+    if job_status == "COMPLETED":
         earning_status = "AVAILABLE"
         released_at = max(completed_at, paid_at)
     sql.add("fixer_earnings", {
@@ -754,8 +756,7 @@ def create_job(request, accepted, completed_at, rated):
         "gross_amount": amount, "commission_amount": commission, "net_amount": amount - commission,
         "commission_rate_bps": 1000, "status": earning_status, "created_at": T(accept_time),
         "released_at": T(released_at) if released_at else None, "paid_out_at": None,
-        "updated_at": T(released_at or accept_time), "funded_at": T(paid_at) if paid else None,
-        "job_completed_at": T(completed_at) if job_status == "COMPLETED" else None})
+        "updated_at": T(released_at or accept_time)})
     fixer.setdefault("earnings", []).append({"id": uid("earning", quotation_id), "net": amount - commission,
                                              "status": earning_status, "released": released_at})
     request.update({"job_id": job_id, "job_status": job_status, "amount": amount, "accept_time": accept_time,
@@ -790,7 +791,8 @@ def create_job(request, accepted, completed_at, rated):
                 "comment": rng.choice(REVIEWS[work_rating]), "created_at": T(completed_at + rng.randint(2, 40) * HOUR)})
             fixer["ratings"].append(work_rating)
             notify(fixer, "RATING_RECEIVED", f"Recibiste una calificación de {work_rating} de 5",
-                   f"Un cliente calificó tu trabajo en \"{request['title']}\".", f"/fixers/{fixer['id']}/profile",
+                   f"Un cliente calificó tu trabajo en \"{request['title']}\".",
+                   Raw("'/fixers/' || CAST(" + q(fixer["id"]) + " AS VARCHAR) || '/profile'"),
                    uid("rating", job_id), "RATING", completed_at + 3 * HOUR)
         sql.add("property_work_history", {
             "id": uid("work", job_id), "property_id": request["property"]["id"], "job_id": job_id,
@@ -859,6 +861,29 @@ for _ in range(380):
         create_request(prop, status, created, rng.choice(users["fixer"]["specialties"]), reporter, urgency)
         continue
     create_request(prop, status, created, None, reporter, urgency, fixer=fixer)
+
+# Recent demo activity deliberately uses the same digital lifecycle as the rest of the
+# dataset.  These named records make the landing pages useful immediately after loading
+# the demo without reviving the retired CASH/owner-payments model.
+managed_demo_property = next(p for p in published if p["manager"] is users["manager"])
+tenant_demo_property = next(p for p in published if tenant_of(p) is users["tenant"])
+recent_activity = [
+    (home_a, "OPEN", -4 * HOUR, "PLUMBING", users["tenant"], "URGENT",
+     ("Fuga reciente bajo el lavaplatos", "La tubería gotea desde esta mañana y necesita revisión prioritaria."), None),
+    (home_b, "ASSIGNED", -2 * DAY, "ELECTRICAL", users["owner"], "HIGH",
+     ("Tablero listo para visita programada", "La visita quedó acordada para revisar los interruptores del apartamento."), users["fixer"]),
+    (home_c, "COMPLETED", -5 * DAY, "PAINTING", users["owner"], "MEDIUM",
+     ("Retoque terminado antes de mostrar el inmueble", "Se corrigieron las manchas y el apartamento quedó listo para publicarse."), users["fixer"]),
+    (managed_demo_property, "SLA_WARNING", -54 * HOUR, "GENERAL", users["manager"], "URGENT",
+     ("Seguimiento administrativo de reparación prioritaria", "La administración reportó que la reparación requiere atención dentro del SLA."), None),
+    (tenant_demo_property, "ASSIGNED", -3 * DAY, "CARPENTRY", users["tenant"], "MEDIUM",
+     ("Ajuste de puertas solicitado por arrendatario", "Las puertas del clóset requieren nivelación y ajuste de bisagras."), None),
+    (home_d, "OPEN", -9 * HOUR, "MASONRY", users["owner"], "MEDIUM",
+     ("Revisión previa a remodelación", "Se necesita una cotización para reparar el enchape antes de iniciar la remodelación."), None),
+]
+for prop, status, created, specialty, reporter, urgency, title_desc, fixer in recent_activity:
+    create_request(prop, status, created, specialty, reporter, urgency, title_desc, fixer=fixer,
+                   rated=status == "COMPLETED")
 
 # Manager invitations on open managed requests.
 for request in [r for r in requests_out if r["status"] == "OPEN" and r["manager"] is not None][:40]:
@@ -1016,20 +1041,25 @@ for fixer in fixers:
 for fixer in fixers:
     for doc in fixer.get("docs", []):
         sql.add("fixer_verification_documents", doc)
+payout_transitions = []
 for fixer in verified:
     available = [e for e in fixer.get("earnings", []) if e["status"] == "AVAILABLE" and e["released"] < -10 * DAY]
     if len(available) >= 2 and rng.random() < 0.7:
         chosen = available[: max(1, len(available) * 2 // 3)]
         counters["payout"] += 1
         requested = max(e["released"] for e in chosen) + DAY
-        sql.add("payouts", {"id": uid("payout", counters["payout"]), "fixer_user_id": fixer["id"],
+        payout_id = uid("payout", counters["payout"])
+        sql.add("payouts", {"id": payout_id, "fixer_user_id": fixer["id"],
                             "amount": sum(e["net"] for e in chosen), "earning_count": len(chosen),
-                            "status": "REQUESTED", "requested_at": T(requested)})
+                            "status": "TRANSFERRED", "requested_at": T(requested),
+                            "transferred_at": T(requested), "operation_key": uid("payout-operation", payout_id)})
         for earning in chosen:
-            for row in sql.tables["fixer_earnings"]:
-                if row["id"] == earning["id"]:
-                    row.update({"status": "PAID_OUT", "paid_out_at": T(requested), "updated_at": T(requested)})
-                    earning["status"] = "PAID_OUT"
+            sql.add("payout_entries", {"earning_id": earning["id"], "payout_id": payout_id,
+                                      "fixer_user_id": fixer["id"], "net_amount": earning["net"]})
+            # V42 requires AVAILABLE when the immutable entry is inserted; settle in this same transaction.
+            payout_transitions.append(f"UPDATE fixer_earnings SET status = 'PAID_OUT', paid_out_at = {q(T(requested))}, "
+                                      f"updated_at = {q(T(requested))} WHERE id = {q(earning['id'])};\n")
+            earning["status"] = "PAID_OUT"
 
 # Admin notices: fixers waiting for review, SLA escalations.
 for fixer in [f for f in fixers if f["status"] == "PENDING" and f["profile_row"]["submitted_at"] is not None]:
@@ -1056,12 +1086,14 @@ for row in notifications:
 ORDER = ["users", "user_roles", "fixer_profiles", "fixer_specialties", "media_assets", "fixer_verification_documents",
          "fixer_portfolios", "portfolio_pieces", "properties", "property_photos", "rental_contracts",
          "repair_requests", "repair_request_photos", "quotations", "jobs", "job_status_log", "job_evidences",
-         "fixer_earnings", "payouts", "owner_payments", "chat_messages", "service_ratings", "property_work_history",
+         "repair_payment_contexts", "repair_payments", "simulated_payment_attempts",
+         "fixer_earnings", "payouts", "payout_entries", "chat_messages", "service_ratings", "property_work_history",
          "remodeling_projects", "remodeling_requirements", "request_invitations", "technical_visits",
          "visit_checklist_items", "notifications"]
 sql.order = [t for t in ORDER if t in sql.tables] + [t for t in sql.order if t not in ORDER]
-with open(os.path.join(RESOURCES, "colombia.sql"), "w") as fh:
+with open(os.path.join(RESOURCES, "colombia.sql"), "w", encoding="utf-8", newline="\n") as fh:
     fh.write(sql.render())
+    fh.writelines(payout_transitions)
 summary = {table: len(rows) for table, rows in sql.tables.items()}
 json.dump(summary, open(os.path.join(RESOURCES, "resumen.json"), "w"), indent=1)
 for table in sql.order:

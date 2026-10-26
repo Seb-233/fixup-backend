@@ -1,6 +1,7 @@
 package com.fixup.quotations.web;
 
 import com.fixup.identityaccess.api.CurrentActorProvider;
+import com.fixup.quotations.application.AcceptedQuotation;
 import com.fixup.quotations.api.QuotationStatus;
 import com.fixup.quotations.application.AcceptQuotation;
 import com.fixup.quotations.application.ListOwnQuotations;
@@ -111,9 +112,9 @@ class QuotationController {
     @Operation(summary = "Accept a quotation",
             description = "Closes the request against the chosen fixer and rejects the remaining offers "
                     + "in the same transaction.")
-    @ApiResponse(responseCode = "200", description = "The accepted quotation")
-    QuotationResponse accept(@PathVariable UUID quotationId) {
-        return QuotationResponse.of(acceptQuotation.execute(actors.currentActor(), quotationId));
+    @ApiResponse(responseCode = "200", description = "The accepted quotation and its next payment step")
+    AcceptedQuotationResponse accept(@PathVariable UUID quotationId) {
+        return AcceptedQuotationResponse.of(acceptQuotation.execute(actors.currentActor(), quotationId));
     }
 
     @PostMapping("/{quotationId}/reject")
@@ -156,6 +157,17 @@ class QuotationController {
         QuotationResponse withRequestTitle(String title) {
             return new QuotationResponse(id, requestId, fixerUserId, amount, estimatedDays, message, status, createdAt,
                     fixerName, fixerRatingAverage, fixerRatingCount, fixerCity, title);
+        }
+    }
+
+    @Schema(requiredProperties = {"quotationId", "requestId", "paymentMethod"})
+    record AcceptedQuotationResponse(UUID quotationId, UUID requestId,
+            com.fixup.requests.api.PaymentMethod paymentMethod,
+            @Schema(types = {"string", "null"}, format = "uuid") UUID paymentId) {
+
+        static AcceptedQuotationResponse of(AcceptedQuotation result) {
+            return new AcceptedQuotationResponse(result.quotationId(), result.requestId(),
+                    result.paymentMethod(), result.paymentId());
         }
     }
 }

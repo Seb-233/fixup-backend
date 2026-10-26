@@ -868,7 +868,7 @@
       "get" : {
         "tags" : [ "chat-controller" ],
         "summary" : "Read the chat thread for a repair request",
-        "description" : "Requires an active account that is either the owner of the request, its assigned fixer, or an active PLATFORM_ADMIN. Oldest message first.",
+        "description" : "Active owner, original reporter, request manager, assigned fixer or PLATFORM_ADMIN. History remains readable after completion. Oldest message first; third parties are denied.",
         "operationId" : "list",
         "parameters" : [ {
           "name" : "requestId",
@@ -921,7 +921,7 @@
             }
           },
           "409" : {
-            "description" : "The request has no assigned fixer yet",
+            "description" : "REQUEST_NOT_ASSIGNED: writing requires an active assigned request; completed chats are read-only",
             "content" : {
               "application/json" : {
                 "schema" : {
@@ -951,7 +951,7 @@
       "post" : {
         "tags" : [ "chat-controller" ],
         "summary" : "Send a chat message",
-        "description" : "Requires an active account that is either the owner of the request or its assigned fixer, and the request must already have an assigned fixer.",
+        "description" : "Active owner, original reporter, request manager or assigned fixer. Requires ASSIGNED, SLA_WARNING or SLA_BREACHED with an assigned fixer. COMPLETED is read-only (409 REQUEST_NOT_ASSIGNED).",
         "operationId" : "send",
         "parameters" : [ {
           "name" : "requestId",
@@ -1014,7 +1014,7 @@
             }
           },
           "409" : {
-            "description" : "The request has no assigned fixer yet",
+            "description" : "REQUEST_NOT_ASSIGNED: writing requires an active assigned request; completed chats are read-only",
             "content" : {
               "application/json" : {
                 "schema" : {
@@ -1579,11 +1579,11 @@
             }
           },
           "200" : {
-            "description" : "The accepted quotation",
+            "description" : "The accepted quotation and its next payment step",
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/QuotationResponse"
+                  "$ref" : "#/components/schemas/AcceptedQuotationResponse"
                 }
               }
             }
@@ -1746,6 +1746,188 @@
         }
       }
     },
+    "/payments/{paymentId}/attempts" : {
+      "get" : {
+        "tags" : [ "payment-controller" ],
+        "summary" : "Read immutable attempts visible to authorized payment participants",
+        "operationId" : "history",
+        "parameters" : [ {
+          "name" : "paymentId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "responses" : {
+          "400" : {
+            "description" : "Unexpected client fields",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "The caller cannot perform this payment operation",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "The requested financial resource does not exist",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "The requested financial transition conflicts with current state",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "200" : {
+            "description" : "Attempt history; unavailable legacy gateway metadata is omitted",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/PaymentAttemptResult"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      },
+      "post" : {
+        "tags" : [ "payment-controller" ],
+        "summary" : "Pay the exact reference and amount through the sandbox",
+        "description" : "Owner or current property manager. Idempotency-Key is a UUID scoped to the payment. Replay returns the original operation result; a different body or actor conflicts. The server controls the sandbox scenario. No real funds are processed.",
+        "operationId" : "attempt",
+        "parameters" : [ {
+          "name" : "paymentId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        }, {
+          "name" : "Idempotency-Key",
+          "in" : "header",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/AttemptRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "400" : {
+            "description" : "Unexpected client fields",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "The caller cannot perform this payment operation",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "The requested financial resource does not exist",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "The requested financial transition conflicts with current state",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "200" : {
+            "description" : "Immutable operation result, including on replay",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PaymentAttemptResult"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
     "/payments/me/payouts" : {
       "get" : {
         "tags" : [ "payment-controller" ],
@@ -1773,7 +1955,7 @@
             }
           },
           "403" : {
-            "description" : "Inactive account or missing FIXER role",
+            "description" : "The caller cannot perform this payment operation",
             "content" : {
               "application/json" : {
                 "schema" : {
@@ -1783,7 +1965,7 @@
             }
           },
           "404" : {
-            "description" : "The account has no payment record",
+            "description" : "The requested financial resource does not exist",
             "content" : {
               "application/json" : {
                 "schema" : {
@@ -1793,7 +1975,7 @@
             }
           },
           "409" : {
-            "description" : "There is no available balance to transfer",
+            "description" : "The requested financial transition conflicts with current state",
             "content" : {
               "application/json" : {
                 "schema" : {
@@ -1822,9 +2004,18 @@
       },
       "post" : {
         "tags" : [ "payment-controller" ],
-        "summary" : "Request the transfer of the available balance",
-        "description" : "Academic scope: the request is recorded, no banking API is called. Reading the balance and consuming it happen in the same transaction.",
+        "summary" : "Simulate the transfer of the available balance",
+        "description" : "No banking API is called. The payout reaches TRANSFERRED and its earnings become PAID_OUT in one transaction. Requires UUID Idempotency-Key and no body. Repeating a key for the same fixer returns the original payout (201), without consuming later earnings.",
         "operationId" : "payout",
+        "parameters" : [ {
+          "name" : "Idempotency-Key",
+          "in" : "header",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
         "responses" : {
           "400" : {
             "description" : "Unexpected client fields",
@@ -1847,7 +2038,7 @@
             }
           },
           "403" : {
-            "description" : "Inactive account or missing FIXER role",
+            "description" : "The caller cannot perform this payment operation",
             "content" : {
               "application/json" : {
                 "schema" : {
@@ -1857,7 +2048,7 @@
             }
           },
           "404" : {
-            "description" : "The account has no payment record",
+            "description" : "The requested financial resource does not exist",
             "content" : {
               "application/json" : {
                 "schema" : {
@@ -1867,7 +2058,7 @@
             }
           },
           "409" : {
-            "description" : "There is no available balance to transfer",
+            "description" : "The requested financial transition conflicts with current state",
             "content" : {
               "application/json" : {
                 "schema" : {
@@ -1877,7 +2068,7 @@
             }
           },
           "201" : {
-            "description" : "The transfer request was recorded",
+            "description" : "The payout was simulated and transferred",
             "content" : {
               "application/json" : {
                 "schema" : {
@@ -1892,14 +2083,13 @@
         } ]
       }
     },
-    "/payments/charges/{chargeId}/pay" : {
+    "/payments/debts/{debtId}/pay" : {
       "post" : {
         "tags" : [ "payment-controller" ],
-        "summary" : "Pay a charge in the sandbox gateway (FR-UC-22)",
-        "description" : "Academic scope: no card, account or phone data is sent or stored. The gateway checks that the payer, the reference and the amount match the charge. scenario=DECLINE_FUNDS or DECLINE_BANK simulates a rejection.",
-        "operationId" : "pay",
+        "summary" : "Initiate or reuse a simulated transfer for an outstanding debt",
+        "operationId" : "initiateDebt",
         "parameters" : [ {
-          "name" : "chargeId",
+          "name" : "debtId",
           "in" : "path",
           "required" : true,
           "schema" : {
@@ -1907,16 +2097,6 @@
             "format" : "uuid"
           }
         } ],
-        "requestBody" : {
-          "content" : {
-            "application/json" : {
-              "schema" : {
-                "$ref" : "#/components/schemas/PayRequest"
-              }
-            }
-          },
-          "required" : true
-        },
         "responses" : {
           "400" : {
             "description" : "Unexpected client fields",
@@ -1939,7 +2119,7 @@
             }
           },
           "403" : {
-            "description" : "Inactive account or missing FIXER role",
+            "description" : "The caller cannot perform this payment operation",
             "content" : {
               "application/json" : {
                 "schema" : {
@@ -1949,7 +2129,7 @@
             }
           },
           "404" : {
-            "description" : "The account has no payment record",
+            "description" : "The requested financial resource does not exist",
             "content" : {
               "application/json" : {
                 "schema" : {
@@ -1959,11 +2139,21 @@
             }
           },
           "409" : {
-            "description" : "There is no available balance to transfer",
+            "description" : "The requested financial transition conflicts with current state",
             "content" : {
               "application/json" : {
                 "schema" : {
                   "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "201" : {
+            "description" : "Debt payment ready to simulate",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PaymentDetail"
                 }
               }
             }
@@ -2778,6 +2968,16 @@
                 }
               }
             }
+          },
+          "200" : {
+            "description" : "Job in progress",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/JobResponse"
+                }
+              }
+            }
           }
         },
         "security" : [ {
@@ -2856,6 +3056,16 @@
               "application/json" : {
                 "schema" : {
                   "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "200" : {
+            "description" : "Scheduled job",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/JobResponse"
                 }
               }
             }
@@ -2940,6 +3150,19 @@
                 }
               }
             }
+          },
+          "200" : {
+            "description" : "Attached evidence",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/EvidenceResponse"
+                  }
+                }
+              }
+            }
           }
         },
         "security" : [ {
@@ -2951,7 +3174,7 @@
       "post" : {
         "tags" : [ "job-controller" ],
         "summary" : "Close a finished job",
-        "description" : "Closes the request, records the work in the property's history and releases from escrow the amount the owner paid. Only the assigned fixer can close his own job.",
+        "description" : "Closes the request and records the work in the property's history. CASH requires receivedAmount; TRANSFER rejects it. Only the assigned fixer can close his own job.",
         "operationId" : "complete_1",
         "parameters" : [ {
           "name" : "jobId",
@@ -2966,7 +3189,7 @@
           "content" : {
             "application/json" : {
               "schema" : {
-                "$ref" : "#/components/schemas/NoteRequest"
+                "$ref" : "#/components/schemas/CompletionRequest"
               }
             }
           }
@@ -4988,148 +5211,14 @@
         }
       }
     },
-    "/payments/me/earnings" : {
+    "/payments/{paymentId}" : {
       "get" : {
         "tags" : [ "payment-controller" ],
-        "summary" : "Read the current fixer's balance, commissions and history",
-        "description" : "Amounts are whole Colombian pesos. The available balance is what can be transferred today; the held balance belongs to jobs that are not closed yet.",
-        "operationId" : "earnings",
-        "responses" : {
-          "400" : {
-            "description" : "Unexpected client fields",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "401" : {
-            "description" : "Missing or invalid bearer token",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "403" : {
-            "description" : "Inactive account or missing FIXER role",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "404" : {
-            "description" : "The account has no payment record",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "409" : {
-            "description" : "There is no available balance to transfer",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "200" : {
-            "description" : "Balance and history of the current fixer",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/EarningsResponse"
-                }
-              }
-            }
-          }
-        },
-        "security" : [ {
-          "bearerAuth" : [ ]
-        } ]
-      }
-    },
-    "/payments/charges/me" : {
-      "get" : {
-        "tags" : [ "payment-controller" ],
-        "summary" : "Charges the current owner or manager must pay or already paid (FR-UC-05)",
-        "operationId" : "myCharges",
-        "responses" : {
-          "400" : {
-            "description" : "Unexpected client fields",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "401" : {
-            "description" : "Missing or invalid bearer token",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "403" : {
-            "description" : "Inactive account or missing FIXER role",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "404" : {
-            "description" : "The account has no payment record",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "409" : {
-            "description" : "There is no available balance to transfer",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        },
-        "security" : [ {
-          "bearerAuth" : [ ]
-        } ]
-      }
-    },
-    "/payments/charges/for-request/{requestId}" : {
-      "get" : {
-        "tags" : [ "payment-controller" ],
-        "summary" : "The charge of a repair request, for the payer, the fixer or a platform admin",
-        "operationId" : "chargeForRequest",
+        "summary" : "Read a simulated service or outstanding-balance payment",
+        "description" : "The responsible owner, current property manager, beneficiary fixer and platform administrators can audit visible payments.",
+        "operationId" : "payment",
         "parameters" : [ {
-          "name" : "requestId",
+          "name" : "paymentId",
           "in" : "path",
           "required" : true,
           "schema" : {
@@ -5159,7 +5248,7 @@
             }
           },
           "403" : {
-            "description" : "Inactive account or missing FIXER role",
+            "description" : "The caller cannot perform this payment operation",
             "content" : {
               "application/json" : {
                 "schema" : {
@@ -5169,7 +5258,7 @@
             }
           },
           "404" : {
-            "description" : "The account has no payment record",
+            "description" : "The requested financial resource does not exist",
             "content" : {
               "application/json" : {
                 "schema" : {
@@ -5179,11 +5268,364 @@
             }
           },
           "409" : {
-            "description" : "There is no available balance to transfer",
+            "description" : "The requested financial transition conflicts with current state",
             "content" : {
               "application/json" : {
                 "schema" : {
                   "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "200" : {
+            "description" : "Authoritative payment state",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PaymentDetail"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/payments/me" : {
+      "get" : {
+        "tags" : [ "payment-controller" ],
+        "summary" : "Recover visible digital payments for the current payer",
+        "description" : "Returns a bounded page of canonical payments owned by the caller or currently delegated to the caller as real-estate manager. Order is createdAt descending, then payment ID descending. Fixers use earnings endpoints instead.",
+        "operationId" : "payments",
+        "parameters" : [ {
+          "name" : "requestId",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        }, {
+          "name" : "status",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "$ref" : "#/components/schemas/PaymentStatus"
+          }
+        }, {
+          "name" : "purpose",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "$ref" : "#/components/schemas/PaymentPurpose"
+          }
+        }, {
+          "name" : "page",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "default" : 0
+          }
+        }, {
+          "name" : "size",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "default" : 20
+          }
+        } ],
+        "responses" : {
+          "400" : {
+            "description" : "Unexpected client fields",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "The caller cannot perform this payment operation",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "The requested financial resource does not exist",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "The requested financial transition conflicts with current state",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "200" : {
+            "description" : "Bounded authorized payment page",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PaymentPageResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/payments/me/earnings" : {
+      "get" : {
+        "tags" : [ "payment-controller" ],
+        "summary" : "Read the current fixer's balance, commissions and history",
+        "description" : "Amounts are whole Colombian pesos. The available balance is what can be transferred today; the held balance belongs to jobs that are not closed yet.",
+        "operationId" : "earnings",
+        "responses" : {
+          "400" : {
+            "description" : "Unexpected client fields",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "The caller cannot perform this payment operation",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "The requested financial resource does not exist",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "The requested financial transition conflicts with current state",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "200" : {
+            "description" : "Balance and history of the current fixer",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/EarningsResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/payments/me/debts" : {
+      "get" : {
+        "tags" : [ "payment-controller" ],
+        "summary" : "List the current owner's outstanding debts",
+        "operationId" : "debts",
+        "responses" : {
+          "400" : {
+            "description" : "Unexpected client fields",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "The caller cannot perform this payment operation",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "The requested financial resource does not exist",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "The requested financial transition conflicts with current state",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "200" : {
+            "description" : "Outstanding debts of the owner",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/OwnerDebtDetail"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/payments/cash-settlements/jobs/{jobId}" : {
+      "get" : {
+        "tags" : [ "payment-controller" ],
+        "summary" : "Read the authoritative cash settlement for a completed job",
+        "operationId" : "cashSettlement",
+        "parameters" : [ {
+          "name" : "jobId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "responses" : {
+          "400" : {
+            "description" : "Unexpected client fields",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "The caller cannot perform this payment operation",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "The requested financial resource does not exist",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "The requested financial transition conflicts with current state",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "200" : {
+            "description" : "Audited cash settlement",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/CashSettlementDetail"
                 }
               }
             }
@@ -5327,6 +5769,109 @@
                     "type" : "integer",
                     "format" : "int64"
                   }
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
+    "/media/portfolio/feed" : {
+      "get" : {
+        "tags" : [ "portfolio-controller" ],
+        "summary" : "Browse public pieces from published portfolios",
+        "description" : "Ideas feed for active users. Results are stable by piece position and identifier; size is capped at 48 and fixerUserIds accepts at most 200 values.",
+        "operationId" : "feed",
+        "parameters" : [ {
+          "name" : "page",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "default" : 0
+          }
+        }, {
+          "name" : "size",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "default" : 24
+          }
+        }, {
+          "name" : "fixerUserIds",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string",
+              "format" : "uuid"
+            }
+          }
+        } ],
+        "responses" : {
+          "400" : {
+            "description" : "Missing or invalid field",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Inactive account, or the fixer is not verified",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "PIECE_NOT_FOUND, media or portfolio not found",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "A publication or media rule rejected the operation",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "200" : {
+            "description" : "One page of public portfolio pieces",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PortfolioFeedResponse"
                 }
               }
             }
@@ -5587,6 +6132,46 @@
         } ]
       }
     },
+    "/locations/reverse-geocode" : {
+      "get" : {
+        "tags" : [ "location-controller" ],
+        "summary" : "Resolve map coordinates to a readable address",
+        "operationId" : "reverseGeocode",
+        "parameters" : [ {
+          "name" : "latitude",
+          "in" : "query",
+          "required" : true,
+          "schema" : {
+            "type" : "number"
+          }
+        }, {
+          "name" : "longitude",
+          "in" : "query",
+          "required" : true,
+          "schema" : {
+            "type" : "number"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/GeocodingCandidate"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
     "/locations/geocode" : {
       "get" : {
         "tags" : [ "location-controller" ],
@@ -5761,6 +6346,16 @@
                 }
               }
             }
+          },
+          "200" : {
+            "description" : "Job, status log and evidence",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/JobDetailResponse"
+                }
+              }
+            }
           }
         },
         "security" : [ {
@@ -5904,6 +6499,16 @@
               "application/json" : {
                 "schema" : {
                   "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "200" : {
+            "description" : "Job, status log and evidence",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/JobDetailResponse"
                 }
               }
             }
@@ -6442,6 +7047,16 @@
               }
             }
           },
+          "409" : {
+            "description" : "A historical paid expense lacks sufficient property context; reconciliation is required",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "200" : {
             "description" : "OK",
             "content" : {
@@ -6511,6 +7126,16 @@
           },
           "403" : {
             "description" : "Only owners, real estate managers and platform admins",
+            "content" : {
+              "text/csv" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "A historical paid expense lacks sufficient property context; reconciliation is required",
             "content" : {
               "text/csv" : {
                 "schema" : {
@@ -7264,6 +7889,11 @@
           },
           "urgencyLevel" : {
             "$ref" : "#/components/schemas/UrgencyLevel"
+          },
+          "paymentMethod" : {
+            "type" : "string",
+            "default" : "TRANSFER",
+            "enum" : [ "TRANSFER" ]
           }
         },
         "required" : [ "description", "propertyId", "title" ]
@@ -7271,6 +7901,10 @@
       "UrgencyLevel" : {
         "type" : "string",
         "enum" : [ "LOW", "MEDIUM", "HIGH", "URGENT" ]
+      },
+      "PaymentMethod" : {
+        "type" : "string",
+        "enum" : [ "TRANSFER", "CASH" ]
       },
       "PhotoResponse" : {
         "type" : "object",
@@ -7326,6 +7960,9 @@
             "type" : [ "string", "null" ],
             "format" : "uuid"
           },
+          "paymentMethod" : {
+            "$ref" : "#/components/schemas/PaymentMethod"
+          },
           "createdAt" : {
             "type" : "string",
             "format" : "date-time"
@@ -7375,7 +8012,7 @@
             "format" : "date-time"
           }
         },
-        "required" : [ "createdAt", "description", "ownerUserId", "photos", "requestId", "slaState", "specialty", "status", "title", "urgencyLevel" ]
+        "required" : [ "createdAt", "description", "ownerUserId", "paymentMethod", "photos", "requestId", "slaState", "specialty", "status", "title", "urgencyLevel" ]
       },
       "SlaState" : {
         "type" : "string",
@@ -7497,6 +8134,11 @@
           },
           "urgencyLevel" : {
             "$ref" : "#/components/schemas/UrgencyLevel"
+          },
+          "paymentMethod" : {
+            "type" : "string",
+            "default" : "TRANSFER",
+            "enum" : [ "TRANSFER" ]
           }
         },
         "required" : [ "description", "title" ]
@@ -7601,6 +8243,9 @@
           "requestStatus" : {
             "$ref" : "#/components/schemas/RepairRequestStatus"
           },
+          "paymentMethod" : {
+            "$ref" : "#/components/schemas/PaymentMethod"
+          },
           "assignedFixerUserId" : {
             "type" : [ "string", "null" ],
             "format" : "uuid"
@@ -7614,7 +8259,7 @@
             "$ref" : "#/components/schemas/JobStatus"
           }
         },
-        "required" : [ "position", "requestId", "requestStatus", "requirementId", "specialty" ]
+        "required" : [ "paymentMethod", "position", "requestId", "requestStatus", "requirementId", "specialty" ]
       },
       "RateRequest" : {
         "type" : "object",
@@ -7784,6 +8429,27 @@
         "type" : "string",
         "enum" : [ "SUBMITTED", "ACCEPTED", "REJECTED" ]
       },
+      "AcceptedQuotationResponse" : {
+        "type" : "object",
+        "properties" : {
+          "quotationId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "requestId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "paymentMethod" : {
+            "$ref" : "#/components/schemas/PaymentMethod"
+          },
+          "paymentId" : {
+            "type" : [ "string", "null" ],
+            "format" : "uuid"
+          }
+        },
+        "required" : [ "paymentMethod", "quotationId", "requestId" ]
+      },
       "NewProperty" : {
         "type" : "object",
         "properties" : {
@@ -7927,6 +8593,89 @@
           }
         }
       },
+      "AttemptRequest" : {
+        "type" : "object",
+        "properties" : {
+          "reference" : {
+            "type" : "string",
+            "minLength" : 1
+          },
+          "amount" : {
+            "type" : "string",
+            "format" : "int64",
+            "minimum" : 1
+          },
+          "instrument" : {
+            "$ref" : "#/components/schemas/SandboxPaymentInstrument"
+          }
+        },
+        "required" : [ "amount", "instrument", "reference" ]
+      },
+      "SandboxPaymentInstrument" : {
+        "type" : "string",
+        "enum" : [ "SANDBOX_CARD", "SANDBOX_PSE", "SANDBOX_NEQUI" ]
+      },
+      "PaymentAttemptResult" : {
+        "type" : "object",
+        "properties" : {
+          "paymentId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "attemptId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "operationKey" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "reference" : {
+            "type" : "string"
+          },
+          "amount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "instrument" : {
+            "$ref" : "#/components/schemas/SandboxPaymentInstrument"
+          },
+          "status" : {
+            "$ref" : "#/components/schemas/PaymentStatus"
+          },
+          "attemptedByUserId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "gatewayTransactionId" : {
+            "type" : "string"
+          },
+          "failureReason" : {
+            "type" : "string"
+          },
+          "attemptedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          }
+        }
+      },
+      "PaymentStatus" : {
+        "type" : "string",
+        "enum" : [ "PENDING", "APPROVED", "DECLINED", "ERROR" ]
+      },
+      "PayoutEntry" : {
+        "type" : "object",
+        "properties" : {
+          "earningId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "netAmount" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        }
+      },
       "PayoutResponse" : {
         "type" : "object",
         "properties" : {
@@ -7948,41 +8697,125 @@
           "requestedAt" : {
             "type" : "string",
             "format" : "date-time"
+          },
+          "transferredAt" : {
+            "type" : [ "string", "null" ],
+            "format" : "date-time"
+          },
+          "operationKey" : {
+            "type" : [ "string", "null" ],
+            "format" : "uuid"
+          },
+          "detailStatus" : {
+            "type" : "string"
+          },
+          "earnings" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/PayoutEntry"
+            }
           }
         },
-        "required" : [ "amount", "earningCount", "id", "requestedAt", "status" ]
+        "required" : [ "amount", "detailStatus", "earningCount", "earnings", "id", "requestedAt", "status" ]
       },
       "PayoutStatus" : {
         "type" : "string",
-        "enum" : [ "REQUESTED" ]
+        "enum" : [ "REQUESTED", "TRANSFERRED" ]
       },
-      "PayRequest" : {
+      "PaymentContext" : {
         "type" : "object",
-        "additionalProperties" : false,
         "properties" : {
-          "reference" : {
+          "quotationId" : {
             "type" : "string",
-            "maxLength" : 32,
-            "minLength" : 0
+            "format" : "uuid"
+          },
+          "requestId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "propertyId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "ownerUserId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "fixerUserId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "managerUserId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "specialty" : {
+            "type" : "string"
+          },
+          "concept" : {
+            "type" : "string"
+          },
+          "capturedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "source" : {
+            "type" : "string"
+          }
+        }
+      },
+      "PaymentDetail" : {
+        "type" : "object",
+        "properties" : {
+          "paymentId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "quotationId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "requestId" : {
+            "type" : "string",
+            "format" : "uuid"
           },
           "amount" : {
             "type" : "integer",
             "format" : "int64"
           },
-          "method" : {
+          "paymentMethod" : {
             "$ref" : "#/components/schemas/PaymentMethod"
           },
-          "scenario" : {
+          "purpose" : {
+            "$ref" : "#/components/schemas/PaymentPurpose"
+          },
+          "status" : {
+            "$ref" : "#/components/schemas/PaymentStatus"
+          },
+          "createdAt" : {
             "type" : "string",
-            "maxLength" : 20,
-            "minLength" : 0
+            "format" : "date-time"
+          },
+          "updatedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "completedAt" : {
+            "type" : [ "string", "null" ],
+            "format" : "date-time"
+          },
+          "reference" : {
+            "type" : "string"
+          },
+          "context" : {
+            "$ref" : "#/components/schemas/PaymentContext"
           }
         },
-        "required" : [ "amount", "method", "reference" ]
+        "required" : [ "amount", "createdAt", "paymentId", "paymentMethod", "purpose", "quotationId", "requestId", "status", "updatedAt" ]
       },
-      "PaymentMethod" : {
+      "PaymentPurpose" : {
         "type" : "string",
-        "enum" : [ "SANDBOX_CARD", "SANDBOX_PSE", "SANDBOX_NEQUI" ]
+        "enum" : [ "SERVICE", "OUTSTANDING_BALANCE" ]
       },
       "DeviceTokenRequest" : {
         "type" : "object",
@@ -8179,47 +9012,6 @@
           }
         }
       },
-      "ScheduleRequest" : {
-        "type" : "object",
-        "additionalProperties" : false,
-        "properties" : {
-          "scheduledFor" : {
-            "type" : "string",
-            "format" : "date-time"
-          },
-          "note" : {
-            "type" : "string",
-            "maxLength" : 1000,
-            "minLength" : 0
-          }
-        },
-        "required" : [ "scheduledFor" ]
-      },
-      "EvidenceRequest" : {
-        "type" : "object",
-        "additionalProperties" : false,
-        "properties" : {
-          "mediaIds" : {
-            "type" : "array",
-            "items" : {
-              "type" : "string",
-              "format" : "uuid"
-            },
-            "maxItems" : 8,
-            "minItems" : 0
-          },
-          "stage" : {
-            "type" : "string",
-            "enum" : [ "BEFORE", "DURING", "AFTER" ]
-          },
-          "caption" : {
-            "type" : "string",
-            "maxLength" : 200,
-            "minLength" : 0
-          }
-        },
-        "required" : [ "mediaIds", "stage" ]
-      },
       "JobResponse" : {
         "type" : "object",
         "properties" : {
@@ -8238,6 +9030,13 @@
           "ownerUserId" : {
             "type" : "string",
             "format" : "uuid"
+          },
+          "paymentMethod" : {
+            "type" : "string"
+          },
+          "agreedAmount" : {
+            "type" : "integer",
+            "format" : "int64"
           },
           "status" : {
             "$ref" : "#/components/schemas/JobStatus"
@@ -8280,7 +9079,91 @@
             "type" : [ "string", "null" ]
           }
         },
-        "required" : [ "createdAt", "id", "ownerUserId", "quotationId", "requestId", "status" ]
+        "required" : [ "agreedAmount", "createdAt", "id", "ownerUserId", "paymentMethod", "quotationId", "requestId", "status" ]
+      },
+      "ScheduleRequest" : {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "scheduledFor" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "note" : {
+            "type" : "string",
+            "maxLength" : 1000,
+            "minLength" : 0
+          }
+        },
+        "required" : [ "scheduledFor" ]
+      },
+      "EvidenceRequest" : {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "mediaIds" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string",
+              "format" : "uuid"
+            },
+            "maxItems" : 8,
+            "minItems" : 0
+          },
+          "stage" : {
+            "type" : "string",
+            "enum" : [ "BEFORE", "DURING", "AFTER" ]
+          },
+          "caption" : {
+            "type" : "string",
+            "maxLength" : 200,
+            "minLength" : 0
+          }
+        },
+        "required" : [ "mediaIds", "stage" ]
+      },
+      "EvidenceResponse" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "mediaId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "url" : {
+            "type" : [ "string", "null" ]
+          },
+          "stage" : {
+            "type" : "string",
+            "enum" : [ "BEFORE", "DURING", "AFTER" ]
+          },
+          "caption" : {
+            "type" : [ "string", "null" ]
+          },
+          "createdAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          }
+        },
+        "required" : [ "createdAt", "id", "mediaId", "stage" ]
+      },
+      "CompletionRequest" : {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "receivedAmount" : {
+            "type" : "string",
+            "format" : "int64"
+          },
+          "note" : {
+            "type" : "string",
+            "maxLength" : 1000,
+            "minLength" : 0
+          }
+        }
       },
       "RejectionRequest" : {
         "type" : "object",
@@ -8635,6 +9518,9 @@
           "title" : {
             "type" : "string"
           },
+          "paymentMethod" : {
+            "$ref" : "#/components/schemas/PaymentMethod"
+          },
           "createdAt" : {
             "type" : "string",
             "format" : "date-time"
@@ -8653,7 +9539,7 @@
             "type" : "boolean"
           }
         },
-        "required" : [ "createdAt", "invited", "requestId", "specialty", "title", "urgencyLevel" ]
+        "required" : [ "createdAt", "invited", "paymentMethod", "requestId", "specialty", "title", "urgencyLevel" ]
       },
       "ProjectSummaryResponse" : {
         "type" : "object",
@@ -9048,6 +9934,31 @@
         },
         "required" : [ "items", "page", "size", "totalItems", "totalPages" ]
       },
+      "PaymentPageResponse" : {
+        "type" : "object",
+        "properties" : {
+          "items" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/PaymentDetail"
+            }
+          },
+          "page" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "size" : {
+            "type" : "integer",
+            "format" : "int32",
+            "maximum" : 50,
+            "minimum" : 1
+          },
+          "hasMore" : {
+            "type" : "boolean"
+          }
+        },
+        "required" : [ "hasMore", "items", "page", "size" ]
+      },
       "EarningResponse" : {
         "type" : "object",
         "properties" : {
@@ -9087,14 +9998,6 @@
             "format" : "date-time"
           },
           "paidOutAt" : {
-            "type" : [ "string", "null" ],
-            "format" : "date-time"
-          },
-          "fundedAt" : {
-            "type" : [ "string", "null" ],
-            "format" : "date-time"
-          },
-          "jobCompletedAt" : {
             "type" : [ "string", "null" ],
             "format" : "date-time"
           }
@@ -9137,6 +10040,80 @@
         },
         "required" : [ "availableBalance", "grossTotal", "heldBalance", "history", "paidOutTotal", "totalCommission" ]
       },
+      "OwnerDebtDetail" : {
+        "type" : "object",
+        "properties" : {
+          "debtId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "requestId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "quotationId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "amount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "status" : {
+            "type" : "string",
+            "enum" : [ "OUTSTANDING", "PAID" ]
+          },
+          "createdAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "settledAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          }
+        }
+      },
+      "CashSettlementDetail" : {
+        "type" : "object",
+        "properties" : {
+          "settlementId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "jobId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "quotationId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "requestId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "agreedAmount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "receivedAmount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "outstandingAmount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "debtId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "settledAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          }
+        }
+      },
       "NotificationPageResponse" : {
         "type" : "object",
         "properties" : {
@@ -9164,6 +10141,56 @@
           }
         },
         "required" : [ "content", "page", "size", "totalElements", "totalPages" ]
+      },
+      "FeedPieceResponse" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "fixerUserId" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "title" : {
+            "type" : "string"
+          },
+          "description" : {
+            "type" : [ "string", "null" ]
+          },
+          "readUrl" : {
+            "type" : "string"
+          },
+          "readUrlExpiresAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "createdAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          }
+        },
+        "required" : [ "fixerUserId", "id", "readUrl", "readUrlExpiresAt", "title" ]
+      },
+      "PortfolioFeedResponse" : {
+        "type" : "object",
+        "properties" : {
+          "items" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/FeedPieceResponse"
+            }
+          },
+          "page" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "hasMore" : {
+            "type" : "boolean"
+          }
+        },
+        "required" : [ "hasMore", "items", "page" ]
       },
       "OwnPortfolioResponse" : {
         "type" : "object",
@@ -9202,6 +10229,49 @@
           }
         },
         "required" : [ "displayName", "latitude", "longitude" ]
+      },
+      "JobDetailResponse" : {
+        "type" : "object",
+        "properties" : {
+          "job" : {
+            "$ref" : "#/components/schemas/JobResponse"
+          },
+          "fixerName" : {
+            "type" : [ "string", "null" ]
+          },
+          "evidence" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/EvidenceResponse"
+            }
+          },
+          "log" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/LogEntryResponse"
+            }
+          }
+        },
+        "required" : [ "evidence", "job", "log" ]
+      },
+      "LogEntryResponse" : {
+        "type" : "object",
+        "properties" : {
+          "status" : {
+            "$ref" : "#/components/schemas/JobStatus"
+          },
+          "note" : {
+            "type" : [ "string", "null" ]
+          },
+          "changedBy" : {
+            "type" : [ "string", "null" ]
+          },
+          "changedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          }
+        },
+        "required" : [ "changedAt", "status" ]
       },
       "ReviewDocumentResponse" : {
         "type" : "object",
@@ -9477,6 +10547,11 @@
       "Pageable" : {
         "type" : "object",
         "properties" : {
+          "page" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 0
+          },
           "size" : {
             "type" : "integer",
             "format" : "int32",
@@ -9487,11 +10562,6 @@
             "items" : {
               "type" : "string"
             }
-          },
-          "page" : {
-            "type" : "integer",
-            "format" : "int32",
-            "minimum" : 0
           }
         }
       },
@@ -9589,5 +10659,7 @@
         "bearerFormat" : "JWT"
       }
     }
-  }
+  },
+  "x-runtime-validated" : true,
+  "x-integration-status" : "FR-UC-05.4: full runtime contract checked against previously reconciled routes, responses and security; PostgreSQL 17."
 }

@@ -1,6 +1,7 @@
 package com.fixup.requests.infrastructure;
 
 import com.fixup.requests.api.RepairRequestStatus;
+import com.fixup.requests.api.PaymentMethod;
 import com.fixup.requests.api.UrgencyLevel;
 import com.fixup.fixers.api.Specialty;
 import com.fixup.requests.domain.RepairRequest;
@@ -44,6 +45,9 @@ class RepairRequestEntity {
     private RepairRequestStatus status;
     @Column(name = "assigned_fixer_user_id")
     private UUID assignedFixerUserId;
+    @Enumerated(EnumType.STRING)
+    @Column(name = "payment_method", nullable = false, length = 16)
+    private PaymentMethod paymentMethod;
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
     @Column(name = "updated_at", nullable = false)
@@ -86,6 +90,7 @@ class RepairRequestEntity {
         entity.description = request.description();
         entity.mediaIds = new ArrayList<>(request.mediaIds());
         entity.createdAt = request.createdAt();
+        entity.paymentMethod = request.paymentMethod();
         entity.urgencyLevel = request.urgencyLevel();
         entity.slaDeadline = request.slaDeadline();
         entity.lastEscalationNotifiedAt = request.lastEscalationNotifiedAt();
@@ -109,7 +114,7 @@ class RepairRequestEntity {
 
     RepairRequest toDomain() {
         return new RepairRequest(id, propertyId, propertyCity, ownerUserId, specialty, title, description, List.copyOf(mediaIds),
-                status, assignedFixerUserId, createdAt, updatedAt,
+                status, assignedFixerUserId, paymentMethod, createdAt, updatedAt,
                 urgencyLevel, slaDeadline, lastEscalationNotifiedAt,
                 requestedByUserId, managerUserId, propertyName, propertyAddress, completedAt);
     }

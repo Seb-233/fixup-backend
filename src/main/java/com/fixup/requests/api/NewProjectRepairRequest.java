@@ -7,9 +7,10 @@ import java.util.UUID;
 
 /** Data a collaborating module may use to open an ordinary repair request. */
 public record NewProjectRepairRequest(UUID propertyId, String title, String description,
-        List<UUID> mediaIds, UrgencyLevel urgencyLevel) {
+        List<UUID> mediaIds, UrgencyLevel urgencyLevel, PaymentMethod paymentMethod) {
 
     public NewProjectRepairRequest {
+        PaymentMethod.requireDigitalCreation(paymentMethod);
         if (mediaIds != null && mediaIds.stream().anyMatch(Objects::isNull)) {
             throw new IllegalArgumentException("mediaIds cannot contain null elements");
         }
@@ -17,5 +18,9 @@ public record NewProjectRepairRequest(UUID propertyId, String title, String desc
         if (new HashSet<>(mediaIds).size() != mediaIds.size()) {
             throw new IllegalArgumentException("mediaIds cannot contain duplicates");
         }
+    }
+
+    public NewProjectRepairRequest(UUID propertyId, String title, String description, List<UUID> mediaIds, UrgencyLevel urgencyLevel) {
+        this(propertyId, title, description, mediaIds, urgencyLevel, PaymentMethod.TRANSFER);
     }
 }

@@ -46,6 +46,11 @@ class JpaProperties implements Properties {
     }
 
     @Override
+    public Optional<Property> findByIdForShare(UUID id) {
+        return repository.findByIdForShare(id).map(PropertyEntity::toDomain);
+    }
+
+    @Override
     public List<Property> findAllById(Collection<UUID> ids) {
         if (ids == null || ids.isEmpty()) {
             return List.of();

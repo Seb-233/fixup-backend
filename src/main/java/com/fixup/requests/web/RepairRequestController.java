@@ -7,6 +7,7 @@ import com.fixup.fixers.api.Specialty;
 import com.fixup.media.api.MediaAttachmentService;
 import com.fixup.media.api.SignedMediaView;
 import com.fixup.requests.api.RepairRequestStatus;
+import com.fixup.requests.api.PaymentMethod;
 import com.fixup.requests.api.SlaState;
 import com.fixup.requests.api.UrgencyLevel;
 import com.fixup.requests.application.CancelRepairRequest;
@@ -102,7 +103,8 @@ class RepairRequestController {
         var actor = actors.currentActor();
         var mediaIds = body.mediaIds() == null ? List.<UUID>of() : body.mediaIds();
         var summary = createRequest.execute(actor,
-                new NewRepairRequest(body.propertyId(), body.title(), body.description(), mediaIds, body.urgencyLevel()));
+                new NewRepairRequest(body.propertyId(), body.title(), body.description(), mediaIds,
+                        body.urgencyLevel(), body.paymentMethod()));
         return detail(actor, summary, people.namesFor(List.of(summary)), true);
     }
 
@@ -179,7 +181,10 @@ class RepairRequestController {
     record OpenRequest(@NotNull UUID propertyId, @NotBlank @Size(max = 150) String title,
             @NotBlank @Size(max = 2000) String description,
             @Size(max = 6) List<@NotNull UUID> mediaIds,
-            UrgencyLevel urgencyLevel) {
+            UrgencyLevel urgencyLevel,
+            @com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = com.fixup.requests.api.NewPaymentMethodDeserializer.class)
+            @Schema(implementation = String.class, allowableValues = {"TRANSFER"}, defaultValue = "TRANSFER", requiredMode = Schema.RequiredMode.NOT_REQUIRED)
+            PaymentMethod paymentMethod) {
         public OpenRequest {
             if (mediaIds != null) {
                 if (mediaIds.contains(null)) {
@@ -192,13 +197,15 @@ class RepairRequestController {
         }
     }
 
-    @Schema(requiredProperties = {"requestId", "specialty", "title", "createdAt", "urgencyLevel", "invited"})
+    @Schema(requiredProperties = {"requestId", "specialty", "title", "paymentMethod", "createdAt", "urgencyLevel", "invited"})
     @com.fasterxml.jackson.annotation.JsonIgnoreProperties(ignoreUnknown = false)
-    record OpenRequestSummaryResponse(UUID requestId, Specialty specialty, String title, Instant createdAt,
+    record OpenRequestSummaryResponse(UUID requestId, Specialty specialty, String title,
+            PaymentMethod paymentMethod, Instant createdAt,
             @Schema(types = {"string", "null"}) String propertyCity, UrgencyLevel urgencyLevel,
             @Schema(types = {"string", "null"}) Instant slaDeadline, boolean invited) {
         static OpenRequestSummaryResponse of(com.fixup.requests.domain.RepairRequest request, boolean invited) {
-            return new OpenRequestSummaryResponse(request.id(), request.specialty(), request.title(), request.createdAt(),
+            return new OpenRequestSummaryResponse(request.id(), request.specialty(), request.title(),
+                    request.paymentMethod(), request.createdAt(),
                     request.propertyCity(), request.urgencyLevel(), request.slaDeadline(), invited);
         }
     }
@@ -208,10 +215,10 @@ class RepairRequestController {
     }
 
     @Schema(requiredProperties = {"requestId", "specialty", "title", "description", "photos",
-        "status", "urgencyLevel", "createdAt", "slaState", "ownerUserId"})
+        "status", "paymentMethod", "urgencyLevel", "createdAt", "slaState", "ownerUserId"})
     record RequestDetailResponse(UUID requestId, UUID propertyId, Specialty specialty, String title, String description,
             List<PhotoResponse> photos, RepairRequestStatus status,
-            @Schema(types = {"string", "null"}) UUID assignedFixerUserId, Instant createdAt,
+            @Schema(types = {"string", "null"}) UUID assignedFixerUserId, PaymentMethod paymentMethod, Instant createdAt,
             UrgencyLevel urgencyLevel,
             @Schema(types = {"string", "null"}) Instant slaDeadline,
             SlaState slaState,
@@ -233,7 +240,7 @@ class RepairRequestController {
                     .toList();
             return new RequestDetailResponse(summary.id(), summary.propertyId(), summary.specialty(), summary.title(),
                     summary.description(), photoResponses, summary.status(), summary.assignedFixerUserId(),
-                    summary.createdAt(), summary.urgencyLevel(), summary.slaDeadline(), summary.slaState(),
+                    summary.paymentMethod(), summary.createdAt(), summary.urgencyLevel(), summary.slaDeadline(), summary.slaState(),
                     summary.ownerUserId(), names.get(summary.ownerUserId()), summary.requestedByUserId(),
                     names.get(summary.requestedByUserId()), summary.managerUserId(),
                     names.get(summary.assignedFixerUserId()), summary.propertyName(),

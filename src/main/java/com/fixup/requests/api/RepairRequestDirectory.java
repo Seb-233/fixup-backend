@@ -33,11 +33,12 @@ public interface RepairRequestDirectory {
     void assign(UUID requestId, UUID fixerUserId);
 
     /**
-     * FR-UC-19: closes the request when its job is completed, inside the caller's transaction.
+     * Completes an assigned request inside the caller's transaction, validating owner and fixer.
+     * A compatible repeat preserves the original completion time; incompatible identities fail.
      *
      * @throws RepairRequestConflictException when the request has no active assignment.
      */
-    void markCompleted(UUID requestId);
+    void complete(RepairRequestCompletionCommand command);
 
     /** FR-UC-11: technicians a manager already invited to quote the request. */
     Set<UUID> invitedFixers(UUID requestId);

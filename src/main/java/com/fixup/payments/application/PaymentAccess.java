@@ -24,4 +24,5 @@ final class PaymentAccess {
             throw new PaymentAccessDeniedException();
         }
     }
+
 }

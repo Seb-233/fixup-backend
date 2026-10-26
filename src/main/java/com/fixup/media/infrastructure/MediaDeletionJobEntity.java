@@ -8,6 +8,7 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.UUID;
 
 @Entity
@@ -103,7 +104,9 @@ public class MediaDeletionJobEntity {
                 maxAttempts,
                 null,
                 null,
-                now,
+                // SQL stores microseconds. Rounding upward can make an immediate deletion
+                // ineligible when the AFTER_COMMIT listener observes the same clock tick.
+                now.truncatedTo(ChronoUnit.MICROS),
                 null,
                 now,
                 now);

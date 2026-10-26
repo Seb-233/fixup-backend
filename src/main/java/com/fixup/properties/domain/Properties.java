@@ -11,6 +11,7 @@ public interface Properties {
     Property save(Property property);
     List<Property> saveAll(List<Property> properties);
     Optional<Property> findById(UUID id);
+    Optional<Property> findByIdForShare(UUID id);
     List<Property> findAllById(Collection<UUID> ids);
     List<Property> findByOwnerUserIdOrderByCreatedAtDesc(UUID ownerUserId);
     /** FR-UC-11: los inmuebles que el usuario posee o administra, más recientes primero. */

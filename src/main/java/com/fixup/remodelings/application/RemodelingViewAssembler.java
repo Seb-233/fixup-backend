@@ -92,7 +92,7 @@ class RemodelingViewAssembler {
         var request = requireRequest(context.requestsById(), requirement.requestId());
         var job = context.jobsByRequestId().get(requirement.requestId());
         return new RemodelingRequirementSummary(requirement.id(), requirement.requestId(),
-                requirement.position(), request.specialty(), request.status(),
+                requirement.position(), request.specialty(), request.status(), request.paymentMethod(),
                 request.assignedFixerUserId(), job == null ? null : job.jobId(),
                 job == null ? null : job.status());
     }

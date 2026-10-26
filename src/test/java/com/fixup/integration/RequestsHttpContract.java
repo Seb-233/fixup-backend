@@ -61,7 +61,8 @@ abstract class RequestsHttpContract {
                     "propertyId": "%s",
                     "title": "Tubo roto en la pared",
                     "description": "Fuga de agua masiva",
-                    "mediaIds": []
+                    "mediaIds": [],
+                    "paymentMethod": "TRANSFER"
                 }
                 """.formatted(propId);
 
@@ -81,13 +82,14 @@ abstract class RequestsHttpContract {
         PropertyFixtures.insertPublished(jdbc, propertyId, ownerId);
         String body = """
                 {"propertyId":"%s","title":"Tubo roto urgente","description":"Fuga de agua masiva",
-                 "mediaIds":[],"urgencyLevel":"URGENT"}
+                 "mediaIds":[],"urgencyLevel":"URGENT","paymentMethod":"TRANSFER"}
                 """.formatted(propertyId);
 
         var response = mvc.perform(post("/requests").with(identity(subject))
                         .contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.urgencyLevel").value("URGENT"))
+                .andExpect(jsonPath("$.paymentMethod").value("TRANSFER"))
                 .andReturn().getResponse();
         UUID requestId = UUID.fromString(mapper.readTree(response.getContentAsString()).get("requestId").asText());
 
@@ -118,7 +120,7 @@ abstract class RequestsHttpContract {
         PropertyFixtures.insertPublished(jdbc, propId, ownerId2);
 
         String body = """
-                {"propertyId":"%s","title":"Fuga","description":"Gotera","mediaIds":[]}
+                {"propertyId":"%s","title":"Fuga","description":"Gotera","mediaIds":[],"paymentMethod":"TRANSFER"}
                 """.formatted(propId);
 
         mvc.perform(post("/requests").with(identity("auth0|owner-foreign-1"))
@@ -130,7 +132,7 @@ abstract class RequestsHttpContract {
     void nonexistentPropertyReturns404() throws Exception {
         provisionOwner("auth0|owner-nonexistent");
         String body = """
-                {"propertyId":"%s","title":"Fuga","description":"Gotera","mediaIds":[]}
+                {"propertyId":"%s","title":"Fuga","description":"Gotera","mediaIds":[],"paymentMethod":"TRANSFER"}
                 """.formatted(UUID.randomUUID());
 
         mvc.perform(post("/requests").with(identity("auth0|owner-nonexistent"))
@@ -143,7 +145,7 @@ abstract class RequestsHttpContract {
         // FR-UC-08: a tenant reports failures only on the property they rent; any other property is 404.
         provisionWithRole("auth0|tenant-1", "TENANT");
         String body = """
-                {"propertyId":"%s","title":"Fuga","description":"Gotera","mediaIds":[]}
+                {"propertyId":"%s","title":"Fuga","description":"Gotera","mediaIds":[],"paymentMethod":"TRANSFER"}
                 """.formatted(UUID.randomUUID());
 
         mvc.perform(post("/requests").with(identity("auth0|tenant-1"))
@@ -156,7 +158,7 @@ abstract class RequestsHttpContract {
         // FR-UC-11: a manager opens requests only on delegated properties; any other property is 404.
         provisionWithRole("auth0|rem-1", "REAL_ESTATE_MANAGER");
         String body = """
-                {"propertyId":"%s","title":"Fuga","description":"Gotera","mediaIds":[]}
+                {"propertyId":"%s","title":"Fuga","description":"Gotera","mediaIds":[],"paymentMethod":"TRANSFER"}
                 """.formatted(UUID.randomUUID());
 
         mvc.perform(post("/requests").with(identity("auth0|rem-1"))
@@ -168,7 +170,7 @@ abstract class RequestsHttpContract {
     void fixerCannotCreateRequest() throws Exception {
         provisionWithRole("auth0|fixer-1", "FIXER");
         String body = """
-                {"propertyId":"%s","title":"Fuga","description":"Gotera","mediaIds":[]}
+                {"propertyId":"%s","title":"Fuga","description":"Gotera","mediaIds":[],"paymentMethod":"TRANSFER"}
                 """.formatted(UUID.randomUUID());
 
         mvc.perform(post("/requests").with(identity("auth0|fixer-1"))
@@ -201,6 +203,7 @@ abstract class RequestsHttpContract {
                     "title": "Tubo",
                     "description": "Fuga",
                     "mediaIds": [],
+                    "paymentMethod": "TRANSFER",
                     "specialty": "PLUMBING"
                 }
                 """.formatted(propId);
@@ -214,11 +217,30 @@ abstract class RequestsHttpContract {
     void missingPropertyIdReturns400() throws Exception {
         provisionOwner("auth0|owner-missing-prop");
         String body = """
-                {"title":"Fuga","description":"Gotera","mediaIds":[]}
+                {"title":"Fuga","description":"Gotera","mediaIds":[],"paymentMethod":"TRANSFER"}
                 """;
 
         mvc.perform(post("/requests").with(identity("auth0|owner-missing-prop"))
                 .contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void paymentMethodDefaultsToTransferAndRejectsCashNullAndUnknown() throws Exception {
+        UUID ownerId = provisionOwner("auth0|owner-payment-method");
+        UUID propertyId = UUID.randomUUID();
+        PropertyFixtures.insertPublished(jdbc, propertyId, ownerId);
+
+        mvc.perform(post("/requests").with(identity("auth0|owner-payment-method"))
+                .contentType(MediaType.APPLICATION_JSON).content("{\"propertyId\":\"" + propertyId + "\",\"title\":\"Fuga\",\"description\":\"Gotera\",\"mediaIds\":[]}"))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.paymentMethod").value("TRANSFER"));
+        for (String body : java.util.List.of(
+                "{\"propertyId\":\"" + propertyId + "\",\"title\":\"Fuga\",\"description\":\"Gotera\",\"paymentMethod\":null}",
+                "{\"propertyId\":\"" + propertyId + "\",\"title\":\"Fuga\",\"description\":\"Gotera\",\"paymentMethod\":\"CASH\"}",
+                "{\"propertyId\":\"" + propertyId + "\",\"title\":\"Fuga\",\"description\":\"Gotera\",\"mediaIds\":[],\"paymentMethod\":\"CARD\"}")) {
+            mvc.perform(post("/requests").with(identity("auth0|owner-payment-method"))
+                            .contentType(MediaType.APPLICATION_JSON).content(body))
+                    .andExpect(status().isBadRequest());
+        }
     }
 }

@@ -7,6 +7,7 @@ import com.fixup.requests.api.RepairRequestAccessDeniedException;
 import com.fixup.requests.api.RepairRequestConflictException;
 import com.fixup.requests.api.RepairRequestSnapshot;
 import com.fixup.requests.api.RepairRequestStatus;
+import com.fixup.requests.api.PaymentMethod;
 import com.fixup.requests.api.UrgencyLevel;
 import com.fixup.fixers.api.Specialty;
 import java.time.Duration;
@@ -23,7 +24,7 @@ import java.util.UUID;
  */
 public record RepairRequest(UUID id, UUID propertyId, String propertyCity, UUID ownerUserId, Specialty specialty, String title,
         String description, List<UUID> mediaIds, RepairRequestStatus status,
-        UUID assignedFixerUserId, Instant createdAt, Instant updatedAt,
+        UUID assignedFixerUserId, PaymentMethod paymentMethod, Instant createdAt, Instant updatedAt,
         UrgencyLevel urgencyLevel, Instant slaDeadline, Instant lastEscalationNotifiedAt,
         UUID requestedByUserId, UUID managerUserId, String propertyName, String propertyAddress,
         Instant completedAt) {
@@ -34,6 +35,10 @@ public record RepairRequest(UUID id, UUID propertyId, String propertyCity, UUID 
             RepairRequestStatus.CANCELLED);
 
     public RepairRequest {
+        if (paymentMethod == null) {
+            throw new RepairRequestConflictException("PAYMENT_METHOD_REQUIRED",
+                    "A payment method is required to open a repair request");
+        }
         if (mediaIds == null) {
             mediaIds = List.of();
         } else {
@@ -60,22 +65,22 @@ public record RepairRequest(UUID id, UUID propertyId, String propertyCity, UUID 
 
     public RepairRequest(UUID id, UUID propertyId, String propertyCity, UUID ownerUserId, Specialty specialty,
             String title, String description, List<UUID> mediaIds, RepairRequestStatus status,
-            UUID assignedFixerUserId, Instant createdAt, Instant updatedAt,
+            UUID assignedFixerUserId, PaymentMethod paymentMethod, Instant createdAt, Instant updatedAt,
             UrgencyLevel urgencyLevel, Instant slaDeadline, Instant lastEscalationNotifiedAt) {
         this(id, propertyId, propertyCity, ownerUserId, specialty, title, description, mediaIds, status,
-                assignedFixerUserId, createdAt, updatedAt, urgencyLevel, slaDeadline, lastEscalationNotifiedAt,
+                assignedFixerUserId, paymentMethod, createdAt, updatedAt, urgencyLevel, slaDeadline, lastEscalationNotifiedAt,
                 ownerUserId, null, null, null, null);
     }
 
     public static RepairRequest open(UUID id, UUID propertyId, String propertyCity, UUID ownerUserId, Specialty specialty, String title,
-            String description, List<UUID> mediaIds, UrgencyLevel urgencyLevel, Instant now) {
+            String description, List<UUID> mediaIds, UrgencyLevel urgencyLevel, PaymentMethod paymentMethod, Instant now) {
         return open(id, new PropertyContext(propertyId, propertyCity, null, null, ownerUserId, null), ownerUserId,
-                specialty, title, description, mediaIds, urgencyLevel, now);
+                specialty, title, description, mediaIds, urgencyLevel, paymentMethod, now);
     }
 
     /** FR-UC-04 y FR-UC-08: abre la solicitud con el contexto del inmueble y quien la reporta. */
     public static RepairRequest open(UUID id, PropertyContext property, UUID requestedByUserId, Specialty specialty,
-            String title, String description, List<UUID> mediaIds, UrgencyLevel urgencyLevel, Instant now) {
+            String title, String description, List<UUID> mediaIds, UrgencyLevel urgencyLevel, PaymentMethod paymentMethod, Instant now) {
         if (property == null || property.propertyId() == null) {
             throw new RepairRequestConflictException("INVALID_PROPERTY",
                     "A propertyId is required to open a new repair request");
@@ -85,7 +90,7 @@ public record RepairRequest(UUID id, UUID propertyId, String propertyCity, UUID 
                 ? now.plus(URGENT_SLA_DURATION)
                 : null;
         return new RepairRequest(id, property.propertyId(), property.city(), property.ownerUserId(), specialty, title,
-                description, mediaIds, RepairRequestStatus.OPEN, null, now, now, effectiveUrgency, slaDeadline, null,
+                description, mediaIds, RepairRequestStatus.OPEN, null, paymentMethod, now, now, effectiveUrgency, slaDeadline, null,
                 requestedByUserId, property.managerUserId(), property.name(), property.address(), null);
     }
 
@@ -99,19 +104,19 @@ public record RepairRequest(UUID id, UUID propertyId, String propertyCity, UUID 
                     "The owner of the request cannot be assigned as its fixer");
         }
         return new RepairRequest(id, propertyId, propertyCity, ownerUserId, specialty, title, description, mediaIds,
-                RepairRequestStatus.ASSIGNED, fixerUserId, createdAt, now,
+                RepairRequestStatus.ASSIGNED, fixerUserId, paymentMethod, createdAt, now,
                 urgencyLevel, slaDeadline, lastEscalationNotifiedAt,
                 requestedByUserId, managerUserId, propertyName, propertyAddress, completedAt);
     }
 
-    /** FR-UC-19: cerrar el trabajo cierra la solicitud; la conversación queda solo para lectura. */
+    /** FR-UC-19: cerrar el trabajo registra también el cierre de la solicitud. */
     public RepairRequest complete(Instant now) {
         if (assignedFixerUserId == null || CLOSED.contains(status)) {
             throw new RepairRequestConflictException("REQUEST_NOT_ASSIGNED",
                     "Only an assigned request that is still active can be completed");
         }
         return new RepairRequest(id, propertyId, propertyCity, ownerUserId, specialty, title, description, mediaIds,
-                RepairRequestStatus.COMPLETED, assignedFixerUserId, createdAt, now,
+                RepairRequestStatus.COMPLETED, assignedFixerUserId, paymentMethod, createdAt, now,
                 urgencyLevel, slaDeadline, lastEscalationNotifiedAt,
                 requestedByUserId, managerUserId, propertyName, propertyAddress, now);
     }
@@ -165,27 +170,27 @@ public record RepairRequest(UUID id, UUID propertyId, String propertyCity, UUID 
     }
 
     public RepairRequestSnapshot snapshot() {
-        return new RepairRequestSnapshot(id, ownerUserId, specialty, status, assignedFixerUserId, propertyId,
+        return new RepairRequestSnapshot(id, ownerUserId, specialty, status, assignedFixerUserId, paymentMethod, propertyId,
                 requestedByUserId, managerUserId, title, propertyName, propertyAddress, propertyCity);
     }
 
     public RepairRequest withStatus(RepairRequestStatus newStatus, Instant now) {
         return new RepairRequest(id, propertyId, propertyCity, ownerUserId, specialty, title, description, mediaIds,
-                newStatus, assignedFixerUserId, createdAt, now,
+                newStatus, assignedFixerUserId, paymentMethod, createdAt, now,
                 urgencyLevel, slaDeadline, lastEscalationNotifiedAt,
                 requestedByUserId, managerUserId, propertyName, propertyAddress, completedAt);
     }
 
     public RepairRequest withLastEscalationNotifiedAt(Instant now) {
         return new RepairRequest(id, propertyId, propertyCity, ownerUserId, specialty, title, description, mediaIds,
-                status, assignedFixerUserId, createdAt, now,
+                status, assignedFixerUserId, paymentMethod, createdAt, now,
                 urgencyLevel, slaDeadline, now,
                 requestedByUserId, managerUserId, propertyName, propertyAddress, completedAt);
     }
 
     public RepairRequest withAssignedFixerUserId(UUID fixerUserId, Instant now) {
         return new RepairRequest(id, propertyId, propertyCity, ownerUserId, specialty, title, description, mediaIds,
-                status, fixerUserId, createdAt, now,
+                status, fixerUserId, paymentMethod, createdAt, now,
                 urgencyLevel, slaDeadline, lastEscalationNotifiedAt,
                 requestedByUserId, managerUserId, propertyName, propertyAddress, completedAt);
     }

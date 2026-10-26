@@ -2,6 +2,9 @@ package com.fixup.requests.application;
 
 import com.fixup.requests.api.ProjectRepairRequestSnapshot;
 import com.fixup.requests.api.RepairRequestDirectory;
+import com.fixup.requests.api.RepairRequestCompletionCommand;
+import com.fixup.requests.api.RepairRequestConflictException;
+import com.fixup.requests.api.RepairRequestStatus;
 import com.fixup.requests.api.RepairRequestNotFoundException;
 import com.fixup.requests.api.RepairRequestSnapshot;
 import com.fixup.requests.domain.RepairRequests;
@@ -51,7 +54,7 @@ class RepairRequestAssignment implements RepairRequestDirectory {
     public List<ProjectRepairRequestSnapshot> findAll(Collection<UUID> requestIds) {
         return requests.findAllByIds(requestIds).stream()
                 .map(request -> new ProjectRepairRequestSnapshot(request.id(), request.specialty(),
-                        request.status(), request.assignedFixerUserId()))
+                        request.status(), request.assignedFixerUserId(), request.paymentMethod()))
                 .toList();
     }
 
@@ -74,12 +77,24 @@ class RepairRequestAssignment implements RepairRequestDirectory {
 
     @Override
     @Transactional(propagation = Propagation.MANDATORY)
-    public void markCompleted(UUID requestId) {
-        var request = requests.findByIdForUpdate(requestId)
+    public void complete(RepairRequestCompletionCommand command) {
+        var request = requests.findByIdForUpdate(command.requestId())
                 .orElseThrow(RepairRequestNotFoundException::new);
-        if (request.status() == com.fixup.requests.api.RepairRequestStatus.COMPLETED) {
+        if (request.assignedFixerUserId() == null
+                || !request.assignedFixerUserId().equals(command.fixerUserId())
+                || !request.ownerUserId().equals(command.ownerUserId())) {
+            throw new RepairRequestConflictException("REQUEST_NOT_ASSIGNED",
+                    "Only the matching owner and assigned fixer can complete the request");
+        }
+        if (request.status() == RepairRequestStatus.COMPLETED) {
             return;
         }
-        requests.update(request.complete(Instant.now()));
+        if (request.status() != RepairRequestStatus.ASSIGNED
+                && request.status() != RepairRequestStatus.SLA_WARNING
+                && request.status() != RepairRequestStatus.SLA_BREACHED) {
+            throw new RepairRequestConflictException("REQUEST_NOT_ASSIGNED",
+                    "Only an assigned request can be completed");
+        }
+        requests.update(request.complete(command.completedAt()));
     }
 }

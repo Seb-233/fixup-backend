@@ -1,6 +1,7 @@
 package com.fixup.properties.web;
 
 import com.fixup.properties.application.GeocodeAddress;
+import com.fixup.properties.application.ReverseGeocodeAddress;
 import com.fixup.properties.domain.GeocodingCandidate;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -11,6 +12,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import java.util.List;
+import java.math.BigDecimal;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -25,9 +27,20 @@ class LocationController {
     static final String OPENSTREETMAP_ATTRIBUTION = "\u00A9 OpenStreetMap contributors";
 
     private final GeocodeAddress geocodeAddress;
+    private final ReverseGeocodeAddress reverseGeocodeAddress;
 
-    LocationController(GeocodeAddress geocodeAddress) {
+    LocationController(GeocodeAddress geocodeAddress, ReverseGeocodeAddress reverseGeocodeAddress) {
         this.geocodeAddress = geocodeAddress;
+        this.reverseGeocodeAddress = reverseGeocodeAddress;
+    }
+
+    @GetMapping(value = "/reverse-geocode", produces = MediaType.APPLICATION_JSON_VALUE)
+    @Operation(summary = "Resolve map coordinates to a readable address")
+    @SecurityRequirement(name = "bearerAuth")
+    ResponseEntity<List<GeocodingCandidate>> reverseGeocode(
+            @RequestParam BigDecimal latitude, @RequestParam BigDecimal longitude) {
+        return ResponseEntity.ok().header(ATTRIBUTION_HEADER, OPENSTREETMAP_ATTRIBUTION)
+                .body(reverseGeocodeAddress.execute(latitude, longitude));
     }
 
     @GetMapping(value = "/geocode", produces = MediaType.APPLICATION_JSON_VALUE)

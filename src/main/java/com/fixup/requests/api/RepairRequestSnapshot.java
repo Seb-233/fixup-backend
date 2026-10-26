@@ -12,12 +12,16 @@ import java.util.UUID;
  * property it belongs to.
  */
 public record RepairRequestSnapshot(UUID requestId, UUID ownerUserId, Specialty specialty,
-        RepairRequestStatus status, UUID assignedFixerUserId, UUID propertyId, UUID requestedByUserId,
+        RepairRequestStatus status, UUID assignedFixerUserId, PaymentMethod paymentMethod, UUID propertyId, UUID requestedByUserId,
         UUID managerUserId, String title, String propertyName, String propertyAddress, String propertyCity) {
 
+    public RepairRequestSnapshot {
+        java.util.Objects.requireNonNull(paymentMethod, "paymentMethod must not be null");
+    }
+
     public RepairRequestSnapshot(UUID requestId, UUID ownerUserId, Specialty specialty,
-            RepairRequestStatus status, UUID assignedFixerUserId) {
-        this(requestId, ownerUserId, specialty, status, assignedFixerUserId, null, ownerUserId, null, null, null,
+            RepairRequestStatus status, UUID assignedFixerUserId, PaymentMethod paymentMethod) {
+        this(requestId, ownerUserId, specialty, status, assignedFixerUserId, paymentMethod, null, ownerUserId, null, null, null,
                 null, null);
     }
 
@@ -32,6 +36,12 @@ public record RepairRequestSnapshot(UUID requestId, UUID ownerUserId, Specialty 
     public boolean isAssigned() {
         return assignedFixerUserId != null && status != RepairRequestStatus.OPEN
                 && status != RepairRequestStatus.COMPLETED && status != RepairRequestStatus.CANCELLED;
+    }
+
+    public boolean allowsChat() {
+        return assignedFixerUserId != null
+                && (status == RepairRequestStatus.ASSIGNED
+                        || status == RepairRequestStatus.COMPLETED);
     }
 
     /** FR-UC-25: the owner check travels with the record, not with the screen that displays it. */

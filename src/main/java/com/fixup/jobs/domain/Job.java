@@ -6,25 +6,30 @@ import com.fixup.jobs.api.JobStatus;
 import java.time.Instant;
 import java.util.UUID;
 
-/**
- * FR-UC-19 y FR-UC-20: el trabajo nace cuando el propietario acepta una cotización y termina cuando
- * el técnico lo cierra. Entre medio el técnico lo programa (fecha acordada con el cliente) y lo
- * inicia; cada paso queda en la bitácora del trabajo. Guarda a las dos partes porque el dinero se
- * mueve entre ellas.
- */
+/** A job preserves its agreed financial terms throughout scheduling, execution and completion. */
 public record Job(UUID id, UUID requestId, UUID quotationId, UUID fixerUserId, UUID ownerUserId,
-        JobStatus status, Instant createdAt, Instant completedAt, Instant updatedAt,
+        String paymentMethod, long agreedAmount, JobStatus status, Instant createdAt, Instant completedAt, Instant updatedAt,
         Instant scheduledFor, Instant startedAt, String progressNote) {
 
+    public Job {
+        java.util.Objects.requireNonNull(paymentMethod, "paymentMethod must not be null");
+        if (!paymentMethod.equals("CASH") && !paymentMethod.equals("TRANSFER")) {
+            throw new IllegalArgumentException("Unsupported payment method");
+        }
+        if (agreedAmount <= 0) {
+            throw new IllegalArgumentException("agreedAmount must be positive");
+        }
+    }
+
     public Job(UUID id, UUID requestId, UUID quotationId, UUID fixerUserId, UUID ownerUserId,
-            JobStatus status, Instant createdAt, Instant completedAt, Instant updatedAt) {
-        this(id, requestId, quotationId, fixerUserId, ownerUserId, status, createdAt, completedAt, updatedAt,
+            String paymentMethod, long agreedAmount, JobStatus status, Instant createdAt, Instant completedAt, Instant updatedAt) {
+        this(id, requestId, quotationId, fixerUserId, ownerUserId, paymentMethod, agreedAmount, status, createdAt, completedAt, updatedAt,
                 null, null, null);
     }
 
     public static Job assigned(UUID id, UUID requestId, UUID quotationId, UUID fixerUserId,
-            UUID ownerUserId, Instant now) {
-        return new Job(id, requestId, quotationId, fixerUserId, ownerUserId, JobStatus.ASSIGNED,
+            UUID ownerUserId, String paymentMethod, long agreedAmount, Instant now) {
+        return new Job(id, requestId, quotationId, fixerUserId, ownerUserId, paymentMethod, agreedAmount, JobStatus.ASSIGNED,
                 now, null, now, null, null, null);
     }
 
@@ -36,7 +41,7 @@ public record Job(UUID id, UUID requestId, UUID quotationId, UUID fixerUserId, U
         if (when == null || when.isBefore(now.minusSeconds(60))) {
             throw new JobConflictException("INVALID_SCHEDULE", "The scheduled date must be in the future");
         }
-        return new Job(id, requestId, quotationId, fixerUserId, ownerUserId, JobStatus.SCHEDULED, createdAt,
+        return new Job(id, requestId, quotationId, fixerUserId, ownerUserId, paymentMethod, agreedAmount, JobStatus.SCHEDULED, createdAt,
                 null, now, when, startedAt, note(note));
     }
 
@@ -44,7 +49,7 @@ public record Job(UUID id, UUID requestId, UUID quotationId, UUID fixerUserId, U
         if (status != JobStatus.ASSIGNED && status != JobStatus.SCHEDULED) {
             throw new JobConflictException("JOB_NOT_STARTABLE", "Only an assigned or scheduled job can start");
         }
-        return new Job(id, requestId, quotationId, fixerUserId, ownerUserId, JobStatus.IN_PROGRESS, createdAt,
+        return new Job(id, requestId, quotationId, fixerUserId, ownerUserId, paymentMethod, agreedAmount, JobStatus.IN_PROGRESS, createdAt,
                 null, now, scheduledFor, now, note(note));
     }
 
@@ -57,7 +62,7 @@ public record Job(UUID id, UUID requestId, UUID quotationId, UUID fixerUserId, U
         if (status == JobStatus.COMPLETED) {
             throw new JobConflictException("JOB_ALREADY_COMPLETED", "The job is already completed");
         }
-        return new Job(id, requestId, quotationId, fixerUserId, ownerUserId, JobStatus.COMPLETED,
+        return new Job(id, requestId, quotationId, fixerUserId, ownerUserId, paymentMethod, agreedAmount, JobStatus.COMPLETED,
                 createdAt, now, now, scheduledFor, startedAt == null ? now : startedAt,
                 note == null ? progressNote : note(note));
     }

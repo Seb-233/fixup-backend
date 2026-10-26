@@ -9,6 +9,8 @@ import com.fixup.notifications.api.NotificationType;
 import com.fixup.notifications.api.RequestNotifications;
 import com.fixup.properties.api.PropertyNotFoundException;
 import com.fixup.properties.api.PropertySnapshot;
+import com.fixup.payments.api.OwnerDebtDirectory;
+import com.fixup.requests.api.RepairRequestConflictException;
 import com.fixup.requests.api.UrgencyLevel;
 import com.fixup.requests.api.NewProjectRepairRequest;
 import com.fixup.requests.api.ProjectRepairRequestSnapshot;
@@ -44,11 +46,12 @@ public class CreateRepairRequest implements RepairRequestCreation {
     private final RequestNotifications notifications;
     private final ApplicationEventPublisher events;
     private final Clock clock;
+    private final OwnerDebtDirectory debts;
 
     CreateRepairRequest(RepairRequests requests, MediaAttachmentService mediaAttachmentService,
                         PropertyDirectory propertyDirectory, TenancyDirectory tenancy,
                         RepairSpecialtyClassifier classifier, RequestNotifications notifications,
-                        ApplicationEventPublisher events, Clock clock) {
+                        ApplicationEventPublisher events, OwnerDebtDirectory debts, Clock clock) {
         this.requests = requests;
         this.propertyDirectory = propertyDirectory;
         this.tenancy = tenancy;
@@ -57,12 +60,18 @@ public class CreateRepairRequest implements RepairRequestCreation {
         this.notifications = notifications;
         this.events = events;
         this.clock = clock;
+        this.debts = debts;
     }
 
     @Transactional
     public RepairRequestSummary execute(CurrentActor actor, NewRepairRequest draft) {
+        com.fixup.requests.api.PaymentMethod.requireDigitalCreation(draft.paymentMethod());
         RequestAccess.requireActiveRequester(actor);
         var property = requireRelationship(actor, draft.propertyId());
+        if (debts.hasOutstandingDebtForProperty(property.id(), property.ownerUserId())) {
+            throw new RepairRequestConflictException("OWNER_HAS_OUTSTANDING_DEBT",
+                    "Pay outstanding debt before creating another repair request");
+        }
         Specialty specialty = classifier.classify(draft.title(), draft.description());
         var mediaIds = draft.mediaIds() == null ? List.<UUID>of() : draft.mediaIds();
         mediaAttachmentService.attachRepairRequestPhotos(actor.internalUserId(), mediaIds);
@@ -70,7 +79,8 @@ public class CreateRepairRequest implements RepairRequestCreation {
         var context = new RepairRequest.PropertyContext(property.id(), property.city(), property.name(),
                 property.address(), property.ownerUserId(), property.managerUserId());
         var request = RepairRequest.open(UUID.randomUUID(), context, actor.internalUserId(), specialty,
-                draft.title().trim(), draft.description().trim(), mediaIds, urgency, Instant.now(clock));
+                draft.title().trim(), draft.description().trim(), mediaIds, urgency,
+                draft.paymentMethod(), Instant.now(clock));
         requests.create(request);
 
         if (urgency == UrgencyLevel.URGENT) {
@@ -83,9 +93,9 @@ public class CreateRepairRequest implements RepairRequestCreation {
     @Override
     public ProjectRepairRequestSnapshot open(CurrentActor actor, NewProjectRepairRequest draft) {
         var summary = execute(actor, new NewRepairRequest(draft.propertyId(), draft.title(),
-                draft.description(), draft.mediaIds(), draft.urgencyLevel()));
+                draft.description(), draft.mediaIds(), draft.urgencyLevel(), draft.paymentMethod()));
         return new ProjectRepairRequestSnapshot(summary.id(), summary.specialty(), summary.status(),
-                summary.assignedFixerUserId());
+                summary.assignedFixerUserId(), summary.paymentMethod());
     }
 
     /**

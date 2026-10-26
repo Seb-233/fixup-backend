@@ -42,6 +42,13 @@ class PropertyDirectoryImpl implements PropertyDirectory {
     }
 
     @Override
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.MANDATORY)
+    public PropertySnapshot lockForFinancialDecision(UUID propertyId) {
+        return properties.findByIdForShare(propertyId).map(PropertySnapshots::of)
+                .orElseThrow(() -> new PropertyNotFoundException(propertyId));
+    }
+
+    @Override
     @Transactional(readOnly = true)
     public Map<UUID, String> names(Collection<UUID> propertyIds) {
         var names = new HashMap<UUID, String>();

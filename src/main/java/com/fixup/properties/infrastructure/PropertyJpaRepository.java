@@ -14,6 +14,10 @@ interface PropertyJpaRepository extends JpaRepository<PropertyEntity, UUID>,
         org.springframework.data.jpa.repository.JpaSpecificationExecutor<PropertyEntity> {
     List<PropertyEntity> findByOwnerUserIdOrderByCreatedAtDesc(UUID ownerUserId);
 
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_READ)
+    @Query("select p from PropertyEntity p where p.id = :id")
+    java.util.Optional<PropertyEntity> findByIdForShare(@Param("id") UUID id);
+
     @Query("select p from PropertyEntity p where p.ownerUserId = :userId or p.managerUserId = :userId order by p.createdAt desc")
     List<PropertyEntity> findControlledBy(@Param("userId") UUID userId);
 

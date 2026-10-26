@@ -20,6 +20,8 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
+import com.fasterxml.jackson.databind.JsonNode;
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -77,30 +79,35 @@ class JobController {
 
     @GetMapping("/{jobId}")
     @Operation(summary = "Read a job with its log and evidence photos (FR-UC-19)")
+    @ApiResponse(responseCode = "200", description = "Job, status log and evidence")
     JobDetailResponse detail(@PathVariable UUID jobId) {
         return JobDetailResponse.of(getDetail.byId(actors.currentActor(), jobId));
     }
 
     @GetMapping("/for-request/{requestId}")
     @Operation(summary = "Read the job opened for a repair request (FR-UC-19)")
+    @ApiResponse(responseCode = "200", description = "Job, status log and evidence")
     JobDetailResponse forRequest(@PathVariable UUID requestId) {
         return JobDetailResponse.of(getDetail.byRequest(actors.currentActor(), requestId));
     }
 
     @PostMapping(value = "/{jobId}/schedule", consumes = MediaType.APPLICATION_JSON_VALUE)
     @Operation(summary = "Set or move the date agreed with the client")
+    @ApiResponse(responseCode = "200", description = "Scheduled job")
     JobResponse schedule(@PathVariable UUID jobId, @Valid @RequestBody ScheduleRequest body) {
         return JobResponse.of(progressJob.schedule(actors.currentActor(), jobId, body.scheduledFor(), body.note()));
     }
 
     @PostMapping(value = "/{jobId}/start", consumes = MediaType.APPLICATION_JSON_VALUE)
     @Operation(summary = "Mark the job as in progress")
+    @ApiResponse(responseCode = "200", description = "Job in progress")
     JobResponse start(@PathVariable UUID jobId, @Valid @RequestBody NoteRequest body) {
         return JobResponse.of(progressJob.start(actors.currentActor(), jobId, body.note()));
     }
 
     @PostMapping(value = "/{jobId}/evidence", consumes = MediaType.APPLICATION_JSON_VALUE)
     @Operation(summary = "Attach before, during or after photos to the job")
+    @ApiResponse(responseCode = "200", description = "Attached evidence")
     List<EvidenceResponse> evidence(@PathVariable UUID jobId, @Valid @RequestBody EvidenceRequest body) {
         return addEvidence.execute(actors.currentActor(), jobId, body.mediaIds(), body.stage(), body.caption()).stream()
                 .map(item -> new EvidenceResponse(item.id(), item.mediaId(), null, item.stage(), item.caption(),
@@ -110,11 +117,36 @@ class JobController {
 
     @PostMapping("/{jobId}/complete")
     @Operation(summary = "Close a finished job",
-            description = "Closes the request, records the work in the property's history and releases from escrow "
-                    + "the amount the owner paid. Only the assigned fixer can close his own job.")
+            description = "Closes the request and records the work in the property's history. CASH requires receivedAmount; "
+                    + "TRANSFER rejects it. Only the assigned fixer can close his own job.")
     @ApiResponse(responseCode = "200", description = "The job is completed")
-    JobResponse complete(@PathVariable UUID jobId, @Valid @RequestBody(required = false) NoteRequest body) {
-        return JobResponse.of(completeJob.execute(actors.currentActor(), jobId, body == null ? null : body.note()));
+    JobResponse complete(@PathVariable UUID jobId, @Valid @RequestBody(required = false) CompletionRequest body) {
+        return JobResponse.of(completeJob.execute(actors.currentActor(), jobId,
+                body == null ? null : body.receivedAsLong(), body == null ? null : body.note()));
+    }
+
+    @Schema(additionalProperties = Schema.AdditionalPropertiesValue.FALSE)
+    @com.fasterxml.jackson.annotation.JsonIgnoreProperties(ignoreUnknown = false)
+    record CompletionRequest(@Schema(type = "integer", format = "int64") JsonNode receivedAmount,
+            @Size(max = 1000) String note) {
+        Long receivedAsLong() {
+            if (receivedAmount == null || receivedAmount.isNull()) {
+                return null;
+            }
+            if (receivedAmount.isTextual()) {
+                try {
+                    return new BigDecimal(receivedAmount.textValue()).longValueExact();
+                } catch (NumberFormatException | ArithmeticException ignored) {
+                    throw new com.fixup.jobs.api.JobConflictException("INVALID_CASH_RECEIVED_AMOUNT",
+                            "Cash received must be a whole peso amount");
+                }
+            }
+            if (!receivedAmount.isIntegralNumber() || !receivedAmount.canConvertToLong()) {
+                throw new com.fixup.jobs.api.JobConflictException("INVALID_CASH_RECEIVED_AMOUNT",
+                        "Cash received must be a whole peso amount");
+            }
+            return receivedAmount.longValue();
+        }
     }
 
     @Schema(additionalProperties = Schema.AdditionalPropertiesValue.FALSE)
@@ -133,8 +165,9 @@ class JobController {
             @Size(max = 200) String caption) {
     }
 
-    @Schema(requiredProperties = {"id", "requestId", "quotationId", "ownerUserId", "status", "createdAt"})
-    record JobResponse(UUID id, UUID requestId, UUID quotationId, UUID ownerUserId, JobStatus status,
+    @Schema(requiredProperties = {"id", "requestId", "quotationId", "ownerUserId", "paymentMethod", "agreedAmount", "status", "createdAt"})
+    record JobResponse(UUID id, UUID requestId, UUID quotationId, UUID ownerUserId,
+            String paymentMethod, long agreedAmount, JobStatus status,
             Instant createdAt, @Schema(types = {"string", "null"}) Instant completedAt,
             @Schema(types = {"string", "null"}) Instant scheduledFor,
             @Schema(types = {"string", "null"}) Instant startedAt,
@@ -153,7 +186,8 @@ class JobController {
         static JobResponse of(JobSummary summary, String requestTitle, String specialty, String propertyName,
                 String propertyAddress, String propertyCity, String ownerName) {
             return new JobResponse(summary.id(), summary.requestId(), summary.quotationId(),
-                    summary.ownerUserId(), summary.status(), summary.createdAt(), summary.completedAt(),
+                    summary.ownerUserId(), summary.paymentMethod(), summary.agreedAmount(),
+                    summary.status(), summary.createdAt(), summary.completedAt(),
                     summary.scheduledFor(), summary.startedAt(), summary.progressNote(), requestTitle, specialty,
                     propertyName, propertyAddress, propertyCity, ownerName);
         }

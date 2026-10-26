@@ -12,6 +12,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class RemodelingProjectTest {
+    @Test void internalRequirementIsDigitalByDefaultAndRejectsCashOrExplicitNull() {
+        var type=com.fixup.requests.api.PaymentMethod.TRANSFER;
+        assertThat(new com.fixup.remodelings.application.NewRemodelingRequirement("Title","Description",List.of(),null).paymentMethod()).isEqualTo(type);
+        assertThatThrownBy(()->new com.fixup.remodelings.application.NewRemodelingRequirement("Title","Description",List.of(),null,com.fixup.requests.api.PaymentMethod.CASH))
+                .isInstanceOf(com.fixup.requests.api.RepairRequestConflictException.class);
+        assertThatThrownBy(()->new com.fixup.remodelings.application.NewRemodelingRequirement("Title","Description",List.of(),null,null))
+                .isInstanceOf(NullPointerException.class);
+    }
     @Test
     void acceptsOneRequirementAndNormalizesText() {
         UUID projectId = UUID.randomUUID();

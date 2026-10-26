@@ -33,6 +33,8 @@ import org.springframework.web.bind.annotation.RestController;
     @ApiResponse(responseCode = "401", description = "Missing or invalid bearer token",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
     @ApiResponse(responseCode = "403", description = "Only owners, real estate managers and platform admins",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+    @ApiResponse(responseCode = "409", description = "A historical paid expense lacks sufficient property context; reconciliation is required",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
 })
 class ExpenseReportController {

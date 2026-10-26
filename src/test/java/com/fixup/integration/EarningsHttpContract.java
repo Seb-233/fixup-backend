@@ -29,10 +29,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * FR-UC-20: contrato HTTP del dinero, recorrido de extremo a extremo contra la base.
  *
- * <p>Las pruebas de dominio ya cubren la aritmética y las transiciones. Lo que falta verificar es
- * que el recorrido completo funcione por la API: aceptar la cotización retiene el dinero, cerrar
- * el trabajo lo libera, y la transferencia se lleva exactamente el saldo disponible. Se reutiliza
- * sin cambios contra H2 y contra PostgreSQL.
+ * <p>CASH opens a job without an earning; the shared release/payout scenarios use real TRANSFER
+ * approval to create HELD earnings. No financial rows are fabricated for that lifecycle.
+ *
+ * <p>Alternative charge scenarios are preserved verbatim under
+ * docs/pending-financial/FR-UC-05.2/reference; see the replacement plan in its manifest.
  */
 abstract class EarningsHttpContract {
 
@@ -89,10 +90,14 @@ abstract class EarningsHttpContract {
     }
 
     private UUID createRequest(String ownerSubject, String specialty) throws Exception {
+        return createRequest(ownerSubject, specialty, "TRANSFER");
+    }
+
+    private UUID createRequest(String ownerSubject, String specialty, String paymentMethod) throws Exception {
         java.util.UUID reqPropId = java.util.UUID.randomUUID();
         java.util.UUID ownerUserId = java.util.UUID.fromString(mapper.readTree(mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/auth/me").with(org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt().jwt(j -> j.subject(ownerSubject)))).andReturn().getResponse().getContentAsString()).get("id").asText());
         com.fixup.testsupport.PropertyFixtures.insertPublished(jdbc, reqPropId, ownerUserId);
-        String body = "{\"propertyId\":\"" + reqPropId.toString() + "\",\"title\":\"Tubo roto\",\"description\":\"Fuga constante de agua en la cocina\",\"mediaIds\":[]}";
+        String body = "{\"propertyId\":\"" + reqPropId.toString() + "\",\"title\":\"Tubo roto\",\"description\":\"Fuga constante de agua en la cocina\",\"mediaIds\":[],\"paymentMethod\":\"" + paymentMethod + "\"}";
         var result = mvc.perform(post("/requests").with(identity(ownerSubject)).contentType(MediaType.APPLICATION_JSON).content(body)).andExpect(status().isCreated()).andReturn();
         java.util.UUID reqId = java.util.UUID.fromString(mapper.readTree(result.getResponse().getContentAsString()).get("requestId").asText());
         jdbc.update("UPDATE repair_requests SET specialty = ? WHERE id = ?", specialty, reqId);
@@ -120,45 +125,45 @@ abstract class EarningsHttpContract {
                 .andExpect(status().isOk());
     }
 
-    /**
-     * FR-UC-05: el propietario paga la cotización aceptada en la pasarela de pruebas, con la
-     * referencia y el valor exactos del cobro.
-     */
-    private void payCharge(String ownerSubject, UUID requestId) throws Exception {
-        var charge = mapper.readTree(mvc.perform(get("/payments/charges/for-request/" + requestId)
-                        .with(identity(ownerSubject)))
-                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
-        mvc.perform(post("/payments/charges/" + charge.get("id").asText() + "/pay").with(identity(ownerSubject))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"reference\":\"%s\",\"amount\":%d,\"method\":\"SANDBOX_PSE\"}"
-                                .formatted(charge.get("reference").asText(), charge.get("amount").asLong())))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("APPROVED"));
+    private record AcceptedCashJob(UUID jobId, UUID quotationId, UUID fixerId) {
     }
 
-    /** Deja al técnico con un trabajo asignado y pagado, con su ingreso retenido. Devuelve el id del trabajo. */
-    private UUID assignedJob(String ownerSubject, String fixerSubject, long amount) throws Exception {
-        return assignedJob(ownerSubject, fixerSubject, amount, true);
-    }
-
-    private UUID assignedJob(String ownerSubject, String fixerSubject, long amount, boolean paid) throws Exception {
+    private AcceptedCashJob acceptedCashJob(String ownerSubject, String fixerSubject, long amount) throws Exception {
         UUID requestId = createRequest(ownerSubject, "PLUMBING");
         UUID quotationId = submitQuotation(fixerSubject, requestId, amount);
-        acceptQuotation(ownerSubject, quotationId);
-        if (paid) {
-            payCharge(ownerSubject, requestId);
-        }
+        com.fixup.testsupport.HistoricalCashFixtures.acceptedJob(jdbc, quotationId);
 
         var result = mvc.perform(get("/jobs/me").with(identity(fixerSubject)))
                 .andExpect(status().isOk()).andReturn();
-        return UUID.fromString(mapper.readTree(result.getResponse().getContentAsString())
+        UUID jobId = UUID.fromString(mapper.readTree(result.getResponse().getContentAsString())
+                .get(0).get("id").asText());
+        UUID fixerId = jdbc.queryForObject("SELECT fixer_user_id FROM quotations WHERE id = ?",
+                UUID.class, quotationId);
+        return new AcceptedCashJob(jobId, quotationId, fixerId);
+    }
+
+    /** Uses the real TRANSFER approval path to create the held earning. */
+    private UUID assignedJob(String ownerSubject, String fixerSubject, long amount) throws Exception {
+        UUID requestId = createRequest(ownerSubject, "PLUMBING", "TRANSFER");
+        UUID quotationId = submitQuotation(fixerSubject, requestId, amount);
+        var accepted = mvc.perform(post("/quotations/" + quotationId + "/accept")
+                .with(identity(ownerSubject))).andExpect(status().isOk()).andReturn();
+        String paymentId = mapper.readTree(accepted.getResponse().getContentAsString())
+                .get("paymentId").asText();
+        mvc.perform(post("/payments/" + paymentId + "/simulate")
+                .with(identity(ownerSubject)).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"outcome\":\"APPROVED\"}"))
+                .andExpect(status().isOk());
+        var jobs = mvc.perform(get("/jobs/me").with(identity(fixerSubject)))
+                .andExpect(status().isOk()).andReturn();
+        return UUID.fromString(mapper.readTree(jobs.getResponse().getContentAsString())
                 .get(0).get("id").asText());
     }
 
     // ---------- Tests ----------
 
     @Test
-    void acceptingTheQuotationOpensTheJobAndHoldsTheMoneyInEscrow() throws Exception {
+    void approvingTransferOpensJobAndHoldsTheMoneyInEscrow() throws Exception {
         String owner = "auth0|owner-escrow";
         String fixer = "auth0|fixer-escrow";
         provisionWithRole(owner, "OWNER");
@@ -173,7 +178,7 @@ abstract class EarningsHttpContract {
                 .andExpect(jsonPath("$[0].status").value("ASSIGNED"))
                 .andExpect(jsonPath("$[0].completedAt").doesNotExist());
 
-        // El dinero está comprometido, no disponible: nada que transferir todavía.
+        // TRANSFER approval creates the held earning; closure has not released it yet.
         mvc.perform(get("/payments/me/earnings").with(identity(fixer)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.availableBalance").value(0))
@@ -187,6 +192,32 @@ abstract class EarningsHttpContract {
                 .andExpect(jsonPath("$.history[0].netAmount").value(NET))
                 .andExpect(jsonPath("$.history[0].commissionRateBasisPoints").value(1000))
                 .andExpect(jsonPath("$.history[0].releasedAt").doesNotExist());
+    }
+
+    @Test
+    void historicalCashJobRemainsReadableWithoutCreatingEarning() throws Exception {
+        String owner = "auth0|owner-escrow";
+        String fixer = "auth0|fixer-escrow";
+        provisionWithRole(owner, "OWNER");
+        provisionVerifiedFixer(fixer, "PLUMBING");
+
+        UUID jobId = acceptedCashJob(owner, fixer, AMOUNT).jobId();
+
+        mvc.perform(get("/jobs/me").with(identity(fixer)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(1)))
+                .andExpect(jsonPath("$[0].id").value(jobId.toString()))
+                .andExpect(jsonPath("$[0].status").value("ASSIGNED"))
+                .andExpect(jsonPath("$[0].completedAt").doesNotExist());
+
+        // CASH acceptance alone creates no earning and no balance to transfer.
+        mvc.perform(get("/payments/me/earnings").with(identity(fixer)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.availableBalance").value(0))
+                .andExpect(jsonPath("$.heldBalance").value(0))
+                .andExpect(jsonPath("$.totalCommission").value(0))
+                .andExpect(jsonPath("$.grossTotal").value(0))
+                .andExpect(jsonPath("$.history", hasSize(0)));
     }
 
     @Test
@@ -214,11 +245,12 @@ abstract class EarningsHttpContract {
                 .andExpect(jsonPath("$.history[0].netAmount").value(NET))
                 .andExpect(jsonPath("$.history[0].commissionAmount").value(COMMISSION));
 
-        mvc.perform(post("/payments/me/payouts").with(identity(fixer)))
+        mvc.perform(post("/payments/me/payouts").header("Idempotency-Key", UUID.randomUUID()).with(identity(fixer)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.amount").value(NET))
                 .andExpect(jsonPath("$.earningCount").value(1))
-                .andExpect(jsonPath("$.status").value("REQUESTED"));
+                .andExpect(jsonPath("$.status").value("TRANSFERRED"))
+                .andExpect(jsonPath("$.transferredAt").isNotEmpty());
 
         mvc.perform(get("/payments/me/earnings").with(identity(fixer)))
                 .andExpect(status().isOk())
@@ -234,79 +266,26 @@ abstract class EarningsHttpContract {
                 .andExpect(jsonPath("$[0].amount").value(NET));
 
         // El saldo ya se consumió: pedir otra transferencia no registra una vacía.
-        mvc.perform(post("/payments/me/payouts").with(identity(fixer)))
+        mvc.perform(post("/payments/me/payouts").header("Idempotency-Key", UUID.randomUUID()).with(identity(fixer)))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("NO_AVAILABLE_BALANCE"));
     }
 
     @Test
-    void anUnpaidJobKeepsTheMoneyInEscrowUntilTheOwnerPays() throws Exception {
-        String owner = "auth0|owner-unpaid";
-        String fixer = "auth0|fixer-unpaid";
-        provisionWithRole(owner, "OWNER");
-        provisionVerifiedFixer(fixer, "PLUMBING");
-        UUID jobId = assignedJob(owner, fixer, AMOUNT, false);
-        UUID requestId = UUID.fromString(mapper.readTree(mvc.perform(get("/jobs/me").with(identity(fixer)))
-                .andReturn().getResponse().getContentAsString()).get(0).get("requestId").asText());
+    void historicalRequestedPayoutRemainsReadable() throws Exception {
+        String fixer = "auth0|fixer-historical-payout";
+        UUID fixerId = provisionVerifiedFixer(fixer, "PLUMBING");
+        UUID payoutId = UUID.randomUUID();
+        jdbc.update("INSERT INTO payouts (id, fixer_user_id, amount, earning_count, status, requested_at) "
+                + "VALUES (?, ?, ?, ?, 'REQUESTED', CURRENT_TIMESTAMP)",
+                payoutId, fixerId, 100_000L, 1);
 
-        mvc.perform(post("/jobs/" + jobId + "/complete").with(identity(fixer))).andExpect(status().isOk());
-        // El trabajo está cerrado pero el propietario no ha pagado: el dinero no es del técnico todavía.
-        mvc.perform(get("/payments/me/earnings").with(identity(fixer)))
-                .andExpect(jsonPath("$.availableBalance").value(0))
-                .andExpect(jsonPath("$.heldBalance").value(NET))
-                .andExpect(jsonPath("$.history[0].jobCompletedAt").isNotEmpty())
-                .andExpect(jsonPath("$.history[0].fundedAt").doesNotExist());
-
-        payCharge(owner, requestId);
-        mvc.perform(get("/payments/me/earnings").with(identity(fixer)))
-                .andExpect(jsonPath("$.availableBalance").value(NET))
-                .andExpect(jsonPath("$.history[0].status").value("AVAILABLE"));
-    }
-
-    @Test
-    void theSandboxRejectsAWrongReferenceOrAmountAndCanDecline() throws Exception {
-        String owner = "auth0|owner-sandbox";
-        String fixer = "auth0|fixer-sandbox";
-        String stranger = "auth0|owner-sandbox-stranger";
-        provisionWithRole(owner, "OWNER");
-        provisionWithRole(stranger, "OWNER");
-        provisionVerifiedFixer(fixer, "PLUMBING");
-        assignedJob(owner, fixer, AMOUNT, false);
-        UUID requestId = UUID.fromString(mapper.readTree(mvc.perform(get("/jobs/me").with(identity(fixer)))
-                .andReturn().getResponse().getContentAsString()).get(0).get("requestId").asText());
-        var charge = mapper.readTree(mvc.perform(get("/payments/charges/for-request/" + requestId)
-                .with(identity(owner))).andReturn().getResponse().getContentAsString());
-        String chargeId = charge.get("id").asText();
-        String reference = charge.get("reference").asText();
-
-        mvc.perform(post("/payments/charges/" + chargeId + "/pay").with(identity(owner))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"reference\":\"FXR-WRONG\",\"amount\":%d,\"method\":\"SANDBOX_CARD\"}"
-                                .formatted(AMOUNT)))
-                .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("REFERENCE_MISMATCH"));
-        mvc.perform(post("/payments/charges/" + chargeId + "/pay").with(identity(owner))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"reference\":\"%s\",\"amount\":%d,\"method\":\"SANDBOX_CARD\"}"
-                                .formatted(reference, AMOUNT - 1)))
-                .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("AMOUNT_MISMATCH"));
-        mvc.perform(post("/payments/charges/" + chargeId + "/pay").with(identity(stranger))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"reference\":\"%s\",\"amount\":%d,\"method\":\"SANDBOX_CARD\"}"
-                                .formatted(reference, AMOUNT)))
-                .andExpect(status().isForbidden());
-        mvc.perform(post("/payments/charges/" + chargeId + "/pay").with(identity(owner))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"reference\":\"%s\",\"amount\":%d,\"method\":\"SANDBOX_NEQUI\",\"scenario\":\"DECLINE_FUNDS\"}"
-                                .formatted(reference, AMOUNT)))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("DECLINED"))
-                .andExpect(jsonPath("$.attempts").value(1));
-        // Un rechazo se puede reintentar; la aprobación deja el cobro cerrado para siempre.
-        payCharge(owner, requestId);
-        mvc.perform(post("/payments/charges/" + chargeId + "/pay").with(identity(owner))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"reference\":\"%s\",\"amount\":%d,\"method\":\"SANDBOX_PSE\"}"
-                                .formatted(reference, AMOUNT)))
-                .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("CHARGE_ALREADY_PAID"));
+        mvc.perform(get("/payments/me/payouts").with(identity(fixer)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(1)))
+                .andExpect(jsonPath("$[0].id").value(payoutId.toString()))
+                .andExpect(jsonPath("$[0].status").value("REQUESTED"))
+                .andExpect(jsonPath("$[0].transferredAt").doesNotExist());
     }
 
     @Test
@@ -321,13 +300,13 @@ abstract class EarningsHttpContract {
 
         // Un monto en el cuerpo se rechaza de frente. Aceptarlo en silencio y transferir otra
         // cifra dejaría a quien llama creyendo que decidió algo que nunca se leyó.
-        mvc.perform(post("/payments/me/payouts").with(identity(fixer))
+        mvc.perform(post("/payments/me/payouts").header("Idempotency-Key", UUID.randomUUID()).with(identity(fixer))
                 .contentType(MediaType.APPLICATION_JSON).content("{\"amount\": 999999999}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
 
         // Y el saldo sigue intacto: el rechazo no consumió nada.
-        mvc.perform(post("/payments/me/payouts").with(identity(fixer)))
+        mvc.perform(post("/payments/me/payouts").header("Idempotency-Key", UUID.randomUUID()).with(identity(fixer)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.amount").value(NET));
     }
@@ -352,7 +331,7 @@ abstract class EarningsHttpContract {
                 .andExpect(jsonPath("$.totalCommission").value(COMMISSION + 99L))
                 .andExpect(jsonPath("$.grossTotal").value(AMOUNT + 999L));
 
-        mvc.perform(post("/payments/me/payouts").with(identity(fixer)))
+        mvc.perform(post("/payments/me/payouts").header("Idempotency-Key", UUID.randomUUID()).with(identity(fixer)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.amount").value(NET + 900L))
                 .andExpect(jsonPath("$.earningCount").value(2));
@@ -420,7 +399,7 @@ abstract class EarningsHttpContract {
         for (String path : List.of("/jobs/me", "/payments/me/earnings", "/payments/me/payouts")) {
             mvc.perform(get(path)).andExpect(status().isUnauthorized());
         }
-        mvc.perform(post("/payments/me/payouts")).andExpect(status().isUnauthorized());
+        mvc.perform(post("/payments/me/payouts").header("Idempotency-Key", UUID.randomUUID())).andExpect(status().isUnauthorized());
         mvc.perform(post("/jobs/" + UUID.randomUUID() + "/complete")).andExpect(status().isUnauthorized());
     }
 
@@ -439,7 +418,7 @@ abstract class EarningsHttpContract {
         var rejected = new AtomicInteger();
         Callable<Void> attempt = () -> {
             start.await();
-            int code = mvc.perform(post("/payments/me/payouts").with(identity(fixer)))
+            int code = mvc.perform(post("/payments/me/payouts").header("Idempotency-Key", UUID.randomUUID()).with(identity(fixer)))
                     .andReturn().getResponse().getStatus();
             if (code == 201) {
                 created.incrementAndGet();

@@ -17,6 +17,9 @@ public interface PropertyDirectory {
      */
     PropertySnapshot require(UUID propertyId);
 
+    /** Hold the property row against concurrent ownership/delegation changes in the caller's transaction. */
+    PropertySnapshot lockForFinancialDecision(UUID propertyId);
+
     /** Nombres de los inmuebles pedidos; los que no existen o no son visibles no aparecen. */
     Map<UUID, String> names(Collection<UUID> propertyIds);
 

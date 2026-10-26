@@ -14,6 +14,10 @@ public interface PaymentGateway {
     record Attempt(UUID chargeId, String reference, long amount, PaymentMethod method, String scenario) {
     }
 
-    record Result(boolean approved, String transactionId, String failureReason) {
+    record Result(PaymentStatus status, String transactionId, String failureReason) {
+        public Result {
+            java.util.Objects.requireNonNull(status);
+            java.util.Objects.requireNonNull(transactionId);
+        }
     }
 }

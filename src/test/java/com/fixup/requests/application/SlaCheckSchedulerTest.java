@@ -2,6 +2,7 @@ package com.fixup.requests.application;
 
 import com.fixup.fixers.api.Specialty;
 import com.fixup.requests.api.RepairRequestStatus;
+import com.fixup.requests.api.PaymentMethod;
 import com.fixup.requests.api.SlaBreached;
 import com.fixup.requests.api.SlaWarningRaised;
 import com.fixup.requests.api.UrgencyLevel;
@@ -69,6 +70,7 @@ class SlaCheckSchedulerTest {
                 List.of(),
                 status,
                 null,
+                PaymentMethod.TRANSFER,
                 baseNow.minus(Duration.ofHours(10)),
                 baseNow.minus(Duration.ofHours(10)),
                 UrgencyLevel.URGENT,

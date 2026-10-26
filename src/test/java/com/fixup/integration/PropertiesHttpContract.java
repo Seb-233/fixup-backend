@@ -453,6 +453,34 @@ abstract class PropertiesHttpContract {
     }
 
     @Test
+    void ownerCanReverseGeocodeButInvalidCoordinatesAreRejected() throws Exception {
+        UUID ownerId = UUID.randomUUID();
+        String subject = "auth0|reverse-geocode-owner";
+        seedUser(ownerId, subject);
+        var latitude = new BigDecimal("4.657");
+        var longitude = new BigDecimal("-74.055");
+        when(geocodingProvider.reverseGeocode(latitude, longitude))
+                .thenReturn(java.util.List.of(new GeocodingCandidate(
+                        "Carrera 7, Bogota", latitude, longitude)));
+
+        mvc.perform(get("/locations/reverse-geocode")
+                        .queryParam("latitude", "4.657").queryParam("longitude", "-74.055")
+                        .with(jwt().jwt(j -> j.subject(subject))))
+                .andExpect(status().isOk())
+                .andExpect(header().string("X-Data-Attribution", "\u00A9 OpenStreetMap contributors"))
+                .andExpect(jsonPath("$[0].displayName").value("Carrera 7, Bogota"))
+                .andExpect(jsonPath("$[0].latitude").value(4.657));
+        mvc.perform(get("/locations/reverse-geocode")
+                        .queryParam("latitude", "91").queryParam("longitude", "-74")
+                        .with(jwt().jwt(j -> j.subject(subject))))
+                .andExpect(status().isBadRequest());
+        mvc.perform(get("/locations/reverse-geocode")
+                        .queryParam("latitude", "4").queryParam("longitude", "-181")
+                        .with(jwt().jwt(j -> j.subject(subject))))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
     void tenantCanGeocodeAndReceiveAnEmptyCandidateList() throws Exception {
         UUID tenantId = UUID.randomUUID();
         String subject = "auth0|geocode-tenant";

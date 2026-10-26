@@ -35,7 +35,6 @@ public class IntegrationDatabaseCleaner {
             jdbc.update("DELETE FROM service_ratings");
             jdbc.update("DELETE FROM visit_checklist_items");
             jdbc.update("DELETE FROM technical_visits");
-            jdbc.update("DELETE FROM owner_payments");
             jdbc.update("DELETE FROM property_work_history");
             jdbc.update("DELETE FROM job_evidences");
             jdbc.update("DELETE FROM job_status_log");
@@ -44,6 +43,12 @@ public class IntegrationDatabaseCleaner {
             jdbc.update("DELETE FROM notifications");
             jdbc.update("DELETE FROM user_devices");
             jdbc.update("DELETE FROM chat_messages");
+            jdbc.update("DELETE FROM simulated_payment_attempts");
+            jdbc.update("DELETE FROM cash_settlements");
+            jdbc.update("DELETE FROM owner_debts");
+            jdbc.update("DELETE FROM repair_payments");
+            jdbc.update("DELETE FROM repair_payment_contexts");
+            jdbc.update("DELETE FROM payout_entries");
             jdbc.update("DELETE FROM payouts");
             jdbc.update("DELETE FROM fixer_earnings");
             jdbc.update("DELETE FROM jobs");

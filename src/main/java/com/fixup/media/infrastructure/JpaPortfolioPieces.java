@@ -2,6 +2,7 @@ package com.fixup.media.infrastructure;
 
 import com.fixup.media.api.PortfolioRuleException;
 import com.fixup.media.api.PortfolioVisibility;
+import com.fixup.media.domain.PortfolioFeedSlice;
 import com.fixup.media.domain.PortfolioPiece;
 import com.fixup.media.domain.PortfolioPieces;
 import java.util.List;
@@ -9,6 +10,7 @@ import java.util.Optional;
 import java.util.UUID;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.PessimisticLockingFailureException;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Repository;
 
 @Repository
@@ -63,6 +65,16 @@ class JpaPortfolioPieces implements PortfolioPieces {
         return repository.findByFixerUserIdAndVisibilityOrderByPositionAsc(
                 fixerUserId, PortfolioVisibility.PUBLIC).stream()
                 .map(PortfolioPieceEntity::toDomain).toList();
+    }
+
+    @Override
+    public PortfolioFeedSlice findPublishedFeed(java.util.Collection<UUID> fixerFilter, int page, int size) {
+        if (fixerFilter != null && fixerFilter.isEmpty()) return new PortfolioFeedSlice(List.of(), false);
+        var pageable = PageRequest.of(page, size);
+        var result = fixerFilter == null ? repository.findPublishedFeed(pageable)
+                : repository.findPublishedFeedOf(fixerFilter, pageable);
+        return new PortfolioFeedSlice(result.getContent().stream().map(PortfolioPieceEntity::toDomain).toList(),
+                result.hasNext());
     }
 
     @Override
