@@ -4,7 +4,8 @@ COPY .mvn .mvn
 COPY mvnw pom.xml ./
 RUN chmod +x mvnw
 COPY src src
-RUN ./mvnw --batch-mode --no-transfer-progress clean verify
+# CI validates tests with Docker/Testcontainers before CD; image build only packages the JAR.
+RUN ./mvnw --batch-mode --no-transfer-progress -DskipTests clean package
 
 FROM eclipse-temurin:21-jre
 WORKDIR /app
