@@ -6,4 +6,5 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 interface PayoutJpaRepository extends JpaRepository<PayoutEntity, UUID> {
     List<PayoutEntity> findByFixerUserIdOrderByRequestedAtDesc(UUID fixerUserId);
+    java.util.Optional<PayoutEntity> findByFixerUserIdAndOperationKey(UUID fixerUserId, UUID operationKey);
 }

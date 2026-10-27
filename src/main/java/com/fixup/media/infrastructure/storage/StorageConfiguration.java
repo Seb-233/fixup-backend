@@ -1,6 +1,7 @@
 package com.fixup.media.infrastructure.storage;
 
 import com.fixup.media.application.ObjectStorage;
+import java.util.Arrays;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Bean;
@@ -18,7 +19,9 @@ public class StorageConfiguration {
             @Value("${fixup.storage.secret-key}") String secretKey,
             @Value("${fixup.storage.bucket:fixup-private}") String bucket,
             @Value("${fixup.storage.region:us-east-1}") String region,
-            @Value("${fixup.storage.auto-create-bucket:false}") boolean autoCreateBucket) {
-        return new S3ObjectStorage(endpoint, publicEndpoint, accessKey, secretKey, bucket, region, autoCreateBucket);
+            @Value("${fixup.storage.auto-create-bucket:false}") boolean autoCreateBucket,
+            @Value("${fixup.cors.allowed-origins:http://localhost:4200}") String allowedOrigins) {
+        var origins = Arrays.stream(allowedOrigins.split(",")).map(String::trim).filter(origin -> !origin.isEmpty()).toList();
+        return new S3ObjectStorage(endpoint, publicEndpoint, accessKey, secretKey, bucket, region, autoCreateBucket, origins);
     }
 }

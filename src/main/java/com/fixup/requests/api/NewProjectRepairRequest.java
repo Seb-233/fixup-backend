@@ -10,7 +10,7 @@ public record NewProjectRepairRequest(UUID propertyId, String title, String desc
         List<UUID> mediaIds, UrgencyLevel urgencyLevel, PaymentMethod paymentMethod) {
 
     public NewProjectRepairRequest {
-        Objects.requireNonNull(paymentMethod, "paymentMethod must not be null");
+        PaymentMethod.requireDigitalCreation(paymentMethod);
         if (mediaIds != null && mediaIds.stream().anyMatch(Objects::isNull)) {
             throw new IllegalArgumentException("mediaIds cannot contain null elements");
         }
@@ -18,5 +18,9 @@ public record NewProjectRepairRequest(UUID propertyId, String title, String desc
         if (new HashSet<>(mediaIds).size() != mediaIds.size()) {
             throw new IllegalArgumentException("mediaIds cannot contain duplicates");
         }
+    }
+
+    public NewProjectRepairRequest(UUID propertyId, String title, String description, List<UUID> mediaIds, UrgencyLevel urgencyLevel) {
+        this(propertyId, title, description, mediaIds, urgencyLevel, PaymentMethod.TRANSFER);
     }
 }

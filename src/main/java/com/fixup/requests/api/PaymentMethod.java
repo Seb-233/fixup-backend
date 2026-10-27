@@ -12,5 +12,12 @@ import io.swagger.v3.oas.annotations.media.Schema;
 @Schema(enumAsRef = true)
 public enum PaymentMethod {
     TRANSFER,
-    CASH
+    CASH;
+
+    /** Only for creation commands; never normalize a persisted historical request. */
+    public static PaymentMethod requireDigitalCreation(PaymentMethod method) {
+        java.util.Objects.requireNonNull(method, "paymentMethod must not be null");
+        if (method != TRANSFER) throw new RepairRequestConflictException("DIGITAL_PAYMENT_REQUIRED", "New repairs require digital payment");
+        return method;
+    }
 }

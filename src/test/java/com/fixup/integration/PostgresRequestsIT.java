@@ -14,6 +14,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 @Import(TestJwtConfiguration.class)
+@org.springframework.test.annotation.DirtiesContext
 @Testcontainers
 class PostgresRequestsIT extends RequestsHttpContract {
 

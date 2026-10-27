@@ -9,6 +9,9 @@ public record NewRemodelingRequirement(String title, String description, List<UU
         UrgencyLevel urgencyLevel, PaymentMethod paymentMethod) {
     public NewRemodelingRequirement {
         mediaIds = mediaIds == null ? List.of() : List.copyOf(mediaIds);
-        java.util.Objects.requireNonNull(paymentMethod, "paymentMethod must not be null");
+        PaymentMethod.requireDigitalCreation(paymentMethod);
+    }
+    public NewRemodelingRequirement(String title, String description, List<UUID> mediaIds, UrgencyLevel urgencyLevel) {
+        this(title, description, mediaIds, urgencyLevel, PaymentMethod.TRANSFER);
     }
 }

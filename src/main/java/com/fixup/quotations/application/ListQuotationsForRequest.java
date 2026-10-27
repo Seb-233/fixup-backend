@@ -25,7 +25,7 @@ public class ListQuotationsForRequest {
     @Transactional(readOnly = true)
     public List<QuotationSummary> execute(CurrentActor actor, UUID requestId) {
         QuotationAccess.requireActive(actor);
-        requests.require(requestId).requireOwnedBy(actor.internalUserId());
+        requests.require(requestId).requireDecidedBy(actor.internalUserId());
         return quotations.findByRequest(requestId).stream().map(QuotationSummary::of).toList();
     }
 }

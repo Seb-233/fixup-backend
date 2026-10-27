@@ -9,22 +9,26 @@ import com.fixup.requests.api.RepairRequestAccessDeniedException;
 import com.fixup.requests.api.RepairRequestNotFoundException;
 import com.fixup.requests.domain.RepairRequest;
 import com.fixup.requests.domain.RepairRequests;
+import com.fixup.requests.domain.RequestInvitations;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * FR-UC-18: el detalle que evalúa el usuario autorizado.
- * Solo responde al propietario, admin autorizado, fixer asignado, o fixer verificado y compatible mientras esté OPEN.
+ * FR-UC-18: el detalle que evalúa el usuario autorizado. Responde a quien tiene relación con el
+ * inmueble (propietario, arrendatario que la reportó, administrador), al admin de plataforma, al
+ * técnico asignado y, mientras está abierta, al técnico verificado compatible o invitado.
  */
 @Service
 public class GetRepairRequest {
     private final RepairRequests requests;
     private final FixerEligibility eligibility;
+    private final RequestInvitations invitations;
 
-    public GetRepairRequest(RepairRequests requests, FixerEligibility eligibility) {
+    public GetRepairRequest(RepairRequests requests, FixerEligibility eligibility, RequestInvitations invitations) {
         this.requests = requests;
         this.eligibility = eligibility;
+        this.invitations = invitations;
     }
 
     @Transactional(readOnly = true)
@@ -39,7 +43,7 @@ public class GetRepairRequest {
             throw new RepairRequestAccessDeniedException();
         }
         var userId = actor.internalUserId();
-        if (request.ownerUserId().equals(userId)) {
+        if (request.involves(userId)) {
             return;
         }
         if (actor.hasRole(Role.PLATFORM_ADMIN)) {
@@ -52,7 +56,8 @@ public class GetRepairRequest {
             try {
                 eligibility.requireVerified(actor);
                 var specialties = eligibility.specialtiesOf(actor);
-                if (specialties != null && specialties.contains(request.specialty())) {
+                if ((specialties != null && specialties.contains(request.specialty()))
+                        || invitations.exists(request.id(), userId)) {
                     return;
                 }
             } catch (FixerNotEligibleException ex) {

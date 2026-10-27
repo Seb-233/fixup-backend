@@ -30,6 +30,8 @@ class PayoutEntity {
     private Instant requestedAt;
     @Column(name = "transferred_at")
     private Instant transferredAt;
+    @Column(name = "operation_key", updatable = false)
+    private UUID operationKey;
 
     protected PayoutEntity() {
     }
@@ -43,10 +45,11 @@ class PayoutEntity {
         entity.status = payout.status();
         entity.requestedAt = payout.requestedAt();
         entity.transferredAt = payout.transferredAt();
+        entity.operationKey = payout.operationKey();
         return entity;
     }
 
     Payout toDomain() {
-        return new Payout(id, fixerUserId, amount, earningCount, status, requestedAt, transferredAt);
+        return new Payout(id, fixerUserId, amount, earningCount, status, requestedAt, transferredAt, operationKey);
     }
 }

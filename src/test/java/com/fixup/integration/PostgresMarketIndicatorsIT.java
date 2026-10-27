@@ -29,6 +29,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 @Import({TestJwtConfiguration.class, MarketIndicatorsHttpContract.ControllableSourceConfiguration.class})
+@org.springframework.test.annotation.DirtiesContext
 @Testcontainers
 class PostgresMarketIndicatorsIT extends MarketIndicatorsHttpContract {
     @Container

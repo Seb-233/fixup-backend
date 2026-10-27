@@ -32,6 +32,13 @@ public class IntegrationDatabaseCleaner {
         // fixup_app because of some earlier, unrelated test's leftover actor.
         DatabaseActorContext.clear();
         transactionTemplate.executeWithoutResult(status -> {
+            jdbc.update("DELETE FROM service_ratings");
+            jdbc.update("DELETE FROM visit_checklist_items");
+            jdbc.update("DELETE FROM technical_visits");
+            jdbc.update("DELETE FROM property_work_history");
+            jdbc.update("DELETE FROM job_evidences");
+            jdbc.update("DELETE FROM job_status_log");
+            jdbc.update("DELETE FROM request_invitations");
             jdbc.update("DELETE FROM rental_contracts");
             jdbc.update("DELETE FROM notifications");
             jdbc.update("DELETE FROM user_devices");
@@ -40,6 +47,8 @@ public class IntegrationDatabaseCleaner {
             jdbc.update("DELETE FROM cash_settlements");
             jdbc.update("DELETE FROM owner_debts");
             jdbc.update("DELETE FROM repair_payments");
+            jdbc.update("DELETE FROM repair_payment_contexts");
+            jdbc.update("DELETE FROM payout_entries");
             jdbc.update("DELETE FROM payouts");
             jdbc.update("DELETE FROM fixer_earnings");
             jdbc.update("DELETE FROM jobs");
@@ -52,6 +61,7 @@ public class IntegrationDatabaseCleaner {
             jdbc.update("DELETE FROM portfolio_pieces");
             jdbc.update("DELETE FROM fixer_portfolios");
             jdbc.update("DELETE FROM fixer_verification_documents");
+            jdbc.update("DELETE FROM property_photos");
             jdbc.update("DELETE FROM media_assets");
             jdbc.update("DELETE FROM market_indicator_snapshots");
             jdbc.update("DELETE FROM fixer_specialties");

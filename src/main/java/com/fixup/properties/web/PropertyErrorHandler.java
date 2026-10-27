@@ -31,6 +31,11 @@ class PropertyErrorHandler {
         return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
     }
 
+    @ExceptionHandler(IllegalStateException.class)
+    ProblemDetail handleIllegalState(IllegalStateException ex) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+    }
+
     @ExceptionHandler(GeocodingRateLimitExceededException.class)
     ProblemDetail handleGeocodingRateLimit(GeocodingRateLimitExceededException ex) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.TOO_MANY_REQUESTS, ex.getMessage());

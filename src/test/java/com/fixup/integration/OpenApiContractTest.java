@@ -19,8 +19,17 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc
 @ActiveProfiles({"test", "dev"})
 @org.springframework.test.annotation.DirtiesContext
-@Import(TestJwtConfiguration.class)
+@Import({TestJwtConfiguration.class, TestStorageConfiguration.class})
+@org.testcontainers.junit.jupiter.Testcontainers
 class OpenApiContractTest {
+    @org.testcontainers.junit.jupiter.Container
+    static final org.testcontainers.containers.PostgreSQLContainer<?> POSTGRES = new org.testcontainers.containers.PostgreSQLContainer<>("postgres:17-alpine");
+    @org.springframework.test.context.DynamicPropertySource
+    static void postgres(org.springframework.test.context.DynamicPropertyRegistry r) {
+        r.add("spring.datasource.url", POSTGRES::getJdbcUrl);
+        r.add("spring.datasource.username", POSTGRES::getUsername);
+        r.add("spring.datasource.password", POSTGRES::getPassword);
+    }
     @Autowired MockMvc mvc;
     @Autowired ObjectMapper mapper;
     @Autowired org.springdoc.webmvc.api.OpenApiWebMvcResource openApi;
@@ -45,6 +54,7 @@ class OpenApiContractTest {
                 "/media/me/portfolio/publish", "/media/me/portfolio/unpublish",
                 "/media/me/portfolio/pieces/{pieceId}", "/media/me/portfolio/pieces/{pieceId}/hide",
                 "/media/me/portfolio/pieces/{pieceId}/show", "/media/fixers/{fixerUserId}/portfolio",
+                "/media/portfolio/feed",
                 "/analytics/zones/{zone}/market-indicators",
                 "/requests", "/requests/me", "/requests/open", "/requests/{requestId}",
                 "/requests/{requestId}/messages",
@@ -52,19 +62,36 @@ class OpenApiContractTest {
                 "/quotations", "/quotations/me", "/quotations/for-request/{requestId}",
                 "/quotations/{quotationId}/accept", "/quotations/{quotationId}/reject",
                 "/jobs/me", "/jobs/{jobId}/complete",
-                "/payments/me/earnings", "/payments/me/payouts", "/payments/me/debts",
+                "/payments/me", "/payments/me/earnings", "/payments/me/payouts", "/payments/me/debts",
                 "/payments/debts/{debtId}/pay", "/payments/cash-settlements/jobs/{jobId}",
                 "/payments/{paymentId}",
-                "/payments/{paymentId}/simulate", "/properties", "/properties/{propertyId}", "/properties/me",
+                "/payments/{paymentId}/attempts", "/properties", "/properties/{propertyId}", "/properties/me",
                 "/properties/search", "/locations/geocode", "/locations/reverse-geocode",
                 "/properties/bulk/validate", "/properties/bulk/import",
                 "/notifications/me", "/notifications/{id}/read", "/notifications/read-all",
                 "/notifications/me/unread-count", "/notifications/device-token",
                 "/contracts", "/contracts/me", "/contracts/{id}", "/contracts/{id}/renew",
-                "/contracts/{id}/terminate", "/contracts/expiring",
+                "/contracts/{id}/terminate", "/contracts/expiring", "/contracts/tenant-lookup",
                 "/administration/sla-board/requests", "/administration/sla-board/requests/{id}/reassign",
-                "/administration/sla-board/requests/{id}/acknowledge");
+                "/administration/sla-board/requests/{id}/acknowledge",
+                "/properties/{propertyId}/publish", "/properties/{propertyId}/unpublish",
+                "/properties/{propertyId}/manager", "/properties/managers", "/properties/catalog",
+                "/properties/{propertyId}/listing",
+                "/fixers/directory", "/fixers/{fixerUserId}/profile", "/fixers/me/profile",
+                "/fixers/verification/pending",
+                "/requests/reportable-properties", "/requests/{requestId}/cancel",
+                "/management/requests", "/management/requests/{requestId}/invitations",
+                "/management/requests/{requestId}/candidates",
+                "/jobs/{jobId}", "/jobs/for-request/{requestId}", "/jobs/{jobId}/schedule",
+                "/jobs/{jobId}/start", "/jobs/{jobId}/evidence",
+                "/visits", "/visits/me", "/visits/{visitId}", "/visits/{visitId}/confirm",
+                "/visits/{visitId}/reschedule", "/visits/{visitId}/cancel", "/visits/{visitId}/complete",
+                "/visits/{visitId}/no-show",
+                "/ratings", "/ratings/jobs/{jobId}", "/ratings/fixers/{fixerUserId}",
+                "/analytics/expenses", "/analytics/expenses/csv",
+                "/remodelings/{projectId}/publish-listing");
         assertThat(paths.fieldNames()).toIterable().doesNotContain(
+                "/payments/{paymentId}/simulate", "/payments/charges/me", "/payments/charges/for-request/{requestId}", "/payments/charges/{chargeId}/pay",
                 "/demo/token", "/demo/token/{role}",
                 "/media/me/portfolio/{pieceId}",
                 "/media/me/portfolio/{pieceId}/hide",
@@ -88,6 +115,7 @@ class OpenApiContractTest {
                 {"/media/me/portfolio/pieces/{pieceId}/hide", "post", "200"},
                 {"/media/me/portfolio/pieces/{pieceId}/show", "post", "200"},
                 {"/media/fixers/{fixerUserId}/portfolio", "get", "200"},
+                {"/media/portfolio/feed", "get", "200"},
                 {"/requests", "post", "201"}, {"/requests/me", "get", "200"},
                 {"/requests/open", "get", "200"}, {"/requests/{requestId}", "get", "200"},
                 {"/requests/{requestId}/messages", "post", "201"},
@@ -97,14 +125,14 @@ class OpenApiContractTest {
                 {"/quotations/{quotationId}/accept", "post", "200"},
                 {"/quotations/{quotationId}/reject", "post", "200"},
                 {"/jobs/me", "get", "200"}, {"/jobs/{jobId}/complete", "post", "200"},
-                {"/payments/me/earnings", "get", "200"},
+                {"/payments/me", "get", "200"}, {"/payments/me/earnings", "get", "200"},
                 {"/payments/me/payouts", "post", "201"},
                 {"/payments/me/payouts", "get", "200"},
                 {"/payments/me/debts", "get", "200"},
                 {"/payments/debts/{debtId}/pay", "post", "201"},
                 {"/payments/cash-settlements/jobs/{jobId}", "get", "200"},
                 {"/payments/{paymentId}", "get", "200"},
-                {"/payments/{paymentId}/simulate", "post", "200"}}) {
+                {"/payments/{paymentId}/attempts", "post", "200"}, {"/payments/{paymentId}/attempts", "get", "200"}}) {
             var operation = paths.get(endpoint[0]).get(endpoint[1]);
             assertThat(operation.get("security").toString()).contains("bearerAuth");
             for (String code : new String[]{endpoint[2], "400", "401", "403", "409"}) {
@@ -149,7 +177,8 @@ class OpenApiContractTest {
         assertThat(contract.at("/components/schemas/OpenRequest/properties").toString())
                 .contains("paymentMethod");
         assertThat(contract.at("/components/schemas/OpenRequest/required").toString())
-                .contains("paymentMethod");
+                .doesNotContain("paymentMethod");
+        assertThat(contract.at("/components/schemas/OpenRequest/properties/paymentMethod/enum").toString()).isEqualTo("[\"TRANSFER\"]");
         assertThat(contract.at("/components/schemas/RequestDetailResponse/properties").toString())
                 .contains("paymentMethod");
         assertThat(contract.at("/components/schemas/PaymentMethod/enum").toString())
@@ -286,6 +315,13 @@ class OpenApiContractTest {
         assertThat(contract.at("/components/schemas/OwnPortfolioResponse/properties").toString())
                 .contains("fixerUserId", "status", "publishedAt", "pieces");
         assertThat(contract.at("/components/schemas/OwnPortfolioResponse/properties/pieces/type").asText()).isEqualTo("array");
+        assertThat(contract.at("/components/schemas/PortfolioFeedResponse/properties").toString())
+                .contains("items", "page", "hasMore");
+        assertThat(contract.at("/components/schemas/FeedPieceResponse/properties").toString())
+                .contains("fixerUserId", "readUrl", "readUrlExpiresAt")
+                .doesNotContain("storageKey", "objectKey", "bucket");
+        assertThat(paths.get("/media/portfolio/feed").get("get").get("parameters").toString())
+                .contains("page", "size", "fixerUserIds");
         // FR-UC-15 no miente al cliente: la procedencia del dato es parte del contrato.
         assertThat(contract.at("/components/schemas/IndicatorsResponse/properties/freshness/enum").toString())
                 .contains("LIVE", "CACHED", "DEGRADED");
@@ -309,25 +345,63 @@ class OpenApiContractTest {
                 .toString()).contains("null");
         // A payout is requested for the whole available balance: the client never names an amount.
         assertThat(paths.get("/payments/me/payouts").get("post").has("requestBody")).isFalse();
+        assertThat(paths.get("/payments/me").get("get").get("parameters").toString())
+                .contains("requestId", "status", "purpose", "page", "size");
         assertThat(contract.at("/components/schemas/PaymentStatus/enum").toString())
                 .contains("PENDING", "APPROVED", "DECLINED", "ERROR");
         assertThat(contract.at("/components/schemas/PaymentPurpose/enum").toString())
                 .contains("SERVICE", "OUTSTANDING_BALANCE");
-        assertThat(contract.at("/components/schemas/PaymentSimulationOutcome/enum").toString())
-                .contains("PENDING", "APPROVED", "DECLINED", "ERROR")
-                .doesNotContain("TRANSFER", "CASH", "CARD", "PSE", "SANDBOX");
+        assertThat(contract.at("/components/schemas/PaymentSimulationOutcome").isMissingNode()).isTrue();
         assertThat(contract.at("/components/schemas/PaymentDetail/properties").toString())
                 .contains("paymentId", "quotationId", "requestId", "amount", "paymentMethod",
-                        "purpose", "status", "createdAt", "updatedAt", "completedAt")
+                        "purpose", "status", "createdAt", "updatedAt", "completedAt", "reference", "context")
                 .doesNotContain("ownerUserId", "fixerUserId", "card", "bank");
-        assertThat(contract.at("/components/schemas/SimulationRequest/properties").toString())
-                .contains("outcome").doesNotContain("ownerUserId", "paymentMethod");
+        assertThat(contract.at("/components/schemas/PaymentPageResponse/properties").toString())
+                .contains("items", "page", "size", "hasMore");
+        assertThat(contract.at("/components/schemas/AttemptRequest/properties").toString())
+                .contains("reference", "amount", "instrument").doesNotContain("outcome", "ownerUserId", "paymentMethod", "scenario");
+        assertThat(paths.get("/payments/{paymentId}/attempts").get("post").get("parameters").toString())
+                .contains("Idempotency-Key", "uuid");
+        assertThat(contract.at("/components/schemas/SandboxPaymentInstrument/enum").toString())
+                .contains("SANDBOX_CARD", "SANDBOX_PSE", "SANDBOX_NEQUI").doesNotContain("CASH", "TRANSFER");
         Files.createDirectories(Path.of("target"));
         Files.createDirectories(Path.of("docs"));
         String json = mapper.writerWithDefaultPrettyPrinter().writeValueAsString(contract) + System.lineSeparator();
-        Files.writeString(Path.of("target", "openapi.json"), json);
-        Files.writeString(Path.of("docs", "openapi.json"), json);
+        Files.writeString(Path.of("target", "openapi-runtime.json"), json);
+        var documented = mapper.readTree(Path.of("docs", "openapi.json").toFile());
+        documented.at("/components/schemas").fields().forEachRemaining(previous -> {
+            if(java.util.Set.of("SimulationRequest","PaymentSimulationOutcome").contains(previous.getKey())) return;
+            var actual=contract.at("/components/schemas/"+previous.getKey());
+            assertThat(actual.isMissingNode()).as("schema "+previous.getKey()).isFalse();
+            previous.getValue().path("properties").fieldNames().forEachRemaining(property ->
+                    assertThat(actual.path("properties").has(property)).as(previous.getKey()+"."+property).isTrue());
+        });
+        // Every previously reconciled route/method, success body and security declaration must survive.
+        documented.get("paths").fields().forEachRemaining(path -> path.getValue().fields().forEachRemaining(method -> {
+            var actual = paths.path(path.getKey()).path(method.getKey());
+            assertThat(actual.isMissingNode()).as(path.getKey()+" "+method.getKey()).isFalse();
+            assertThat(actual.path("security")).as(path.getKey()+" security").isEqualTo(method.getValue().path("security"));
+            method.getValue().path("responses").fields().forEachRemaining(response -> {
+                assertThat(actual.path("responses").has(response.getKey())).as(path.getKey()+" response "+response.getKey()).isTrue();
+                if(response.getKey().startsWith("2") && response.getValue().has("content")) {
+                    var body=actual.path("responses").path(response.getKey()).path("content");
+                    assertThat(body.isMissingNode()).as(path.getKey()+" success body").isFalse();
+                    response.getValue().path("content").fieldNames().forEachRemaining(type ->
+                        assertThat(body.has(type)).as(path.getKey()+" media "+type).isTrue());
+                }
+            });
+        }));
+        assertThat(paths.get("/requests/{requestId}/messages").get("post").get("description").asText()).contains("COMPLETED", "read-only", "409");
+        assertThat(paths.get("/payments/me/payouts").get("post").get("parameters").toString()).contains("Idempotency-Key", "uuid");
+        assertThat(contract.at("/components/schemas/PayoutResponse/properties").toString()).contains("operationKey", "detailStatus", "earnings");
+        for(String path:java.util.List.of("/jobs/{jobId}","/jobs/for-request/{requestId}","/jobs/{jobId}/schedule","/jobs/{jobId}/start","/jobs/{jobId}/evidence")) {
+            var operation=paths.get(path).elements().next();
+            assertThat(operation.path("responses").path("200").path("content").path("application/json").path("schema").isMissingNode()).as(path).isFalse();
+        }
+        ((com.fasterxml.jackson.databind.node.ObjectNode)contract).put("x-runtime-validated",true);
+        ((com.fasterxml.jackson.databind.node.ObjectNode)contract).put("x-integration-status","FR-UC-05.4: full runtime contract checked against previously reconciled routes, responses and security; PostgreSQL 17.");
+        String exported=mapper.writerWithDefaultPrettyPrinter().writeValueAsString(contract)+System.lineSeparator();
+        Files.writeString(Path.of("target","openapi.json"),exported);
+        Files.writeString(Path.of("docs","openapi.json"),exported);
     }
 }
-
-

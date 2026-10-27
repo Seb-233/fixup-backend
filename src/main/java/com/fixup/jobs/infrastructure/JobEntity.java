@@ -38,6 +38,12 @@ class JobEntity {
     private Instant completedAt;
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
+    @Column(name = "scheduled_for")
+    private Instant scheduledFor;
+    @Column(name = "started_at")
+    private Instant startedAt;
+    @Column(name = "progress_note", length = 1000)
+    private String progressNote;
 
     protected JobEntity() {
     }
@@ -56,16 +62,19 @@ class JobEntity {
         return entity;
     }
 
-    /** Neither party nor the originating quotation ever changes: only the outcome does. */
+    /** Neither party nor the originating quotation ever changes: only the progress does. */
     void apply(Job job) {
         status = job.status();
         completedAt = job.completedAt();
         updatedAt = job.updatedAt();
+        scheduledFor = job.scheduledFor();
+        startedAt = job.startedAt();
+        progressNote = job.progressNote();
     }
 
     Job toDomain() {
         return new Job(id, requestId, quotationId, fixerUserId, ownerUserId, paymentMethod,
                 agreedAmount, status, createdAt,
-                completedAt, updatedAt);
+                completedAt, updatedAt, scheduledFor, startedAt, progressNote);
     }
 }

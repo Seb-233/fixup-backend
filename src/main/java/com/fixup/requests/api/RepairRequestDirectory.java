@@ -2,6 +2,7 @@ package com.fixup.requests.api;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -30,4 +31,15 @@ public interface RepairRequestDirectory {
      * @throws RepairRequestConflictException when the request no longer admits an assignment.
      */
     void assign(UUID requestId, UUID fixerUserId);
+
+    /**
+     * Completes an assigned request inside the caller's transaction, validating owner and fixer.
+     * A compatible repeat preserves the original completion time; incompatible identities fail.
+     *
+     * @throws RepairRequestConflictException when the request has no active assignment.
+     */
+    void complete(RepairRequestCompletionCommand command);
+
+    /** FR-UC-11: technicians a manager already invited to quote the request. */
+    Set<UUID> invitedFixers(UUID requestId);
 }

@@ -2,12 +2,12 @@ package com.fixup.requests.domain;
 
 import com.fixup.fixers.api.Specialty;
 import com.fixup.requests.api.RepairRequestStatus;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
 
 public interface RepairRequests {
     Optional<RepairRequest> findById(UUID id);
@@ -18,6 +18,12 @@ public interface RepairRequests {
     Optional<RepairRequest> findByIdForUpdate(UUID id);
 
     List<RepairRequest> findByOwner(UUID ownerUserId);
+
+    /** FR-UC-08 y FR-UC-11: solicitudes del inmueble que el usuario posee, reportó o administra. */
+    List<RepairRequest> findByParticipant(UUID userId);
+
+    /** FR-UC-11: solicitudes de los inmuebles que el administrador gestiona. */
+    List<RepairRequest> findByManager(UUID managerUserId);
 
     /** Open requests offered to the fixers, newest first, optionally narrowed to one specialty. */
     List<RepairRequest> findOpen(Specialty specialty);
