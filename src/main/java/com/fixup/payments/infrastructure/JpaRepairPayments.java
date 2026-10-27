@@ -1,7 +1,9 @@
 package com.fixup.payments.infrastructure;
 
 import com.fixup.payments.domain.PaymentPurpose;
+import com.fixup.payments.domain.PaymentStatus;
 import com.fixup.payments.domain.RepairPayment;
+import com.fixup.payments.domain.RepairPaymentPage;
 import com.fixup.payments.domain.RepairPayments;
 import java.util.List;
 import java.util.Optional;
@@ -16,6 +18,15 @@ class JpaRepairPayments implements RepairPayments {
     @Override public Optional<RepairPayment> findByIdForUpdate(UUID id) { return repository.findAndLockById(id).map(RepairPaymentEntity::toDomain); }
     @Override public Optional<RepairPayment> findByQuotationAndPurpose(UUID quotationId, PaymentPurpose purpose) { return repository.findByQuotationIdAndPurpose(quotationId, purpose).map(RepairPaymentEntity::toDomain); }
     @Override public List<RepairPayment> findByOwner(UUID ownerUserId) { return repository.findByOwnerUserIdOrderByCreatedAtDesc(ownerUserId).stream().map(RepairPaymentEntity::toDomain).toList(); }
+    @Override public RepairPaymentPage findVisibleForPayer(UUID actorUserId, UUID requestId, PaymentStatus status,
+            PaymentPurpose purpose, int page, int size) {
+        var found = repository.findVisibleForPayer(actorUserId, requestId,
+                status == null ? null : status.name(), purpose == null ? null : purpose.name(),
+                size + 1, Math.multiplyExact(page, size));
+        boolean hasMore = found.size() > size;
+        if (hasMore) found = found.subList(0, size);
+        return new RepairPaymentPage(found.stream().map(RepairPaymentEntity::toDomain).toList(), page, size, hasMore);
+    }
     @Override public void create(RepairPayment payment) { repository.saveAndFlush(RepairPaymentEntity.from(payment)); }
     @Override public void update(RepairPayment payment) {
         var entity = repository.findById(payment.id()).orElseThrow();

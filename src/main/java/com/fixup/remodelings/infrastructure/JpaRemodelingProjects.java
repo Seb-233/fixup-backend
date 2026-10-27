@@ -31,6 +31,14 @@ class JpaRemodelingProjects implements RemodelingProjects {
     }
 
     @Override
+    public void updatePlan(RemodelingProject project) {
+        var entity = projects.findById(project.id())
+                .orElseThrow(() -> new IllegalStateException("The remodeling project disappeared"));
+        entity.applyPlan(project);
+        projects.saveAndFlush(entity);
+    }
+
+    @Override
     public Optional<RemodelingProject> findById(UUID id) {
         return projects.findById(id).map(entity -> toDomain(entity,
                 requirements.findByProjectIdOrderByPosition(entity.id()).stream()
@@ -61,6 +69,6 @@ class JpaRemodelingProjects implements RemodelingProjects {
             List<RemodelingRequirement> projectRequirements) {
         return new RemodelingProject(entity.id(), entity.propertyId(), entity.ownerUserId(),
                 entity.title(), entity.description(), projectRequirements, entity.createdAt(),
-                entity.updatedAt());
+                entity.updatedAt(), entity.plan());
     }
 }

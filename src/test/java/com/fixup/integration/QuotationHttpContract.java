@@ -406,27 +406,25 @@ abstract class QuotationHttpContract {
     }
 
     @Test
-    void cashAcceptanceCreatesJobWithoutGatewayPaymentOrEarning() throws Exception {
+    void historicalCashRequestCannotOpenANewJobAfterCutover() throws Exception {
         String ownerSubject = "auth0|owner-cash-accept";
         provisionOwner(ownerSubject);
-        UUID requestId = createRequest(ownerSubject, "ELECTRICAL", "Tablero", "Cambiar breaker", "CASH");
+        UUID requestId = createRequest(ownerSubject, "ELECTRICAL", "Tablero", "Cambiar breaker", "TRANSFER");
+        com.fixup.testsupport.HistoricalCashFixtures.openRequest(jdbc, requestId);
         String fixerSubject = "auth0|fixer-cash-accept";
         provisionVerifiedFixer(fixerSubject, "ELECTRICAL");
         UUID quotationId = submitQuotation(fixerSubject, requestId, 210_000L, 1, "Pago al terminar");
 
         mvc.perform(post("/quotations/" + quotationId + "/accept").with(identity(ownerSubject)))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.quotationId").value(quotationId.toString()))
-                .andExpect(jsonPath("$.requestId").value(requestId.toString()))
-                .andExpect(jsonPath("$.paymentMethod").value("CASH"))
-                .andExpect(jsonPath("$.paymentId").doesNotExist());
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("DIGITAL_PAYMENT_REQUIRED"));
 
         assertThat(jdbc.queryForObject("SELECT status FROM repair_requests WHERE id = ?", String.class, requestId))
-                .isEqualTo("ASSIGNED");
+                .isEqualTo("OPEN");
         assertThat(jdbc.queryForObject("SELECT count(*) FROM repair_payments WHERE quotation_id = ?",
                 Integer.class, quotationId)).isZero();
         assertThat(jdbc.queryForObject("SELECT count(*) FROM jobs WHERE quotation_id = ? AND status = 'ASSIGNED'",
-                Integer.class, quotationId)).isEqualTo(1);
+                Integer.class, quotationId)).isZero();
         assertThat(jdbc.queryForObject("SELECT count(*) FROM fixer_earnings WHERE quotation_id = ?",
                 Integer.class, quotationId)).isZero();
     }

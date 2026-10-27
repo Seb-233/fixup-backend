@@ -150,7 +150,12 @@ jobs:
 
       - name: Check OpenAPI drift
         run: |
-          if ! cmp -s docs/openapi.json target/openapi.json; then
-            echo "OpenAPI contract drift detected. Please regenerate docs/openapi.json."
-            exit 1
-          fi
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          versioned = json.loads(Path("docs/openapi.json").read_text(encoding="utf-8"))
+          generated = json.loads(Path("target/openapi.json").read_text(encoding="utf-8"))
+          if versioned != generated:
+              raise SystemExit("OpenAPI contract drift detected. Please regenerate docs/openapi.json.")
+          PY

@@ -45,6 +45,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 @Import({TestJwtConfiguration.class, TestStorageConfiguration.class})
+@org.springframework.test.annotation.DirtiesContext
 @Testcontainers
 class PostgresRowLevelSecurityIT {
     @Container
@@ -154,8 +155,9 @@ class PostgresRowLevelSecurityIT {
 
     private UUID createRepairPayment(UUID ownerId, UUID fixerId) {
         UUID id = UUID.randomUUID();
-        jdbc.update("INSERT INTO repair_payments (id, quotation_id, request_id, owner_user_id, fixer_user_id, amount, payment_method, purpose, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 100000, 'TRANSFER', 'SERVICE', 'PENDING', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
-                id, UUID.randomUUID(), UUID.randomUUID(), ownerId, fixerId);
+        jdbc.update("INSERT INTO repair_payments (id, quotation_id, request_id, owner_user_id, fixer_user_id, amount, payment_method, purpose, status, created_at, updated_at, reference) VALUES (?, ?, ?, ?, ?, 100000, 'TRANSFER', 'SERVICE', 'PENDING', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?)",
+                id, UUID.randomUUID(), UUID.randomUUID(), ownerId, fixerId,
+                "FXR-"+id.toString().replace("-", "").toUpperCase(java.util.Locale.ROOT));
         return id;
     }
 
@@ -503,8 +505,9 @@ class PostgresRowLevelSecurityIT {
         UUID tenant = provisionWithRole("auth0|rls-prop-tenant", "TENANT");
         assertThat(visiblePropertyIds(tenant, "TENANT")).containsExactlyInAnyOrder(propA, propB);
 
+        // FR-UC-11: a real estate manager browses the published catalog like a tenant, never drafts.
         UUID manager = provisionWithRole("auth0|rls-prop-manager", "REAL_ESTATE_MANAGER");
-        assertThat(visiblePropertyIds(manager, "REAL_ESTATE_MANAGER")).isEmpty();
+        assertThat(visiblePropertyIds(manager, "REAL_ESTATE_MANAGER")).containsExactlyInAnyOrder(propA, propB);
 
         UUID admin = provisionAdmin("auth0|rls-prop-admin");
         assertThat(visiblePropertyIds(admin, "PLATFORM_ADMIN"))
@@ -586,15 +589,9 @@ class PostgresRowLevelSecurityIT {
         UUID admin = provisionAdmin("auth0|rls-cash-admin");
         UUID request = createRequest(owner, "PLUMBING", "Cash settlement RLS");
         UUID quotation = createQuotation(request, fixer, 100_000);
-        UUID job = UUID.randomUUID();
+        UUID job = com.fixup.testsupport.HistoricalCashFixtures.acceptedJob(jdbc, quotation);
         UUID settlement = UUID.randomUUID();
-        jdbc.update("UPDATE repair_requests SET status = 'ASSIGNED', assigned_fixer_user_id = ?, "
-                + "payment_method = 'CASH' WHERE id = ?", fixer, request);
-        jdbc.update("UPDATE quotations SET status = 'ACCEPTED' WHERE id = ?", quotation);
-        jdbc.update("INSERT INTO jobs (id, request_id, quotation_id, fixer_user_id, owner_user_id, "
-                + "payment_method, agreed_amount, status, created_at, completed_at, updated_at) "
-                + "VALUES (?, ?, ?, ?, ?, 'CASH', 100000, 'COMPLETED', CURRENT_TIMESTAMP, "
-                + "CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)", job, request, quotation, fixer, owner);
+        jdbc.update("UPDATE jobs SET status='COMPLETED',completed_at=CURRENT_TIMESTAMP WHERE id=?",job);
         jdbc.update("INSERT INTO cash_settlements (id, job_id, quotation_id, request_id, "
                 + "owner_user_id, fixer_user_id, agreed_amount, received_amount, outstanding_amount, "
                 + "settled_at) VALUES (?, ?, ?, ?, ?, ?, 100000, 60000, 40000, CURRENT_TIMESTAMP)",

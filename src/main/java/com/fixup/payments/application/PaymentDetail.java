@@ -14,11 +14,18 @@ import java.util.UUID;
 public record PaymentDetail(UUID paymentId, UUID quotationId, UUID requestId, long amount,
         RepairPaymentMethod paymentMethod, PaymentPurpose purpose, PaymentStatus status,
         Instant createdAt, Instant updatedAt,
-        @Schema(types = {"string", "null"}) Instant completedAt) {
+        @Schema(types = {"string", "null"}) Instant completedAt,
+        String reference,
+        @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+        com.fixup.payments.api.PaymentContext context) {
 
     static PaymentDetail from(RepairPayment payment) {
+        return from(payment, null);
+    }
+
+    static PaymentDetail from(RepairPayment payment, com.fixup.payments.api.PaymentContext context) {
         return new PaymentDetail(payment.id(), payment.quotationId(), payment.requestId(), payment.amount(),
                 payment.paymentMethod(), payment.purpose(), payment.status(), payment.createdAt(),
-                payment.updatedAt(), payment.completedAt());
+                payment.updatedAt(), payment.completedAt(), payment.reference(), context);
     }
 }

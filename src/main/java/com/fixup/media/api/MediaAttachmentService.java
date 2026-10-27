@@ -22,6 +22,18 @@ public interface MediaAttachmentService {
     void attachFixerVerificationDocuments(UUID ownerUserId, List<UUID> mediaIds);
 
     /**
+     * FR-UC-02: verifies that the media IDs belong to the uploader, have purpose PROPERTY_PHOTO,
+     * are READY, and marks them ATTACHED in the same transaction.
+     */
+    void attachPropertyPhotos(UUID uploaderUserId, List<UUID> mediaIds);
+
+    /**
+     * FR-UC-19: verifies that the media IDs belong to the fixer, have purpose JOB_EVIDENCE, are
+     * READY, and marks them ATTACHED in the same transaction.
+     */
+    void attachJobEvidence(UUID fixerUserId, List<UUID> mediaIds);
+
+    /**
      * Resolves signed GET read URLs with expiration for the given media IDs.
      */
     List<SignedMediaView> resolveReadUrls(List<UUID> mediaIds);

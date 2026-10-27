@@ -82,14 +82,14 @@ abstract class RequestsHttpContract {
         PropertyFixtures.insertPublished(jdbc, propertyId, ownerId);
         String body = """
                 {"propertyId":"%s","title":"Tubo roto urgente","description":"Fuga de agua masiva",
-                 "mediaIds":[],"urgencyLevel":"URGENT","paymentMethod":"CASH"}
+                 "mediaIds":[],"urgencyLevel":"URGENT","paymentMethod":"TRANSFER"}
                 """.formatted(propertyId);
 
         var response = mvc.perform(post("/requests").with(identity(subject))
                         .contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.urgencyLevel").value("URGENT"))
-                .andExpect(jsonPath("$.paymentMethod").value("CASH"))
+                .andExpect(jsonPath("$.paymentMethod").value("TRANSFER"))
                 .andReturn().getResponse();
         UUID requestId = UUID.fromString(mapper.readTree(response.getContentAsString()).get("requestId").asText());
 
@@ -141,7 +141,8 @@ abstract class RequestsHttpContract {
     }
 
     @Test
-    void tenantCannotCreateRequest() throws Exception {
+    void tenantWithoutAnActiveLeaseCannotCreateRequest() throws Exception {
+        // FR-UC-08: a tenant reports failures only on the property they rent; any other property is 404.
         provisionWithRole("auth0|tenant-1", "TENANT");
         String body = """
                 {"propertyId":"%s","title":"Fuga","description":"Gotera","mediaIds":[],"paymentMethod":"TRANSFER"}
@@ -149,11 +150,12 @@ abstract class RequestsHttpContract {
 
         mvc.perform(post("/requests").with(identity("auth0|tenant-1"))
                 .contentType(MediaType.APPLICATION_JSON).content(body))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isNotFound());
     }
 
     @Test
-    void realEstateManagerCannotCreateRequest() throws Exception {
+    void realEstateManagerCannotCreateRequestForAPropertyTheyDoNotManage() throws Exception {
+        // FR-UC-11: a manager opens requests only on delegated properties; any other property is 404.
         provisionWithRole("auth0|rem-1", "REAL_ESTATE_MANAGER");
         String body = """
                 {"propertyId":"%s","title":"Fuga","description":"Gotera","mediaIds":[],"paymentMethod":"TRANSFER"}
@@ -161,7 +163,7 @@ abstract class RequestsHttpContract {
 
         mvc.perform(post("/requests").with(identity("auth0|rem-1"))
                 .contentType(MediaType.APPLICATION_JSON).content(body))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isNotFound());
     }
 
     @Test
@@ -224,13 +226,17 @@ abstract class RequestsHttpContract {
     }
 
     @Test
-    void paymentMethodIsRequiredAndMustBeKnown() throws Exception {
+    void paymentMethodDefaultsToTransferAndRejectsCashNullAndUnknown() throws Exception {
         UUID ownerId = provisionOwner("auth0|owner-payment-method");
         UUID propertyId = UUID.randomUUID();
         PropertyFixtures.insertPublished(jdbc, propertyId, ownerId);
 
+        mvc.perform(post("/requests").with(identity("auth0|owner-payment-method"))
+                .contentType(MediaType.APPLICATION_JSON).content("{\"propertyId\":\"" + propertyId + "\",\"title\":\"Fuga\",\"description\":\"Gotera\",\"mediaIds\":[]}"))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.paymentMethod").value("TRANSFER"));
         for (String body : java.util.List.of(
-                "{\"propertyId\":\"" + propertyId + "\",\"title\":\"Fuga\",\"description\":\"Gotera\",\"mediaIds\":[]}",
+                "{\"propertyId\":\"" + propertyId + "\",\"title\":\"Fuga\",\"description\":\"Gotera\",\"paymentMethod\":null}",
+                "{\"propertyId\":\"" + propertyId + "\",\"title\":\"Fuga\",\"description\":\"Gotera\",\"paymentMethod\":\"CASH\"}",
                 "{\"propertyId\":\"" + propertyId + "\",\"title\":\"Fuga\",\"description\":\"Gotera\",\"mediaIds\":[],\"paymentMethod\":\"CARD\"}")) {
             mvc.perform(post("/requests").with(identity("auth0|owner-payment-method"))
                             .contentType(MediaType.APPLICATION_JSON).content(body))

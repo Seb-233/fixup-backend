@@ -7,11 +7,12 @@ import com.fixup.jobs.api.JobAccessDeniedException;
 import com.fixup.jobs.api.JobDirectory;
 import com.fixup.jobs.api.JobSnapshot;
 import com.fixup.jobs.domain.Jobs;
-import java.util.Collection;
-import java.util.List;
-import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import java.util.Collection;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 
 @Service
 class JobDirectoryImpl implements JobDirectory {
@@ -32,8 +33,18 @@ class JobDirectoryImpl implements JobDirectory {
         return jobs.findByRequestIds(requestIds).stream()
                 .filter(job -> actor.hasRole(Role.PLATFORM_ADMIN)
                         || job.ownerUserId().equals(actor.internalUserId()))
-                .map(job -> new JobSnapshot(job.requestId(), job.id(), job.fixerUserId(),
-                        job.status()))
+                .map(JobDirectoryImpl::snapshot)
                 .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<JobSnapshot> find(UUID jobId) {
+        return jobs.findById(jobId).map(JobDirectoryImpl::snapshot);
+    }
+
+    private static JobSnapshot snapshot(com.fixup.jobs.domain.Job job) {
+        return new JobSnapshot(job.requestId(), job.id(), job.fixerUserId(), job.status(), job.ownerUserId(),
+                job.quotationId(), job.completedAt());
     }
 }

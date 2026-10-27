@@ -2,6 +2,7 @@ package com.fixup.fixers.infrastructure;
 
 import com.fixup.fixers.api.FixerVerificationStatus;
 import com.fixup.fixers.api.Specialty;
+import com.fixup.fixers.domain.FixerCard;
 import com.fixup.fixers.domain.FixerProfile;
 import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
@@ -51,6 +52,14 @@ class FixerProfileEntity {
     private BigDecimal latitude;
     @Column(name = "longitude", precision = 10, scale = 6)
     private BigDecimal longitude;
+    @Column(name = "bio", length = 600)
+    private String bio;
+    @Column(name = "years_experience")
+    private Integer yearsExperience;
+    @Column(name = "rating_average", precision = 3, scale = 2)
+    private BigDecimal ratingAverage;
+    @Column(name = "rating_count", nullable = false)
+    private int ratingCount;
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
     @Column(name = "updated_at", nullable = false)
@@ -80,6 +89,27 @@ class FixerProfileEntity {
         latitude = profile.latitude();
         longitude = profile.longitude();
         updatedAt = profile.updatedAt();
+    }
+
+    FixerCard toCard() {
+        return new FixerCard(toDomain(), bio, yearsExperience, ratingAverage, ratingCount);
+    }
+
+    void present(String city, String bio, Integer yearsExperience, Instant now) {
+        this.city = city;
+        this.bio = bio;
+        this.yearsExperience = yearsExperience;
+        this.updatedAt = now;
+    }
+
+    void rate(BigDecimal ratingAverage, int ratingCount, Instant now) {
+        this.ratingAverage = ratingAverage;
+        this.ratingCount = ratingCount;
+        this.updatedAt = now;
+    }
+
+    UUID userId() {
+        return userId;
     }
 
     FixerProfile toDomain() {

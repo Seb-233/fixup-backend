@@ -2,15 +2,18 @@ package com.fixup.quotations.application;
 
 import com.fixup.fixers.api.FixerEligibility;
 import com.fixup.identityaccess.api.CurrentActor;
+import com.fixup.notifications.api.NotificationRequested;
+import com.fixup.notifications.api.NotificationType;
 import com.fixup.quotations.api.QuotationAccessDeniedException;
 import com.fixup.quotations.api.QuotationConflictException;
 import com.fixup.quotations.domain.Quotation;
 import com.fixup.quotations.domain.Quotations;
 import com.fixup.requests.api.RepairRequestDirectory;
-import java.time.Instant;
-import java.util.UUID;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import java.time.Instant;
+import java.util.UUID;
 
 /**
  * FR-UC-18: el Fixer responde la solicitud con su oferta. Solo cotiza quien está verificado, que
@@ -21,11 +24,14 @@ public class SubmitQuotation {
     private final Quotations quotations;
     private final RepairRequestDirectory requests;
     private final FixerEligibility eligibility;
+    private final ApplicationEventPublisher events;
 
-    SubmitQuotation(Quotations quotations, RepairRequestDirectory requests, FixerEligibility eligibility) {
+    SubmitQuotation(Quotations quotations, RepairRequestDirectory requests, FixerEligibility eligibility,
+            ApplicationEventPublisher events) {
         this.quotations = quotations;
         this.requests = requests;
         this.eligibility = eligibility;
+        this.events = events;
     }
 
     @Transactional
@@ -53,6 +59,18 @@ public class SubmitQuotation {
         var quotation = Quotation.submitted(UUID.randomUUID(), draft.requestId(), actor.internalUserId(),
                 draft.amount(), draft.estimatedDays(), message, Instant.now());
         quotations.create(quotation);
+        var deciders = new java.util.LinkedHashSet<UUID>();
+        deciders.add(request.ownerUserId());
+        if (request.managerUserId() != null) {
+            deciders.add(request.managerUserId());
+        }
+        for (UUID decider : deciders) {
+            events.publishEvent(NotificationRequested.of(decider, NotificationType.QUOTATION_RECEIVED,
+                    "Nueva cotización recibida",
+                    "Llegó una oferta por $" + String.format(java.util.Locale.ROOT, "%,d", draft.amount()).replace(',', '.')
+                            + " para \"" + request.title() + "\".",
+                    "/quotations/request/" + request.requestId(), quotation.id(), "QUOTATION"));
+        }
         return QuotationSummary.of(quotation);
     }
 }

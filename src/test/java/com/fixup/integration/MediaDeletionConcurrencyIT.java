@@ -37,6 +37,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 @ActiveProfiles("test")
 @Import({TestJwtConfiguration.class, TestStorageConfiguration.class})
 @Testcontainers
+@org.springframework.test.annotation.DirtiesContext
 class MediaDeletionConcurrencyIT {
 
     @Container
@@ -65,8 +66,11 @@ class MediaDeletionConcurrencyIT {
     }
 
     private UUID createPendingJob(String objectKey) {
+        return createPendingJob(objectKey, Instant.now(clock));
+    }
+
+    private UUID createPendingJob(String objectKey, Instant now) {
         ownerId = UUID.randomUUID();
-        Instant now = Instant.now(clock);
         jdbc.update("INSERT INTO users (id, auth0_subject, email, display_name, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
                 ownerId, "auth0|" + ownerId, "owner@example.test", "Owner", "ACTIVE", java.sql.Timestamp.from(now), java.sql.Timestamp.from(now));
 
@@ -79,6 +83,15 @@ class MediaDeletionConcurrencyIT {
         var job = MediaDeletionJobEntity.pending(jobId, assetId, objectKey, MediaDeletionJobType.PIECE_DELETION, 5, now);
         jobRepository.saveAndFlush(job);
         return jobId;
+    }
+
+    @Test
+    void subMicrosecondSchedulingIsEligibleOnTheSameClockTick() {
+        Instant now = Instant.parse("2026-10-24T12:00:00.123456789Z");
+        UUID jobId = createPendingJob("precision/" + UUID.randomUUID() + ".jpg", now);
+        assertThat(jobRepository.findById(jobId).orElseThrow().getNextAttemptAt()).isBeforeOrEqualTo(now);
+        assertThat(claimer.claimSpecificJob(jobId, now)).isPresent();
+        assertThat(jobRepository.findById(jobId).orElseThrow().getStatus()).isEqualTo("PROCESSING");
     }
 
     @Test

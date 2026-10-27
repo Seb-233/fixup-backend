@@ -17,6 +17,7 @@ import java.util.UUID;
 @Table(name = "repair_payments")
 class RepairPaymentEntity {
     @Id private UUID id;
+    @Column(nullable = false, updatable = false, length = 36) private String reference;
     @Column(name = "quotation_id", nullable = false, updatable = false) private UUID quotationId;
     @Column(name = "request_id", nullable = false, updatable = false) private UUID requestId;
     @Column(name = "owner_user_id", nullable = false, updatable = false) private UUID ownerUserId;
@@ -37,6 +38,7 @@ class RepairPaymentEntity {
         entity.ownerUserId = payment.ownerUserId(); entity.fixerUserId = payment.fixerUserId();
         entity.amount = payment.amount(); entity.paymentMethod = payment.paymentMethod(); entity.purpose = payment.purpose();
         entity.createdAt = payment.createdAt(); entity.apply(payment);
+        entity.reference = payment.reference();
         return entity;
     }
 

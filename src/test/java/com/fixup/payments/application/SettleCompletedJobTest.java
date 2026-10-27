@@ -59,6 +59,7 @@ class SettleCompletedJobTest {
         var released = ArgumentCaptor.forClass(FixerEarning.class);
         verify(earnings).update(released.capture());
         assertThat(released.getValue().status()).isEqualTo(EarningStatus.AVAILABLE);
+        assertThat(released.getValue()).isEqualTo(held.release(NOW));
         verify(settlements, never()).create(org.mockito.ArgumentMatchers.any());
         verify(debts, never()).create(org.mockito.ArgumentMatchers.any());
     }
@@ -68,6 +69,19 @@ class SettleCompletedJobTest {
         assertThatThrownBy(() -> useCase.settle(command("TRANSFER", null)))
                 .isInstanceOf(PaymentConflictException.class)
                 .extracting("code").isEqualTo("EARNING_NOT_HELD");
+    }
+
+    @Test
+    void alreadyReleasedEarningIsNotReleasedOrCommissionedAgain() {
+        var available = FixerEarning.held(UUID.randomUUID(), QUOTATION, FIXER, 100_000, NOW)
+                .release(NOW.minusSeconds(1));
+        when(earnings.findByQuotationForUpdate(QUOTATION)).thenReturn(Optional.of(available));
+        useCase.settle(command("TRANSFER", null));
+        useCase.settle(command("TRANSFER", null));
+        verify(earnings, never()).update(org.mockito.ArgumentMatchers.any());
+        verify(earnings, never()).create(org.mockito.ArgumentMatchers.any());
+        assertThat(available.commissionAmount()).isEqualTo(10_000);
+        assertThat(available.netAmount()).isEqualTo(90_000);
     }
 
     private PaymentSettlementCommand command(String method, Long received) {

@@ -2,6 +2,7 @@ package com.fixup.contracts;
 
 import com.fixup.integration.TestJwtConfiguration;
 import com.fixup.shared.security.DatabaseActorContext;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.time.LocalDate;
@@ -30,8 +31,18 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 @Import({TestJwtConfiguration.class, RentalContractIntegrationTest.ContractTestConfig.class})
+@org.springframework.test.annotation.DirtiesContext
 @Testcontainers
 class PostgresRentalContractIT extends RentalContractHttpContract {
+    // Active manifest: 16 historical migrations through V16, then these 25 successors.
+    // V22/V23 are not active versions; owner_payments remains archived outside Flyway locations.
+    private static final List<String> THROUGH_V16 = List.of("1", "2", "3", "4", "5", "6", "7", "8",
+            "9", "10", "11", "12", "13", "14", "15", "16");
+    private static final List<String> AFTER_V16 = List.of("16.1", "17", "18", "19", "20", "21",
+            "24", "25", "26", "27", "28", "29", "30", "31", "32", "33", "34", "35", "36", "37", "38", "39", "40", "41", "42");
+    private static final List<String> ACTIVE_VERSIONS = java.util.stream.Stream
+            .concat(THROUGH_V16.stream(), AFTER_V16.stream()).toList();
+
     @Container
     static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:17-alpine");
 
@@ -48,21 +59,28 @@ class PostgresRentalContractIT extends RentalContractHttpContract {
 
     @Test
     void upgradesExistingVersion16WithoutRewritingAppliedMigrations() {
-        String schema = "a3_upgrade_" + UUID.randomUUID().toString().replace("-", "");
+        String schema = "public";
         String[] locations = {"classpath:db/migration", "classpath:db/migration-postgres/postgresql"};
-        try {
+        try (var isolated = new PostgreSQLContainer<>("postgres:17-alpine")) {
+            isolated.start();
+            var dataSource = new org.springframework.jdbc.datasource.DriverManagerDataSource(
+                    isolated.getJdbcUrl(), isolated.getUsername(), isolated.getPassword());
+            var jdbc = new org.springframework.jdbc.core.JdbcTemplate(dataSource);
             Flyway.configure().dataSource(dataSource).schemas(schema).locations(locations).target("16").load().migrate();
-            var applied = jdbc.queryForList("SELECT version FROM " + schema + ".flyway_schema_history WHERE success ORDER BY installed_rank", String.class);
-            assertThat(applied).contains("16")
-                    .doesNotContain("16.1", "17", "18", "19", "20", "21");
+            var applied = jdbc.queryForList("SELECT version FROM " + schema + ".flyway_schema_history WHERE success AND version IS NOT NULL ORDER BY installed_rank", String.class);
+            assertThat(applied).containsExactlyElementsOf(THROUGH_V16);
+            var historicalChecksums = jdbc.queryForList("SELECT version, script, checksum FROM " + schema
+                    + ".flyway_schema_history WHERE success AND version IS NOT NULL ORDER BY installed_rank");
             var flyway = Flyway.configure().dataSource(dataSource).schemas(schema).locations(locations).load();
-            assertThat(flyway.migrate().migrationsExecuted).isEqualTo(12);
+            assertThat(flyway.migrate().migrationsExecuted).isEqualTo(AFTER_V16.size());
             flyway.validate();
-            assertThat(jdbc.queryForList("SELECT version FROM " + schema + ".flyway_schema_history WHERE success ORDER BY installed_rank", String.class))
-                    .containsSequence("16", "16.1", "17", "18", "19", "20", "21", "24", "25", "26",
-                            "27", "28", "29");
-        } finally {
-            jdbc.execute("DROP SCHEMA IF EXISTS " + schema + " CASCADE");
+            assertThat(jdbc.queryForList("SELECT version FROM " + schema + ".flyway_schema_history WHERE success AND version IS NOT NULL ORDER BY installed_rank", String.class))
+                    .containsExactlyElementsOf(ACTIVE_VERSIONS);
+            assertThat(jdbc.queryForList("SELECT version, script, checksum FROM " + schema
+                    + ".flyway_schema_history WHERE success AND version IS NOT NULL ORDER BY installed_rank").subList(0, THROUGH_V16.size()))
+                    .containsExactlyElementsOf(historicalChecksums);
+            assertThat(jdbc.queryForObject("SELECT count(*) FROM information_schema.tables "
+                    + "WHERE table_schema = ? AND table_name = 'owner_payments'", Integer.class, schema)).isZero();
         }
     }
 
@@ -85,8 +103,8 @@ class PostgresRentalContractIT extends RentalContractHttpContract {
             assertThat(connection.getMetaData().getDatabaseProductName()).isEqualTo("PostgreSQL");
             assertThat(connection.getMetaData().getDatabaseMajorVersion()).isEqualTo(17);
         }
-        assertThat(jdbc.queryForList("SELECT version FROM flyway_schema_history WHERE success ORDER BY installed_rank",
-                String.class)).contains("10", "14", "16", "16.1", "17", "18");
+        assertThat(jdbc.queryForList("SELECT version FROM flyway_schema_history WHERE success AND version IS NOT NULL ORDER BY installed_rank",
+                String.class)).containsExactlyElementsOf(ACTIVE_VERSIONS);
         assertThat(jdbc.queryForObject("SELECT count(*) FROM flyway_schema_history WHERE NOT success", Integer.class))
                 .isZero();
         assertThat(jdbc.queryForObject("SELECT data_type FROM information_schema.columns WHERE table_name = 'rental_contracts' AND column_name = 'end_date'", String.class))

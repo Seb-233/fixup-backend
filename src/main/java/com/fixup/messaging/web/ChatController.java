@@ -46,7 +46,7 @@ import org.springframework.web.bind.annotation.RestController;
             content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
     @ApiResponse(responseCode = "404", description = "The repair request does not exist or is not visible to the caller",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-    @ApiResponse(responseCode = "409", description = "The request has no assigned fixer yet",
+    @ApiResponse(responseCode = "409", description = "REQUEST_NOT_ASSIGNED: writing requires an active assigned request; completed chats are read-only",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
 })
 class ChatController {
@@ -62,8 +62,8 @@ class ChatController {
 
     @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
     @Operation(summary = "Send a chat message",
-            description = "Requires an active account that is either the owner of the request or its "
-                    + "assigned fixer, and the request must already have an assigned fixer.")
+            description = "Active owner, original reporter, request manager or assigned fixer. Requires ASSIGNED, "
+                    + "SLA_WARNING or SLA_BREACHED with an assigned fixer. COMPLETED is read-only (409 REQUEST_NOT_ASSIGNED).")
     @ApiResponse(responseCode = "201", description = "The message was recorded")
     @ResponseStatus(HttpStatus.CREATED)
     MessageResponse send(@PathVariable UUID requestId, @Valid @RequestBody SendMessageRequest body) {
@@ -73,8 +73,8 @@ class ChatController {
 
     @GetMapping
     @Operation(summary = "Read the chat thread for a repair request",
-            description = "Requires an active account that is either the owner of the request, its "
-                    + "assigned fixer, or an active PLATFORM_ADMIN. Oldest message first.")
+            description = "Active owner, original reporter, request manager, assigned fixer or PLATFORM_ADMIN. "
+                    + "History remains readable after completion. Oldest message first; third parties are denied.")
     @ApiResponse(responseCode = "200", description = "Messages in the order they were sent")
     List<MessageResponse> list(@PathVariable UUID requestId) {
         return listMessages.execute(actors.currentActor(), requestId).stream()

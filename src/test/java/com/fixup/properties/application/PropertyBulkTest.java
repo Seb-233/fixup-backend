@@ -30,9 +30,9 @@ class PropertyBulkTest {
     @Autowired JdbcTemplate jdbc;
     @Autowired IntegrationDatabaseCleaner databaseCleaner;
 
+    @org.junit.jupiter.api.BeforeEach
     @AfterEach
     void clearDatabase() {
-        jdbc.update("DELETE FROM properties");
         databaseCleaner.clean();
     }
 

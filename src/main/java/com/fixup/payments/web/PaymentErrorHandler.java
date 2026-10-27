@@ -5,6 +5,7 @@ import com.fixup.payments.api.PaymentConflictException;
 import com.fixup.payments.api.PaymentNotFoundException;
 import com.fixup.payments.api.DebtNotFoundException;
 import com.fixup.payments.api.CashSettlementNotFoundException;
+import com.fixup.payments.api.InvalidPaymentQueryException;
 import com.fixup.shared.errors.ErrorResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseEntity;
@@ -37,6 +38,13 @@ class PaymentErrorHandler {
 
     @ExceptionHandler(UnexpectedPayloadException.class)
     ResponseEntity<ErrorResponse> badRequest(UnexpectedPayloadException exception,
+            HttpServletRequest request) {
+        return ResponseEntity.badRequest().body(new ErrorResponse(400, "INVALID_REQUEST",
+                exception.getMessage(), request.getRequestURI()));
+    }
+
+    @ExceptionHandler(InvalidPaymentQueryException.class)
+    ResponseEntity<ErrorResponse> invalidQuery(InvalidPaymentQueryException exception,
             HttpServletRequest request) {
         return ResponseEntity.badRequest().body(new ErrorResponse(400, "INVALID_REQUEST",
                 exception.getMessage(), request.getRequestURI()));

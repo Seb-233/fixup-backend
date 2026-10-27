@@ -13,7 +13,7 @@ class ModularityTest {
         assertThat(modules.stream().map(module -> module.getIdentifier().toString()))
                 .containsExactlyInAnyOrder("shared", "identityaccess", "users", "fixers", "properties",
                         "media", "requests", "quotations", "jobs", "notifications", "messaging",
-                        "payments", "contracts", "analytics", "remodelings");
+                        "payments", "contracts", "analytics", "remodelings", "visits", "ratings");
         modules.verify();
     }
 }

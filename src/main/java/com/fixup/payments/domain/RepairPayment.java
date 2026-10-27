@@ -38,6 +38,11 @@ public record RepairPayment(UUID id, UUID quotationId, UUID requestId, UUID owne
                 purpose, PaymentStatus.PENDING, now, now, null);
     }
 
+    /** Public payment reference; collision-free with the canonical primary key, stable on retries. */
+    public String reference() {
+        return "FXR-" + id.toString().replace("-", "").toUpperCase(java.util.Locale.ROOT);
+    }
+
     /** Repeating approval is deliberately a no-op so future HTTP retries cannot duplicate effects. */
     public RepairPayment approve(Instant now) {
         if (status == PaymentStatus.APPROVED) {

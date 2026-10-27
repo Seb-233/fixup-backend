@@ -48,7 +48,7 @@ class SimulateRepairPaymentTest {
     private final OwnerDebts debts = mock(OwnerDebts.class);
     private final ApplicationEventPublisher events = mock(ApplicationEventPublisher.class);
     private final SimulateRepairPayment useCase = new SimulateRepairPayment(payments, attempts,
-            earnings, debts, events, Clock.fixed(NOW, ZoneOffset.UTC));
+            earnings, debts, events, Clock.fixed(NOW, ZoneOffset.UTC), authorization(), gateway(), testEnvironment());
 
     @Test
     void pendingDeclinedAndErrorAreAuditedWithoutEconomicEffects() {
@@ -68,6 +68,16 @@ class SimulateRepairPaymentTest {
                 .containsExactly(PaymentStatus.PENDING, PaymentStatus.DECLINED, PaymentStatus.ERROR);
         verify(earnings, never()).create(any());
         verify(events, never()).publishEvent(any(PaymentApproved.class));
+    }
+
+    @Test
+    void directOutcomeSelectionIsDeniedOutsideTheTestProfile() {
+        var production = new SimulateRepairPayment(payments, attempts, earnings, debts, events,
+                Clock.fixed(NOW, ZoneOffset.UTC), authorization(), gateway(), new org.springframework.mock.env.MockEnvironment());
+        assertThatThrownBy(() -> production.execute(owner(), PAYMENT, PaymentSimulationOutcome.APPROVED))
+                .isInstanceOf(com.fixup.payments.api.PaymentAccessDeniedException.class);
+        verify(payments, never()).findByIdForUpdate(any());
+        verify(attempts, never()).create(any());
     }
 
     @Test
@@ -101,7 +111,7 @@ class SimulateRepairPaymentTest {
             var localEvents = mock(ApplicationEventPublisher.class);
             when(localPayments.findByIdForUpdate(PAYMENT)).thenReturn(Optional.of(retryable));
             var simulation = new SimulateRepairPayment(localPayments, localAttempts, localEarnings,
-                    mock(OwnerDebts.class), localEvents, Clock.fixed(NOW, ZoneOffset.UTC));
+                    mock(OwnerDebts.class), localEvents, Clock.fixed(NOW, ZoneOffset.UTC), authorization(), gateway(), testEnvironment());
 
             assertThat(simulation.execute(owner(), PAYMENT, PaymentSimulationOutcome.APPROVED).status())
                     .isEqualTo(PaymentStatus.APPROVED);
@@ -152,6 +162,31 @@ class SimulateRepairPaymentTest {
     private RepairPayment pending() {
         return RepairPayment.pending(PAYMENT, QUOTATION, REQUEST, OWNER, FIXER, 450_000,
                 RepairPaymentMethod.TRANSFER, PaymentPurpose.SERVICE, CREATED);
+    }
+
+    private PaymentAuthorization authorization() {
+        return new PaymentAuthorization(mock(com.fixup.payments.domain.PaymentContexts.class),
+                mock(com.fixup.properties.api.PropertyDirectory.class));
+    }
+
+    private org.springframework.mock.env.MockEnvironment testEnvironment() {
+        var env = new org.springframework.mock.env.MockEnvironment();
+        env.setActiveProfiles("test");
+        return env;
+    }
+
+    private com.fixup.payments.domain.PaymentGateway gateway() {
+        var gateway = mock(com.fixup.payments.domain.PaymentGateway.class);
+        when(gateway.charge(any())).thenAnswer(call -> {
+            var command = call.getArgument(0, com.fixup.payments.domain.PaymentGateway.Attempt.class);
+            var status = switch (command.scenario()) {
+                case "APPROVE" -> PaymentStatus.APPROVED;
+                case "DECLINE_BANK" -> PaymentStatus.DECLINED;
+                default -> PaymentStatus.valueOf(command.scenario());
+            };
+            return new com.fixup.payments.domain.PaymentGateway.Result(status, "SBX-unit", null);
+        });
+        return gateway;
     }
 
     private CurrentActor owner() {

@@ -32,6 +32,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 @Import({TestJwtConfiguration.class, TestStorageConfiguration.class})
+@org.springframework.test.annotation.DirtiesContext
 @Testcontainers
 class PostgresRemodelingIT extends RemodelingHttpContract {
     @Container
@@ -77,12 +78,12 @@ class PostgresRemodelingIT extends RemodelingHttpContract {
         UUID owner = provisionOwner(ownerSubject);
         var project = createProject(ownerSubject, property(owner));
         UUID transferRequest = UUID.fromString(project.at("/requirements/0/requestId").asText());
-        UUID cashRequest = UUID.fromString(project.at("/requirements/1/requestId").asText());
+        UUID secondRequest = UUID.fromString(project.at("/requirements/1/requestId").asText());
 
         assertThat(jdbc.queryForObject("SELECT payment_method FROM repair_requests WHERE id = ?", String.class,
                 transferRequest)).isEqualTo("TRANSFER");
         assertThat(jdbc.queryForObject("SELECT payment_method FROM repair_requests WHERE id = ?", String.class,
-                cashRequest)).isEqualTo("CASH");
+                secondRequest)).isEqualTo("TRANSFER");
         assertThatThrownBy(() -> jdbc.update("UPDATE repair_requests SET payment_method = 'CARD' WHERE id = ?",
                 transferRequest)).isInstanceOf(DataIntegrityViolationException.class);
     }
@@ -161,9 +162,9 @@ class PostgresRemodelingIT extends RemodelingHttpContract {
                 .andExpect(status().isOk());
         assertProjectStatus(ownerSubject, projectId, "FULLY_ASSIGNED", 2, 0);
         assertThat(jdbc.queryForObject("SELECT count(*) FROM jobs WHERE request_id IN (?, ?)",
-                Integer.class, firstRequest, secondRequest)).isEqualTo(1);
+                Integer.class, firstRequest, secondRequest)).isZero();
         assertThat(jdbc.queryForObject("SELECT count(*) FROM repair_payments WHERE request_id IN (?, ?)",
-                Integer.class, firstRequest, secondRequest)).isEqualTo(1);
+                Integer.class, firstRequest, secondRequest)).isEqualTo(2);
         assertThat(jdbc.queryForObject("SELECT count(*) FROM fixer_earnings WHERE quotation_id IN (?, ?)",
                 Integer.class, firstQuotation, secondQuotation)).isZero();
     }
