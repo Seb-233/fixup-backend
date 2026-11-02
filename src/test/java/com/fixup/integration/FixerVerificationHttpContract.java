@@ -227,6 +227,23 @@ abstract class FixerVerificationHttpContract {
     }
 
     @Test
+    void aCompleteSetWithoutConsentIsAConflictAndTheReviewStaysClosed() throws Exception {
+        UUID id = provisionFixer("auth0|no-consent");
+        String withoutConsent = documents("auth0|no-consent", "ID_CARD", "TRADE_CERTIFICATE")
+                .replace("\"consentVersion\":\"v1\",", "");
+        assertThat(withoutConsent).doesNotContain("consentVersion");
+
+        submit("auth0|no-consent", withoutConsent).andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("CONSENT_REQUIRED"));
+
+        assertThat(statusOf(id)).isEqualTo("PENDING");
+        mvc.perform(get("/fixers/me/verification").with(identity("auth0|no-consent")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.underReview").value(false))
+                .andExpect(jsonPath("$.submittedAt").doesNotExist());
+    }
+
+    @Test
     void resubmittingADocumentTypeReplacesItsMediaInsteadOfDuplicatingTheRow() throws Exception {
         UUID id = provisionFixer("auth0|replace");
         UUID first = uploadVerificationDocument("auth0|replace");
@@ -425,6 +442,19 @@ abstract class FixerVerificationHttpContract {
         mvc.perform(post("/fixers/" + fixer + "/verification/approve").with(identity("auth0|intruder")))
                 .andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
         assertThat(statusOf(fixer)).isEqualTo("PENDING");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"OWNER", "TENANT", "FIXER"})
+    void onlyAPlatformAdministratorSeesThePendingQueue(String role) throws Exception {
+        provision("auth0|queue-intruder");
+        mvc.perform(post("/auth/select-role").with(identity("auth0|queue-intruder"))
+                .contentType(MediaType.APPLICATION_JSON).content("{\"role\":\"" + role + "\"}"))
+                .andExpect(status().isOk());
+
+        mvc.perform(get("/fixers/verification/pending").with(identity("auth0|queue-intruder")))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
     }
 
     @ParameterizedTest
