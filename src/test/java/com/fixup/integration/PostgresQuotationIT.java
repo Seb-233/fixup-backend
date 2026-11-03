@@ -19,6 +19,8 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.contains;
+import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -220,5 +222,39 @@ class PostgresQuotationIT extends QuotationHttpContract {
         assertThat(submittedCount).isEqualTo(0);
         assertThat(rejectedCount).isEqualTo(totalCount - 1);
         assertThat(requestStatus).isEqualTo("ASSIGNED");
+    }
+
+    /**
+     * FR-UC-18: once another fixer wins the request, RLS hides it from the fixer who lost, but the
+     * losing quotation is still theirs. /quotations/me must list it without a title instead of
+     * failing the whole response (the hidden request used to leave the transaction rollback-only).
+     */
+    @Test
+    void fixerListsOwnQuotationsAfterAnotherFixerWinsTheRequest() throws Exception {
+        String ownerSubject = "auth0|owner-lost-quotation";
+        provisionOwner(ownerSubject);
+        UUID lostRequestId = createRequest(ownerSubject, "PLUMBING", "Calentador sin gas", "No enciende");
+        UUID openRequestId = createRequest(ownerSubject, "PLUMBING", "Sifón tapado", "Lavamanos lento");
+
+        String winnerSubject = "auth0|fixer-lost-quotation-winner";
+        provisionVerifiedFixer(winnerSubject, "PLUMBING");
+        UUID winningQuotationId = submitQuotation(winnerSubject, lostRequestId, 120_000L, 1, "Voy mañana");
+
+        String loserSubject = "auth0|fixer-lost-quotation-loser";
+        provisionVerifiedFixer(loserSubject, "PLUMBING");
+        submitQuotation(loserSubject, lostRequestId, 150_000L, 2, "Puedo el jueves");
+        submitQuotation(loserSubject, openRequestId, 60_000L, 1, "Destapo hoy");
+
+        mvc.perform(post("/quotations/" + winningQuotationId + "/accept").with(identity(ownerSubject)))
+                .andExpect(status().isOk());
+        mvc.perform(get("/requests/" + lostRequestId).with(identity(loserSubject)))
+                .andExpect(status().isNotFound());
+
+        mvc.perform(get("/quotations/me").with(identity(loserSubject)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[?(@.requestId == '%s')].status", lostRequestId).value(contains("REJECTED")))
+                .andExpect(jsonPath("$[?(@.requestId == '%s')].requestTitle", lostRequestId).value(contains(nullValue())))
+                .andExpect(jsonPath("$[?(@.requestId == '%s')].requestTitle", openRequestId).value(contains("Sifón tapado")));
     }
 }
