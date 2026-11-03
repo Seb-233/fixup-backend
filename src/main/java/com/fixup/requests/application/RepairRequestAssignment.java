@@ -16,6 +16,8 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -56,6 +58,14 @@ class RepairRequestAssignment implements RepairRequestDirectory {
                 .map(request -> new ProjectRepairRequestSnapshot(request.id(), request.specialty(),
                         request.status(), request.assignedFixerUserId(), request.paymentMethod()))
                 .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Map<UUID, String> titles(Collection<UUID> requestIds) {
+        return requests.findAllByIds(requestIds).stream()
+                .filter(request -> Objects.nonNull(request.title()))
+                .collect(Collectors.toMap(request -> request.id(), request -> request.title()));
     }
 
     @Override

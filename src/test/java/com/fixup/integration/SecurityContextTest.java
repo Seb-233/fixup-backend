@@ -2,6 +2,8 @@ package com.fixup.integration;
 
 import com.nimbusds.jose.jwk.JWKSet;
 import com.sun.net.httpserver.HttpServer;
+import jakarta.servlet.DispatcherType;
+import jakarta.servlet.RequestDispatcher;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
@@ -159,5 +161,17 @@ class SecurityContextTest {
         mvc.perform(patch("/notifications/read-all").header("Origin", "http://localhost:4200"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(header().string("Access-Control-Allow-Origin", "http://localhost:4200"));
+    }
+
+    @Test
+    void errorForwardKeepsTheOriginalStatusInsteadOfBecomingForbidden() throws Exception {
+        mvc.perform(get("/error").with(request -> {
+                    request.setDispatcherType(DispatcherType.ERROR);
+                    request.setAttribute(RequestDispatcher.ERROR_STATUS_CODE, 500);
+                    request.setAttribute(RequestDispatcher.ERROR_REQUEST_URI, "/quotations/me");
+                    return request;
+                }))
+                .andExpect(status().isInternalServerError());
+        mvc.perform(get("/error")).andExpect(status().isUnauthorized());
     }
 }
