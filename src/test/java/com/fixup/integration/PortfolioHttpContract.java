@@ -173,6 +173,17 @@ public abstract class PortfolioHttpContract {
     }
 
     @Test
+    void anUploadOneByteOverTheTenMegabyteLimitIsRejectedWith413() throws Exception {
+        verifiedFixer("auth0|too-large");
+        var req = "{\"purpose\":\"FIXER_PORTFOLIO\",\"contentType\":\"image/jpeg\",\"sizeBytes\":10485761}";
+        mvc.perform(post("/media/uploads").with(identity("auth0|too-large"))
+                .contentType(MediaType.APPLICATION_JSON).content(req))
+                .andExpect(status().isPayloadTooLarge())
+                .andExpect(jsonPath("$.code").value("MEDIA_TOO_LARGE"));
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM media_assets", Integer.class)).isZero();
+    }
+
+    @Test
     void anUnverifiedFixerCannotUploadMedia() throws Exception {
         mvc.perform(post("/auth/bootstrap").with(identity("auth0|pending-fixer")))
                 .andExpect(status().isCreated());
