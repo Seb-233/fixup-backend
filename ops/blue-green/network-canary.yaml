@@ -1,0 +1,19 @@
+# Apply only after namespace and network policies, before any Green Secrets.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: green-network-canary
+  namespace: fixup-green
+  labels: {fixup.role: probe, fixup.environment: green}
+spec:
+  serviceAccountName: green-runtime
+  automountServiceAccountToken: false
+  restartPolicy: Never
+  containers:
+    - name: curl
+      image: curlimages/curl@sha256:58adaa4e8dca9c988bae2aba4ab3434a0bb2da16bbe3f92dec39ec7785166777
+      imagePullPolicy: Never
+      command: [sh, -c, 'sleep 3600']
+      resources:
+        requests: {cpu: 20m, memory: 32Mi}
+        limits: {cpu: 100m, memory: 64Mi}

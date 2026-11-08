@@ -1,0 +1,152 @@
+# BG-02 alternative combined data manifest. Do not apply together with 1b-postgres.yaml
+# or 1b-minio.yaml: they define the same Services and StatefulSets. The staged 1B
+# procedure uses the 1b-* manifests and explicit PVCs; retain this file as a
+# reviewed equivalent for a separately approved combined deployment only.
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: fixup-green
+spec:
+  clusterIP: None
+  selector:
+    fixup.role: postgres
+  ports:
+  - name: postgres
+    port: 5432
+    targetPort: 5432
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: fixup-green
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      fixup.role: postgres
+  template:
+    metadata:
+      labels:
+        fixup.role: postgres
+        fixup.environment: green
+    spec:
+      serviceAccountName: green-runtime
+      automountServiceAccountToken: false
+      containers:
+      - name: postgres
+        image: postgres@sha256:f4c66b820c6f974249089d3d16d86a3698eae11e8746eb6644b2271031e91232
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 5432
+          name: postgres
+        envFrom:
+        - secretRef:
+            name: green-postgres-secret
+        env:
+        - name: PGDATA
+          value: /var/lib/postgresql/data/pgdata
+        volumeMounts:
+        - name: data
+          mountPath: /var/lib/postgresql/data
+        readinessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"
+          periodSeconds: 5
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 250m
+            memory: 512Mi
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      storageClassName: local-path
+      resources:
+        requests:
+          storage: 2Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: minio
+  namespace: fixup-green
+spec:
+  clusterIP: None
+  selector:
+    fixup.role: minio
+  ports:
+  - name: api
+    port: 9000
+    targetPort: 9000
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: minio
+  namespace: fixup-green
+spec:
+  serviceName: minio
+  replicas: 1
+  selector:
+    matchLabels:
+      fixup.role: minio
+  template:
+    metadata:
+      labels:
+        fixup.role: minio
+        fixup.environment: green
+    spec:
+      serviceAccountName: green-runtime
+      automountServiceAccountToken: false
+      containers:
+      - name: minio
+        image: ghcr.io/seb-233/fixup-minio@sha256:a1a8bd4ac40ad7881a245bab97323e18f971e4d4cba2c2007ec1bedd21cbaba2
+        imagePullPolicy: Never
+        args:
+        - server
+        - /data
+        - --console-address
+        - :9001
+        ports:
+        - containerPort: 9000
+          name: api
+        envFrom:
+        - secretRef:
+            name: green-minio-secret
+        volumeMounts:
+        - name: data
+          mountPath: /data
+        readinessProbe:
+          httpGet:
+            path: /minio/health/ready
+            port: api
+          periodSeconds: 10
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 250m
+            memory: 512Mi
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      storageClassName: local-path
+      resources:
+        requests:
+          storage: 2Gi

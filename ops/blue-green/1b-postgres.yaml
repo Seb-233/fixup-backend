@@ -1,0 +1,75 @@
+# BG-02 1B: Service and StatefulSet, after the matching PVC is Bound.
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: fixup-green
+spec:
+  clusterIP: None
+  selector:
+    fixup.role: postgres
+  ports:
+  - name: postgres
+    port: 5432
+    targetPort: 5432
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: fixup-green
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      fixup.role: postgres
+  template:
+    metadata:
+      labels:
+        fixup.role: postgres
+        fixup.environment: green
+    spec:
+      serviceAccountName: green-runtime
+      automountServiceAccountToken: false
+      containers:
+      - name: postgres
+        image: postgres@sha256:f4c66b820c6f974249089d3d16d86a3698eae11e8746eb6644b2271031e91232
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 5432
+          name: postgres
+        envFrom:
+        - secretRef:
+            name: green-postgres-secret
+        env:
+        - name: PGDATA
+          value: /var/lib/postgresql/data/pgdata
+        volumeMounts:
+        - name: data
+          mountPath: /var/lib/postgresql/data
+        readinessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"
+          periodSeconds: 5
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 250m
+            memory: 512Mi
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      storageClassName: local-path
+      resources:
+        requests:
+          storage: 2Gi

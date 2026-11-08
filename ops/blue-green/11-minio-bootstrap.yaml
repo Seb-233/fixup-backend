@@ -1,0 +1,56 @@
+# BG-01 candidate only; apply by stage after approval.
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: green-minio-bootstrap
+  namespace: fixup-green
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 300
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        fixup.role: probe
+        fixup.environment: green
+    spec:
+      serviceAccountName: green-runtime
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      containers:
+      - name: bootstrap
+        image: ghcr.io/seb-233/fixup-minio-client@sha256:9aa490587da3c5b6e0e77319fab2b34bc2ef61a03a7f6463575e533793bf7108
+        imagePullPolicy: Never
+        command:
+        - /bin/sh
+        - -ec
+        args:
+        - 'until mc alias set green http://minio.fixup-green.svc.cluster.local:9000
+          "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD"; do sleep 2; done
+
+          mc mb --ignore-existing green/fixup-green-private
+
+          mc anonymous set none green/fixup-green-private
+
+          mc stat green/fixup-green-private >/dev/null
+
+          '
+        env:
+        - name: MINIO_ROOT_USER
+          valueFrom:
+            secretKeyRef:
+              name: green-minio-secret
+              key: MINIO_ROOT_USER
+        - name: MINIO_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: green-minio-secret
+              key: MINIO_ROOT_PASSWORD
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 100m
+            memory: 128Mi
