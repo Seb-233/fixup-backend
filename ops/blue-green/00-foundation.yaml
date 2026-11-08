@@ -1,0 +1,137 @@
+# BG-01 candidate only; apply by stage after approval.
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: fixup-green
+  labels:
+    app.kubernetes.io/part-of: fixup
+    fixup.environment: green
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: green-budget
+  namespace: fixup-green
+spec:
+  hard:
+    pods: '8'
+    persistentvolumeclaims: '2'
+    requests.storage: 4Gi
+    requests.cpu: 1200m
+    requests.memory: 3Gi
+    limits.cpu: 2500m
+    limits.memory: 5Gi
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: green-runtime
+  namespace: fixup-green
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: green-config
+  namespace: fixup-green
+data:
+  DATABASE_URL: jdbc:postgresql://postgres.fixup-green.svc.cluster.local:5432/fixup_green
+  FIXUP_STORAGE_ENDPOINT: http://minio.fixup-green.svc.cluster.local:9000
+  FIXUP_STORAGE_PUBLIC_ENDPOINT: http://minio.fixup-green.svc.cluster.local:9000
+  FIXUP_STORAGE_BUCKET: fixup-green-private
+  FIXUP_STORAGE_REGION: us-east-1
+  AUTH0_ISSUER_URI: https://auth.invalid/
+  AUTH0_JWK_SET_URI: https://auth.invalid/jwks
+  AUTH0_AUDIENCE: fixup-green-isolated
+  CORS_ALLOWED_ORIGINS: http://localhost:18080
+  FIXUP_SEED_ENABLED: 'false'
+  FIXUP_GEOCODING_ENABLED: 'false'
+  FIXUP_MEDIA_DELETION_ENABLED: 'false'
+  OBSERVABILITY_ENVIRONMENT: green
+  OBSERVABILITY_CLUSTER: nbig44
+  HIKARI_MAXIMUM_POOL_SIZE: '4'
+  HIKARI_MINIMUM_IDLE: '1'
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: green-default-deny
+  namespace: fixup-green
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: green-allow-local
+  namespace: fixup-green
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          fixup.role: backend
+    - podSelector:
+        matchLabels:
+          fixup.role: probe
+    ports:
+    - protocol: TCP
+      port: 8080
+    - protocol: TCP
+      port: 5432
+    - protocol: TCP
+      port: 9000
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: observability
+      podSelector:
+        matchLabels:
+          app.kubernetes.io/name: alloy
+    ports:
+    - protocol: TCP
+      port: 8081
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          fixup.role: backend
+    ports:
+    - protocol: TCP
+      port: 8080
+    - protocol: TCP
+      port: 8081
+  - to:
+    - podSelector:
+        matchLabels:
+          fixup.role: postgres
+    ports:
+    - protocol: TCP
+      port: 5432
+  - to:
+    - podSelector:
+        matchLabels:
+          fixup.role: minio
+    ports:
+    - protocol: TCP
+      port: 9000
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+      podSelector:
+        matchLabels:
+          k8s-app: kube-dns
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53

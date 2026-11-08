@@ -1,0 +1,85 @@
+# BG-02 1B: temporary Green-only synthetic object check.
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: green-minio-smoke
+  namespace: fixup-green
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 180
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        fixup.role: probe
+        fixup.environment: green
+    spec:
+      serviceAccountName: green-runtime
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      containers:
+      - name: smoke
+        image: ghcr.io/seb-233/fixup-minio-client@sha256:9aa490587da3c5b6e0e77319fab2b34bc2ef61a03a7f6463575e533793bf7108
+        imagePullPolicy: Never
+        command:
+        - /bin/sh
+        - -ec
+        args:
+        - |
+          set -eu
+
+          ENDPOINT="http://minio.fixup-green.svc.cluster.local:9000"
+          OBJECT="green/fixup-green-private/1b-probe.txt"
+
+          echo "STEP 1: Esperar disponibilidad de MinIO Green"
+
+          ready=0
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            if mc alias set green "$ENDPOINT"               "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD" >/dev/null 2>&1; then
+              ready=1
+              break
+            fi
+
+            echo "Conexion no disponible, intento $attempt/10"
+            sleep 3
+          done
+
+          if [ "$ready" -ne 1 ]; then
+            echo "ERROR: no se pudo conectar con MinIO Green"
+            exit 1
+          fi
+
+          echo "STEP 2: Escribir objeto sintetico"
+          printf 'green-1b-synthetic\n' | mc pipe "$OBJECT"
+
+          echo "STEP 3: Verificar existencia"
+          mc stat "$OBJECT" >/dev/null
+
+          echo "STEP 4: Comprobar contenido"
+          ACTUAL="$(mc cat "$OBJECT")"
+
+          if [ "$ACTUAL" != "green-1b-synthetic" ]; then
+            echo "ERROR: contenido no coincide"
+            exit 1
+          fi
+
+          echo "SUCCESS: escritura y lectura MinIO Green"
+        env:
+        - name: MINIO_ROOT_USER
+          valueFrom:
+            secretKeyRef:
+              name: green-minio-secret
+              key: MINIO_ROOT_USER
+        - name: MINIO_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: green-minio-secret
+              key: MINIO_ROOT_PASSWORD
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 250m
+            memory: 512Mi
