@@ -1,6 +1,7 @@
 package com.fixup.shared.security;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.servlet.DispatcherType;
 import org.springframework.web.filter.CorsFilter;
 import java.util.Arrays;
 import java.util.List;
@@ -79,7 +80,9 @@ class SecurityConfiguration {
                 .sessionManagement(sessions -> sessions.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .requestCache(cache -> cache.disable())
                 .authorizeHttpRequests(requests -> {
-                    requests.requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                    // The forward to /error keeps the original status; without it every 500 looked like a 403.
+                    requests.dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
+                            .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                             .requestMatchers("/actuator/health").permitAll();
                     if (environment.matchesProfiles("demo")) {
                         requests.requestMatchers("/demo/**").permitAll();

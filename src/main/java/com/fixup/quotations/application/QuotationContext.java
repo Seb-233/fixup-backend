@@ -2,7 +2,6 @@ package com.fixup.quotations.application;
 
 import com.fixup.fixers.api.FixerDirectory;
 import com.fixup.requests.api.RepairRequestDirectory;
-import com.fixup.requests.api.RepairRequestNotFoundException;
 import java.math.BigDecimal;
 import java.util.Collection;
 import java.util.HashMap;
@@ -35,21 +34,14 @@ public class QuotationContext {
         return facts;
     }
 
-    /** Títulos de las solicitudes que el llamador todavía puede leer; las demás no aparecen. */
+    /**
+     * Títulos de las solicitudes que el llamador todavía puede leer; las demás no aparecen. Usa la
+     * consulta en bloque porque {@code require} lanza dentro de su propia transacción y, bajo RLS, eso
+     * dejaba esta en rollback-only aunque la excepción se atrapara.
+     */
     @Transactional(readOnly = true)
     public Map<UUID, String> requestTitles(Collection<UUID> requestIds) {
-        var titles = new HashMap<UUID, String>();
-        for (UUID requestId : requestIds) {
-            try {
-                var request = requests.require(requestId);
-                if (request.title() != null) {
-                    titles.put(requestId, request.title());
-                }
-            } catch (RepairRequestNotFoundException notVisible) {
-                // Under RLS a request awarded to another fixer is no longer visible to this one.
-            }
-        }
-        return titles;
+        return requests.titles(requestIds);
     }
 
     public record FixerFacts(String displayName, BigDecimal ratingAverage, int ratingCount, String city) {

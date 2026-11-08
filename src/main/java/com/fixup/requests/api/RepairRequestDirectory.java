@@ -2,6 +2,7 @@ package com.fixup.requests.api;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -16,6 +17,12 @@ public interface RepairRequestDirectory {
 
     /** Batch view for project composition; missing identifiers are omitted from the result. */
     List<ProjectRepairRequestSnapshot> findAll(Collection<UUID> requestIds);
+
+    /**
+     * Batch titles for listings. Requests the caller can no longer read (RLS) or that carry no title
+     * are omitted instead of failing, so the caller's transaction is never marked rollback-only.
+     */
+    Map<UUID, String> titles(Collection<UUID> requestIds);
 
     /**
      * Locks the repair request row with PESSIMISTIC_WRITE for a decision.
