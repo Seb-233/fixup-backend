@@ -1009,4 +1009,237 @@ abstract class QuotationHttpContract {
                 .andExpect(jsonPath("$", hasSize(1)))
                 .andExpect(jsonPath("$[0].requestId").value(requestId.toString()));
     }
+
+    // ---------- FR-UC-18: lectura de cotizaciones ----------
+
+    @Test
+    void ownerComparesOffersCheapestFirst() throws Exception {
+        String ownerSubject = "auth0|owner-compare-order";
+        provisionOwner(ownerSubject);
+        UUID requestId = createRequest(ownerSubject, "PAINTING", "Fachada", "Dos pisos");
+
+        // Se envían en desorden a propósito: el orden de la respuesta no puede depender de la inserción.
+        String expensiveSubject = "auth0|fixer-order-expensive";
+        UUID expensiveFixer = provisionVerifiedFixer(expensiveSubject, "PAINTING");
+        UUID expensive = submitQuotation(expensiveSubject, requestId, 300_000L, 5, "Incluye andamio");
+
+        String cheapSubject = "auth0|fixer-order-cheap";
+        UUID cheapFixer = provisionVerifiedFixer(cheapSubject, "PAINTING");
+        UUID cheap = submitQuotation(cheapSubject, requestId, 120_000L, 3, "Solo mano de obra");
+
+        String middleSubject = "auth0|fixer-order-middle";
+        UUID middleFixer = provisionVerifiedFixer(middleSubject, "PAINTING");
+        UUID middle = submitQuotation(middleSubject, requestId, 210_000L, 4, "Pintura incluida");
+
+        mvc.perform(get("/quotations/for-request/" + requestId).with(identity(ownerSubject)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(3)))
+                .andExpect(jsonPath("$[0].id").value(cheap.toString()))
+                .andExpect(jsonPath("$[0].amount").value(120_000))
+                .andExpect(jsonPath("$[0].fixerUserId").value(cheapFixer.toString()))
+                .andExpect(jsonPath("$[1].id").value(middle.toString()))
+                .andExpect(jsonPath("$[1].amount").value(210_000))
+                .andExpect(jsonPath("$[1].fixerUserId").value(middleFixer.toString()))
+                .andExpect(jsonPath("$[2].id").value(expensive.toString()))
+                .andExpect(jsonPath("$[2].amount").value(300_000))
+                .andExpect(jsonPath("$[2].fixerUserId").value(expensiveFixer.toString()))
+                // El tablero comparativo muestra el plazo y el estado de cada oferta.
+                .andExpect(jsonPath("$[0].estimatedDays").value(3))
+                .andExpect(jsonPath("$[0].status").value("SUBMITTED"))
+                .andExpect(jsonPath("$[1].status").value("SUBMITTED"))
+                .andExpect(jsonPath("$[2].status").value("SUBMITTED"));
+    }
+
+    @Test
+    void fixerListsOwnQuotationsNewestFirst() throws Exception {
+        String ownerSubject = "auth0|owner-fixer-listing";
+        provisionOwner(ownerSubject);
+        UUID firstRequest = createRequest(ownerSubject, "CARPENTRY", "Puerta", "Ajustar marco");
+        UUID secondRequest = createRequest(ownerSubject, "CARPENTRY", "Closet", "Cambiar corredera");
+
+        String fixerSubject = "auth0|fixer-own-listing";
+        provisionVerifiedFixer(fixerSubject, "CARPENTRY");
+        UUID older = submitQuotation(fixerSubject, firstRequest, 150_000L, 2, "Oferta vieja");
+        UUID newer = submitQuotation(fixerSubject, secondRequest, 180_000L, 3, "Oferta nueva");
+
+        // Una cotización de otro técnico sobre la misma solicitud no puede aparecer aquí.
+        String otherSubject = "auth0|fixer-own-listing-other";
+        provisionVerifiedFixer(otherSubject, "CARPENTRY");
+        submitQuotation(otherSubject, firstRequest, 140_000L, 2, "Oferta ajena");
+
+        // Las dos se crean en el mismo instante de reloj si la máquina es rápida. Se separan a
+        // propósito para que la prueba juzgue el orden declarado y no el azar de la inserción.
+        jdbc.update("UPDATE quotations SET created_at = ? WHERE id = ?",
+                java.sql.Timestamp.from(java.time.Instant.now().minusSeconds(3600)), older);
+
+        mvc.perform(get("/quotations/me").with(identity(fixerSubject)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(2)))
+                .andExpect(jsonPath("$[0].id").value(newer.toString()))
+                .andExpect(jsonPath("$[0].requestId").value(secondRequest.toString()))
+                .andExpect(jsonPath("$[0].status").value("SUBMITTED"))
+                .andExpect(jsonPath("$[1].id").value(older.toString()))
+                .andExpect(jsonPath("$[1].requestId").value(firstRequest.toString()))
+                .andExpect(jsonPath("$[1].status").value("SUBMITTED"));
+    }
+
+    @Test
+    void userWithoutFixerRoleCannotListOwnQuotations() throws Exception {
+        String ownerSubject = "auth0|owner-listing-denied";
+        provisionOwner(ownerSubject);
+
+        mvc.perform(get("/quotations/me").with(identity(ownerSubject)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+    }
+
+    @Test
+    void quotationBodyRejectsOutOfRangeEstimateLongMessageAndUnknownFields() throws Exception {
+        String ownerSubject = "auth0|owner-body-validation";
+        provisionOwner(ownerSubject);
+        UUID requestId = createRequest(ownerSubject, "MASONRY", "Muro", "Resanar");
+
+        String fixerSubject = "auth0|fixer-body-validation";
+        provisionVerifiedFixer(fixerSubject, "MASONRY");
+
+        // El plazo vive entre 1 y 365 días; fuera de ahí la petición ni siquiera llega al dominio.
+        for (int invalidDays : new int[] {0, 366}) {
+            mvc.perform(post("/quotations").with(identity(fixerSubject))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"requestId\":\"" + requestId + "\",\"amount\":150000,\"estimatedDays\":"
+                            + invalidDays + ",\"message\":\"Plazo inválido\"}"))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
+        }
+
+        String tooLongMessage = "x".repeat(1001);
+        mvc.perform(post("/quotations").with(identity(fixerSubject))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"requestId\":\"" + requestId + "\",\"amount\":150000,\"estimatedDays\":2,"
+                        + "\"message\":\"" + tooLongMessage + "\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
+
+        // Un campo que el cliente inventa se rechaza en vez de ignorarse en silencio: si alguien
+        // manda "status" creyendo que decide el estado, tiene que enterarse de que no fue leído.
+        mvc.perform(post("/quotations").with(identity(fixerSubject))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"requestId\":\"" + requestId + "\",\"amount\":150000,\"estimatedDays\":2,"
+                        + "\"message\":\"Campo de más\",\"status\":\"ACCEPTED\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
+
+        // Ninguno de los intentos dejó rastro.
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM quotations WHERE request_id = ?",
+                Integer.class, requestId)).isZero();
+    }
+
+    // ---------- FR-UC-18: aceptación y rechazo ----------
+
+    @Test
+    void acceptingARejectedQuotationReturnsConflict() throws Exception {
+        String ownerSubject = "auth0|owner-accept-rejected";
+        provisionOwner(ownerSubject);
+        UUID requestId = createRequest(ownerSubject, "ELECTRICAL", "Breaker", "Cambiar tablero");
+
+        String fixerSubject = "auth0|fixer-accept-rejected";
+        provisionVerifiedFixer(fixerSubject, "ELECTRICAL");
+        UUID quotationId = submitQuotation(fixerSubject, requestId, 190_000L, 2, "Oferta única");
+
+        mvc.perform(post("/quotations/" + quotationId + "/reject").with(identity(ownerSubject)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("REJECTED"));
+
+        // Rechazar no cierra la solicitud: sigue abierta, pero esa oferta ya no se puede aceptar.
+        mvc.perform(post("/quotations/" + quotationId + "/accept").with(identity(ownerSubject)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("QUOTATION_NOT_SUBMITTED"));
+
+        assertThat(jdbc.queryForObject("SELECT status FROM repair_requests WHERE id = ?", String.class, requestId))
+                .isEqualTo("OPEN");
+        assertThat(jdbc.queryForObject("SELECT status FROM quotations WHERE id = ?", String.class, quotationId))
+                .isEqualTo("REJECTED");
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM repair_payments WHERE quotation_id = ?",
+                Integer.class, quotationId)).isZero();
+    }
+
+    @Test
+    void rejectingAfterTheRequestWasAssignedReturnsConflict() throws Exception {
+        String ownerSubject = "auth0|owner-reject-assigned";
+        provisionOwner(ownerSubject);
+        UUID requestId = createRequest(ownerSubject, "PLUMBING", "Sifón", "Cambiar sifón");
+
+        String winnerSubject = "auth0|fixer-reject-assigned-winner";
+        provisionVerifiedFixer(winnerSubject, "PLUMBING");
+        UUID winner = submitQuotation(winnerSubject, requestId, 160_000L, 2, "Oferta ganadora");
+
+        String loserSubject = "auth0|fixer-reject-assigned-loser";
+        provisionVerifiedFixer(loserSubject, "PLUMBING");
+        UUID loser = submitQuotation(loserSubject, requestId, 175_000L, 3, "Oferta alterna");
+
+        mvc.perform(post("/quotations/" + winner + "/accept").with(identity(ownerSubject)))
+                .andExpect(status().isOk());
+
+        // Con la solicitud ya asignada no se decide nada más sobre ella, ni sobre la ganadora
+        // ni sobre la que quedó rechazada automáticamente.
+        for (UUID decided : List.of(winner, loser)) {
+            mvc.perform(post("/quotations/" + decided + "/reject").with(identity(ownerSubject)))
+                    .andExpect(status().isConflict())
+                    .andExpect(jsonPath("$.code").value("REQUEST_NOT_OPEN"));
+        }
+
+        assertThat(jdbc.queryForObject("SELECT status FROM quotations WHERE id = ?", String.class, winner))
+                .isEqualTo("ACCEPTED");
+        assertThat(jdbc.queryForObject("SELECT status FROM quotations WHERE id = ?", String.class, loser))
+                .isEqualTo("REJECTED");
+    }
+
+    @Test
+    void decidingOnAnUnknownQuotationReturnsNotFound() throws Exception {
+        String ownerSubject = "auth0|owner-unknown-quotation";
+        provisionOwner(ownerSubject);
+        UUID missing = UUID.randomUUID();
+
+        mvc.perform(post("/quotations/" + missing + "/accept").with(identity(ownerSubject)))
+                .andExpect(status().isNotFound());
+        mvc.perform(post("/quotations/" + missing + "/reject").with(identity(ownerSubject)))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void rejectingOneOfferLeavesTheOthersDecidable() throws Exception {
+        String ownerSubject = "auth0|owner-reject-one";
+        provisionOwner(ownerSubject);
+        UUID requestId = createRequest(ownerSubject, "GENERAL", "Varios", "Arreglos menores");
+
+        String discardedSubject = "auth0|fixer-reject-one-discarded";
+        provisionVerifiedFixer(discardedSubject, "GENERAL");
+        UUID discarded = submitQuotation(discardedSubject, requestId, 250_000L, 5, "Oferta descartada");
+
+        String keptSubject = "auth0|fixer-reject-one-kept";
+        provisionVerifiedFixer(keptSubject, "GENERAL");
+        UUID kept = submitQuotation(keptSubject, requestId, 130_000L, 2, "Oferta conservada");
+
+        mvc.perform(post("/quotations/" + discarded + "/reject").with(identity(ownerSubject)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("REJECTED"));
+
+        // La otra oferta sigue viva y el propietario todavía puede aceptarla.
+        mvc.perform(get("/quotations/for-request/" + requestId).with(identity(ownerSubject)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(2)))
+                .andExpect(jsonPath("$[0].id").value(kept.toString()))
+                .andExpect(jsonPath("$[0].status").value("SUBMITTED"))
+                .andExpect(jsonPath("$[1].id").value(discarded.toString()))
+                .andExpect(jsonPath("$[1].status").value("REJECTED"));
+
+        mvc.perform(post("/quotations/" + kept + "/accept").with(identity(ownerSubject)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.quotationId").value(kept.toString()));
+
+        assertThat(jdbc.queryForObject("SELECT status FROM repair_requests WHERE id = ?", String.class, requestId))
+                .isEqualTo("ASSIGNED");
+        assertThat(jdbc.queryForObject("SELECT status FROM quotations WHERE id = ?", String.class, discarded))
+                .isEqualTo("REJECTED");
+    }
 }
