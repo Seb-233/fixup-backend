@@ -11,6 +11,10 @@ spring:
           audiences: https://api.example.test
           jwk-set-uri: https://issuer.example.test/.well-known/jwks.json
 fixup:
+  payments:
+    # La conciliación programada no corre en pruebas: cada contrato la invoca cuando la necesita.
+    reconciliation:
+      enabled: false
   cors:
     allowed-origins: http://localhost:4200
   geocoding:
