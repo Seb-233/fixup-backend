@@ -1,5 +1,6 @@
 package com.fixup.integration;
 
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.hasSize;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
@@ -93,7 +94,7 @@ abstract class LedgerReconciliationHttpContract {
     void aMissingEarningIsReportedWithThePaymentThatLostIt() throws Exception {
         provisionAdmin();
         var transfer = approvedTransfer("lost-earning");
-        jdbc.update("DELETE FROM fixer_earnings WHERE quotation_id = ?", transfer.quotationId());
+        tamperBypassingTriggers("DELETE FROM fixer_earnings WHERE quotation_id = ?", transfer.quotationId());
 
         mvc.perform(get("/administration/payments/reconciliation").with(identity(ADMIN)))
                 .andExpect(status().isOk())
@@ -111,10 +112,16 @@ abstract class LedgerReconciliationHttpContract {
     void aPesoMovedFromCommissionToNetIsReported() throws Exception {
         provisionAdmin();
         var transfer = approvedTransfer("one-peso");
-        // La suma sigue cuadrando, así que la CHECK de la tabla no lo detiene: solo la regla de la
-        // tarifa lo ve.
-        jdbc.update("UPDATE fixer_earnings SET commission_amount = commission_amount - 1, "
-                + "net_amount = net_amount + 1 WHERE quotation_id = ?", transfer.quotationId());
+        String movePeso = "UPDATE fixer_earnings SET commission_amount = commission_amount - 1, "
+                + "net_amount = net_amount + 1 WHERE quotation_id = ?";
+        if (movesRealMoney()) {
+            // En PostgreSQL el trigger preserve_earning_and_transition (V42) ya lo impide.
+            assertThatThrownBy(() -> jdbc.update(movePeso, transfer.quotationId()))
+                    .hasMessageContaining("Earning financial terms are immutable");
+        }
+        // La suma sigue cuadrando, así que la CHECK de la tabla no lo detiene. Se simula un script
+        // con privilegios que salta los triggers: solo la regla de la tarifa lo ve.
+        tamperBypassingTriggers(movePeso, transfer.quotationId());
         UUID earningId = jdbc.queryForObject("SELECT id FROM fixer_earnings WHERE quotation_id = ?",
                 UUID.class, transfer.quotationId());
 
@@ -178,6 +185,34 @@ abstract class LedgerReconciliationHttpContract {
                         .contentType(MediaType.APPLICATION_JSON).content("{\"outcome\":\"APPROVED\"}"))
                 .andExpect(status().isOk());
         return new ApprovedTransfer(paymentId, quotationId);
+    }
+
+    /**
+     * Escribe directo en la base como lo haría un script o una migración con privilegios. En
+     * PostgreSQL desactiva los triggers de la sesión (session_replication_role = replica), que es
+     * justo el caso que la conciliación existe para atrapar.
+     */
+    private void tamperBypassingTriggers(String sql, Object... args) {
+        if (!movesRealMoney()) {
+            jdbc.update(sql, args);
+            return;
+        }
+        jdbc.execute((org.springframework.jdbc.core.ConnectionCallback<Void>) connection -> {
+            try (var bypass = connection.createStatement()) {
+                bypass.execute("SET session_replication_role = replica");
+            }
+            try (var statement = connection.prepareStatement(sql)) {
+                for (int i = 0; i < args.length; i++) {
+                    statement.setObject(i + 1, args[i]);
+                }
+                statement.executeUpdate();
+            } finally {
+                try (var restore = connection.createStatement()) {
+                    restore.execute("SET session_replication_role = origin");
+                }
+            }
+            return null;
+        });
     }
 
     private void provisionAdmin() throws Exception {

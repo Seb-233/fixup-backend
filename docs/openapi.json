@@ -7677,6 +7677,48 @@
         } ]
       }
     },
+    "/administration/payments/reconciliation" : {
+      "get" : {
+        "tags" : [ "ledger-reconciliation-controller" ],
+        "summary" : "Run the payment ledger reconciliation now and return its result",
+        "operationId" : "reconciliation",
+        "responses" : {
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Missing PLATFORM_ADMIN role or inactive account",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "200" : {
+            "description" : "Totals and every broken invariant with a sample of row ids",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/LedgerReconciliation"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
     "/media/me/portfolio/pieces/{pieceId}" : {
       "delete" : {
         "tags" : [ "portfolio-controller" ],
@@ -11166,11 +11208,6 @@
       "Pageable" : {
         "type" : "object",
         "properties" : {
-          "page" : {
-            "type" : "integer",
-            "format" : "int32",
-            "minimum" : 0
-          },
           "size" : {
             "type" : "integer",
             "format" : "int32",
@@ -11181,6 +11218,11 @@
             "items" : {
               "type" : "string"
             }
+          },
+          "page" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 0
           }
         }
       },
@@ -11267,6 +11309,93 @@
           },
           "sorted" : {
             "type" : "boolean"
+          }
+        }
+      },
+      "LedgerFinding" : {
+        "type" : "object",
+        "properties" : {
+          "code" : {
+            "type" : "string"
+          },
+          "description" : {
+            "type" : "string"
+          },
+          "count" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "sample" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string",
+              "format" : "uuid"
+            }
+          }
+        }
+      },
+      "LedgerReconciliation" : {
+        "type" : "object",
+        "properties" : {
+          "checkedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "consistent" : {
+            "type" : "boolean"
+          },
+          "balanced" : {
+            "type" : "boolean"
+          },
+          "totals" : {
+            "$ref" : "#/components/schemas/LedgerTotals"
+          },
+          "findings" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/LedgerFinding"
+            }
+          }
+        }
+      },
+      "LedgerTotals" : {
+        "type" : "object",
+        "properties" : {
+          "collected" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "earningsGross" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "commission" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "net" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "heldNet" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "availableNet" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "paidOutNet" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "payouts" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "outstandingDebts" : {
+            "type" : "integer",
+            "format" : "int64"
           }
         }
       }

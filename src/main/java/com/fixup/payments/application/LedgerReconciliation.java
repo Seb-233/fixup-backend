@@ -1,6 +1,7 @@
 package com.fixup.payments.application;
 
 import com.fixup.payments.domain.LedgerChecks;
+import io.swagger.v3.oas.annotations.media.Schema;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -20,12 +21,14 @@ public record LedgerReconciliation(Instant checkedAt, boolean consistent, boolea
         return findings.stream().mapToLong(Finding::count).sum();
     }
 
+    @Schema(name = "LedgerFinding")
     public record Finding(String code, String description, long count, List<UUID> sample) {
         public Finding {
             sample = List.copyOf(sample);
         }
     }
 
+    @Schema(name = "LedgerTotals")
     public record Totals(long collected, long earningsGross, long commission, long net, long heldNet,
             long availableNet, long paidOutNet, long payouts, long outstandingDebts) {
         static Totals of(LedgerChecks.Totals t) {
