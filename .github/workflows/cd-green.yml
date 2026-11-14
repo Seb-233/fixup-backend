@@ -1,0 +1,183 @@
+name: Green - Validate Deployment
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/cd-green.yml"
+      - "ops/blue-green/21-backend-production.yaml"
+      - "ops/blue-green/30-autoscaling.yaml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fixup-green-validation
+  cancel-in-progress: false
+
+jobs:
+  validate-green:
+    name: Validate Green manifests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install YAML validator
+        run: python3 -m pip install "PyYAML==6.0.2"
+
+      - name: Validate production manifests
+        shell: bash
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+          import re
+          import yaml
+
+          root = Path("ops/blue-green")
+
+          backend_file = root / "21-backend-production.yaml"
+          autoscaling_file = root / "30-autoscaling.yaml"
+
+          documents = []
+
+          for path in [backend_file, autoscaling_file]:
+              if not path.is_file():
+                  raise SystemExit(f"Missing manifest: {path}")
+
+              parsed = list(yaml.safe_load_all(path.read_text()))
+              documents.extend(
+                  item for item in parsed if item is not None
+              )
+
+          resources = {}
+
+          for obj in documents:
+              metadata = obj["metadata"]
+
+              if metadata.get("namespace") != "fixup-green":
+                  raise SystemExit("Unexpected namespace")
+
+              key = (obj["kind"], metadata["name"])
+
+              if key in resources:
+                  raise SystemExit(f"Duplicate resource: {key}")
+
+              resources[key] = obj
+
+          expected = {
+              ("Service", "bg02-demo-green"),
+              ("Deployment", "fixup-backend-green"),
+              ("HorizontalPodAutoscaler", "fixup-backend-green-hpa"),
+              ("PodDisruptionBudget", "fixup-backend-green"),
+          }
+
+          if set(resources) != expected:
+              raise SystemExit(
+                  "Unexpected resource inventory: "
+                  + repr(set(resources) ^ expected)
+              )
+
+          deployment = resources[
+              ("Deployment", "fixup-backend-green")
+          ]
+          hpa = resources[
+              ("HorizontalPodAutoscaler", "fixup-backend-green-hpa")
+          ]
+          pdb = resources[
+              ("PodDisruptionBudget", "fixup-backend-green")
+          ]
+          service = resources[
+              ("Service", "bg02-demo-green")
+          ]
+
+          spec = deployment["spec"]
+
+          if "replicas" in spec:
+              raise SystemExit(
+                  "HPA-managed Deployment must omit replicas"
+              )
+
+          strategy = spec["strategy"]
+
+          if strategy["type"] != "RollingUpdate":
+              raise SystemExit("Invalid deployment strategy")
+
+          rolling = strategy["rollingUpdate"]
+
+          if rolling["maxSurge"] != 1:
+              raise SystemExit("Invalid maxSurge")
+
+          if rolling["maxUnavailable"] != 0:
+              raise SystemExit("Invalid maxUnavailable")
+
+          selector = {
+              "fixup.environment": "green",
+              "fixup.role": "backend",
+          }
+
+          if spec["selector"]["matchLabels"] != selector:
+              raise SystemExit("Invalid Deployment selector")
+
+          if service["spec"]["selector"] != selector:
+              raise SystemExit("Invalid Service selector")
+
+          if hpa["spec"]["scaleTargetRef"]["name"] != \
+                  "fixup-backend-green":
+              raise SystemExit("Invalid HPA target")
+
+          if hpa["spec"]["minReplicas"] != 2:
+              raise SystemExit("Invalid HPA minimum")
+
+          if hpa["spec"]["maxReplicas"] != 4:
+              raise SystemExit("Invalid HPA maximum")
+
+          cpu_metrics = [
+              metric["resource"]["target"]["averageUtilization"]
+              for metric in hpa["spec"]["metrics"]
+              if metric.get("type") == "Resource"
+              and metric["resource"]["name"] == "cpu"
+          ]
+
+          if cpu_metrics != [70]:
+              raise SystemExit("Invalid HPA CPU target")
+
+          if pdb["spec"]["minAvailable"] != 1:
+              raise SystemExit("Invalid PDB minimum")
+
+          if pdb["spec"]["selector"]["matchLabels"] != selector:
+              raise SystemExit("Invalid PDB selector")
+
+          backend = [
+              container
+              for container in spec["template"]["spec"]["containers"]
+              if container["name"] == "backend"
+          ]
+
+          if len(backend) != 1:
+              raise SystemExit("Unexpected backend container count")
+
+          image = backend[0]["image"]
+
+          if not re.fullmatch(
+              r"ghcr\.io/seb-233/fixup-backend@sha256:"
+              r"[a-f0-9]{64}",
+              image,
+          ):
+              raise SystemExit("Backend image is not immutable")
+
+          print("GREEN_MANIFEST_VALIDATION=PASS")
+          print("GREEN_RESOURCE_COUNT=4")
+          print("GREEN_HPA_MIN=2")
+          print("GREEN_HPA_MAX=4")
+          print("GREEN_DEPLOYMENT_REPLICAS=HPA_MANAGED")
+          print("GREEN_PRODUCTION_MODIFIED=false")
+          PY
