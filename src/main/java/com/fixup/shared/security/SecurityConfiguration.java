@@ -83,7 +83,9 @@ class SecurityConfiguration {
                     // The forward to /error keeps the original status; without it every 500 looked like a 403.
                     requests.dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
                             .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                            .requestMatchers("/actuator/health").permitAll();
+                            .requestMatchers("/actuator/health").permitAll()
+                            // INT-01: Wompi no manda token; el evento se autentica con su checksum.
+                            .requestMatchers(HttpMethod.POST, "/payments/wompi/events").permitAll();
                     if (environment.matchesProfiles("demo")) {
                         requests.requestMatchers("/demo/**").permitAll();
                     }

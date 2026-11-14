@@ -34,12 +34,12 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 @org.springframework.test.annotation.DirtiesContext
 @Testcontainers
 class PostgresRentalContractIT extends RentalContractHttpContract {
-    // Active manifest: 16 historical migrations through V16, then these 25 successors.
+    // Active manifest: 16 historical migrations through V16, then these 27 successors.
     // V22/V23 are not active versions; owner_payments remains archived outside Flyway locations.
     private static final List<String> THROUGH_V16 = List.of("1", "2", "3", "4", "5", "6", "7", "8",
             "9", "10", "11", "12", "13", "14", "15", "16");
     private static final List<String> AFTER_V16 = List.of("16.1", "17", "18", "19", "20", "21",
-            "24", "25", "26", "27", "28", "29", "30", "31", "32", "33", "34", "35", "36", "37", "38", "39", "40", "41", "42");
+            "24", "25", "26", "27", "28", "29", "30", "31", "32", "33", "34", "35", "36", "37", "38", "39", "40", "41", "42", "43", "44");
     private static final List<String> ACTIVE_VERSIONS = java.util.stream.Stream
             .concat(THROUGH_V16.stream(), AFTER_V16.stream()).toList();
 
