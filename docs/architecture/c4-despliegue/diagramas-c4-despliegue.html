@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>C4 y despliegue</title>
+<style>
+  :root { --ink: #1d2433; --muted: #5b6475; --line: #d9dee7; --bg: #f6f7f9; --card: #ffffff; --accent: #1f5fae; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 1180px; margin: 0 auto; padding: 24px 16px 64px; }
+  h1 { font-size: 24px; margin: 0 0 4px; }
+  .lead { color: var(--muted); margin: 0 0 24px; max-width: 75ch; }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 18px; margin: 0 0 20px; }
+  h2 { font-size: 17px; margin: 0 0 4px; }
+  .cap { color: var(--muted); margin: 0 0 12px; font-size: 14px; max-width: 90ch; }
+  .tools { display: flex; gap: 8px; margin: 0 0 12px; flex-wrap: wrap; }
+  button { font: inherit; font-size: 13px; padding: 6px 12px; border-radius: 6px; border: 1px solid var(--line); background: #fff; color: var(--ink); cursor: pointer; }
+  button:hover { border-color: var(--accent); color: var(--accent); }
+  .fig { overflow-x: auto; background: #fff; }
+  .fig svg { max-width: 100%; height: auto; }
+  details { margin-top: 10px; font-size: 13px; }
+  details pre { white-space: pre-wrap; background: var(--bg); padding: 10px; border-radius: 6px; }
+  .err { color: #a3261b; font-weight: 600; }
+</style>
+</head>
+<body>
+<main>
+  <h1>C4 y despliegue actualizados (E2-S2)</h1>
+  <p class="lead">Figuras 1, 3 y 11 a 14 del SAD v2, hechas el 14/11/2026 a partir de <code>develop</code> del backend (<code>d07a2fd</code>, incluye BG-02 del PR #53) y del frontend (<code>606bd57</code>): manifiestos <code>k8s/</code>, <code>ops/blue-green/</code>, <code>nginx/nginx.conf</code>, flujos de CI/CD y <code>compose.development.yml</code>. Producción respondió HTTP 200 en <code>/</code> y en <code>/api/actuator/health</code> ese mismo día. Lo que dice «por confirmar» en el documento de acompañamiento lo valida Sebastián antes de pegarlo en el SAD. Cada figura se descarga en SVG o PNG; el código Mermaid está debajo. La página necesita internet para cargar Mermaid.</p>
+  <div id="figs"></div>
+</main>
+
+<script type="text/plain" data-n="1" data-slug="figura-1-contexto" data-title="Figura 1. Diagrama C4 de contexto" data-cap="Cinco tipos de usuario y los sistemas externos con los que FixUp habla hoy. Auth0 solo autentica: los roles se leen de la base de FixUp. La pasarela de pagos sigue simulada en main; la integración con Wompi en sandbox (INT-01) está en curso y aún no forma parte de main. El push no tiene proveedor (NoopPushNotificationGateway).">
+flowchart TB
+  OWN["Propietario<br/>[Persona]"]:::person
+  TEN["Arrendatario<br/>[Persona]"]:::person
+  FIX["Técnico (Fixer)<br/>[Persona]"]:::person
+  MGR["Inmobiliaria<br/>[Persona]"]:::person
+  ADM["Administrador de la plataforma<br/>[Persona]"]:::person
+  FX["FixUp<br/>[Sistema de software]<br/>Reparaciones, arriendos, cotizaciones,<br/>pagos y portafolio de técnicos"]:::core
+  AUTH0["Auth0<br/>[Sistema externo: OIDC, JWT RS256]"]:::sys
+  OSM["OpenStreetMap<br/>[Sistema externo: teselas y Nominatim]"]:::sys
+  MKT["Proveedor de indicadores de mercado<br/>[Sistema externo: REST; sintético en dev]"]:::sys
+  PAY["Pasarela de pagos<br/>[Simulada en main; Wompi sandbox en curso]"]:::sys
+  OWN --> FX
+  TEN --> FX
+  FIX --> FX
+  MGR --> FX
+  ADM --> FX
+  FX -->|"valida tokens [HTTPS]"| AUTH0
+  FX -->|"mapas y geocodificación [HTTPS]"| OSM
+  FX -->|"consulta indicadores con caché [HTTPS]"| MKT
+  FX -.->|"cobro de reparaciones"| PAY
+  classDef person fill:#c9dcf2,stroke:#08427b,stroke-width:2px,color:#08273f
+  classDef core fill:#a9c8ec,stroke:#10233f,stroke-width:2px,color:#10233f
+  classDef sys fill:#f1f1f1,stroke:#8a8f99,color:#1d2433,stroke-dasharray:4 3
+</script>
+
+<script type="text/plain" data-n="3" data-slug="figura-3-contenedores" data-title="Figura 3. Diagrama C4 de contenedores (actualizada)" data-cap="Cambios frente al SAD 1.0: el frontend lo sirve nginx, que además hace de proxy de /api hacia la API (el navegador habla con un solo origen); la interfaz ya no usa Ionic; las fotos y documentos viajan directo entre el navegador y el almacenamiento con URL firmada (5 a 15 minutos), sin pasar por la API; la observabilidad corre aparte con Alloy, Prometheus, Loki y Grafana.">
+flowchart TB
+  USR["Usuarios (5 roles)<br/>[Persona]"]:::person
+  subgraph FXS["FixUp [Sistema de software]"]
+    direction TB
+    WEB["Aplicación web PWA y Android<br/>[Contenedor: Angular 22, TypeScript, Service Worker;<br/>Capacitor 8 en Android]<br/>Menú y pantallas por rol"]:::cont
+    NGX["Servidor web y proxy<br/>[Contenedor: nginx]<br/>Sirve la PWA y reenvía /api/"]:::cont
+    API["API de aplicación<br/>[Contenedor: Java 21, Spring Boot 3.5,<br/>Spring Modulith]<br/>Monolito modular de 15 módulos de negocio"]:::cont
+    DB[("Base de datos<br/>[Contenedor: PostgreSQL 17]<br/>RLS en 24 tablas, rol fixup_app,<br/>triggers de inmutabilidad de pagos")]:::cont
+    S3["Almacenamiento de objetos<br/>[Contenedor: MinIO, API S3]<br/>Bucket privado"]:::cont
+    OBS["Observabilidad<br/>[Contenedor: Grafana Alloy, Prometheus,<br/>Loki, Grafana]"]:::cont
+  end
+  AUTH0["Auth0<br/>[Sistema externo]"]:::sys
+  OSM["OpenStreetMap<br/>[Sistema externo]"]:::sys
+  MKT["Indicadores de mercado<br/>[Sistema externo]"]:::sys
+  USR -->|"usa [HTTPS]"| WEB
+  WEB -->|"descarga la app y llama /api/ [HTTPS]"| NGX
+  NGX -->|"/api/ → REST/JSON con JWT [HTTP interno]"| API
+  WEB -->|"inicia sesión, obtiene JWT [OIDC]"| AUTH0
+  WEB -->|"sube y descarga con URL firmada [HTTPS]"| S3
+  WEB -->|"teselas y búsqueda de direcciones"| OSM
+  API -->|"JDBC, SET LOCAL ROLE fixup_app"| DB
+  API -->|"firma URL, verifica objetos [S3]"| S3
+  API -->|"JWKS [HTTPS]"| AUTH0
+  API -->|"REST con timeout y reintento"| MKT
+  OBS -.->|"recolecta métricas y logs"| API
+  classDef person fill:#c9dcf2,stroke:#08427b,stroke-width:2px,color:#08273f
+  classDef cont fill:#dbe8f7,stroke:#1f5fae,color:#10233f
+  classDef sys fill:#f1f1f1,stroke:#8a8f99,color:#1d2433,stroke-dasharray:4 3
+</script>
+
+<script type="text/plain" data-n="11" data-slug="figura-11-desarrollo" data-title="Figura 11. Despliegue: ambiente de desarrollo" data-cap="Cada desarrollador levanta base, almacenamiento y API con compose.development.yml, todo publicado solo en 127.0.0.1. El frontend corre con ng serve en el puerto 4200. Con el perfil demo la API puede usar H2 y una semilla de Colombia, y habilita el ingreso de demostración; con el perfil dev usa PostgreSQL y Auth0 real.">
+flowchart LR
+  subgraph PC["Portátil del desarrollador [macOS o Linux]"]
+    direction LR
+    NG["ng serve :4200<br/>[Node 22, Angular 22]"]:::cont
+    subgraph DC["Docker Compose (compose.development.yml)"]
+      direction TB
+      BE["backend :8080<br/>[Spring Boot, perfil dev o demo]"]:::cont
+      PG[("database :5432<br/>[postgres:17]")]:::cont
+      MN["minio :9000/:9001<br/>[imagen fixup-minio]"]:::cont
+    end
+    AND["Emulador Android<br/>[Capacitor, adb reverse 8080 y 9000]"]:::cont
+  end
+  AUTH0["Auth0 (tenant de desarrollo)"]:::sys
+  NG -->|"HTTP localhost"| BE
+  AND -->|"HTTP por adb reverse"| BE
+  BE --> PG
+  BE --> MN
+  NG -->|"OIDC"| AUTH0
+  BE -->|"JWKS"| AUTH0
+  classDef cont fill:#dbe8f7,stroke:#1f5fae,color:#10233f
+  classDef sys fill:#f1f1f1,stroke:#8a8f99,color:#1d2433,stroke-dasharray:4 3
+</script>
+
+<script type="text/plain" data-n="12" data-slug="figura-12-ci-cd" data-title="Figura 12. Despliegue: integración y entrega continuas" data-cap="CI corre en runners de GitHub en cada push y PR: integridad del repositorio (Flyway inmutable y sin números repetidos), frescura de la rama, verificación completa con PostgreSQL real en Testcontainers y contrato OpenAPI; en el frontend, chequeo de archivos sensibles, lint, pruebas, build y sincronización de Android. CD solo corre cuando CI de main termina bien: un runner self-hosted construye la imagen, la publica en ghcr.io con tres etiquetas (sha-xxxxxxx, main, latest), sincroniza los Secrets desde el entorno Production de GitHub y aplica los manifiestos con kubectl.">
+flowchart LR
+  DEV["Desarrollador<br/>push o PR"]:::person
+  subgraph GH["GitHub (Seb-233/fixup-backend y fixup-frontend)"]
+    direction TB
+    CI["CI [runner ubuntu de GitHub]<br/>backend: ./mvnw -Ppostgres-it verify + OpenAPI<br/>frontend: lint, test, build, cap sync"]:::cont
+    ENV["Entorno Production<br/>[Secrets: KUBE_CONFIG, BD, MinIO, Auth0]"]:::cont
+  end
+  GHCR["ghcr.io<br/>[Registro de imágenes privado]"]:::sys
+  subgraph RUN["Runner self-hosted (en las VM de la universidad)"]
+    CD["CD: build y push de la imagen,<br/>Secrets de Kubernetes, kubectl apply,<br/>kubectl set image sha-xxxxxxx"]:::cont
+  end
+  K44["k3s NBIG44<br/>namespace fixup (backend)"]:::node
+  K206["k3s NBIG206<br/>namespace fixup (frontend)"]:::node
+  DEV --> CI
+  CI -->|"solo main y en verde"| CD
+  ENV -.-> CD
+  CD -->|"push"| GHCR
+  CD -->|"kubectl"| K44
+  CD -->|"kubectl"| K206
+  K44 -->|"pull con ghcr-pull-secret"| GHCR
+  K206 -->|"pull con ghcr-pull-secret"| GHCR
+  classDef person fill:#c9dcf2,stroke:#08427b,stroke-width:2px,color:#08273f
+  classDef cont fill:#dbe8f7,stroke:#1f5fae,color:#10233f
+  classDef node fill:#eef1f5,stroke:#5b6475,color:#1d2433
+  classDef sys fill:#f1f1f1,stroke:#8a8f99,color:#1d2433,stroke-dasharray:4 3
+</script>
+
+<script type="text/plain" data-n="13" data-slug="figura-13-produccion-blue-green" data-title="Figura 13. Despliegue: producción en NBIG206 y NBIG44 (Blue operativo, Green propuesto)" data-cap="Azul sólido: lo que atiende tráfico hoy (Blue, namespace fixup). Verde: Green, namespace fixup-green en el mismo k3s de NBIG44. Su PostgreSQL y su MinIO están desplegados (iteración 1B, pruebas con PASS operativo informado por el operador y evidencia documental pendiente). Las cajas punteadas son la iteración 2, que no está desplegada: backend Green de 2 a 3 réplicas con HPA y un Job de migración separado, porque la auditoría de BG-02 encontró que Flyway podría migrar Blue si una variable apunta mal. Green no tiene ruta de entrada desde NBIG206 y sus NetworkPolicy bloquean el tráfico hacia Blue.">
+flowchart TB
+  USR["Usuarios<br/>[navegador o Android]"]:::person
+  TS["Tailscale Funnel<br/>fix-rent.tailb7a45b.ts.net<br/>[TLS público]"]:::sys
+  AUTH0["Auth0"]:::sys
+  subgraph N206["NBIG206 · VM Ubuntu 22.04 · 10.43.99.147 · k3s"]
+    direction LR
+    T206["Traefik Ingress<br/>10.43.99.147.nip.io [TLS]"]:::node
+    FE["fixup-frontend<br/>[Deployment, 1 réplica]<br/>nginx: PWA + proxy /api/"]:::blue
+  end
+  subgraph N44["NBIG44 · VM · 10.43.98.238 · k3s"]
+    direction TB
+    T44["Traefik Ingress :80"]:::node
+    subgraph BLUE["namespace fixup · BLUE (operativo)"]
+      direction TB
+      BE["fixup-backend<br/>[Deployment, RollingUpdate<br/>maxSurge 1, maxUnavailable 0]"]:::blue
+      PG[("postgres<br/>[StatefulSet + PVC]")]:::blue
+      MN["minio<br/>[StatefulSet + PVC]"]:::blue
+    end
+    subgraph GREEN["namespace fixup-green · GREEN (sin tráfico)"]
+      direction TB
+      GBE["backend Green 2–3 réplicas + HPA<br/>[iteración 2: propuesto]"]:::prop
+      GMJ["Job de migración Flyway<br/>[iteración 2: propuesto]"]:::prop
+      GPG[("postgres-0<br/>[1B desplegado, PVC 2 Gi]")]:::green
+      GMN["minio-0<br/>[1B desplegado, PVC 2 Gi]"]:::green
+      GNP["NetworkPolicy deny por defecto:<br/>sin salida hacia Blue"]:::green
+    end
+    OBS["namespace observability<br/>Alloy → Prometheus, Loki, Grafana"]:::node
+  end
+  USR -->|"HTTPS"| TS
+  TS --> T206
+  T206 --> FE
+  FE -->|"/api/ → http://10.43.98.238/"| T44
+  T44 --> BE
+  BE --> PG
+  BE --> MN
+  BE -->|"JWKS"| AUTH0
+  GBE -.-> GPG
+  GBE -.-> GMN
+  GMJ -.-> GPG
+  OBS -.-> BE
+  OBS -.-> GBE
+  classDef person fill:#c9dcf2,stroke:#08427b,stroke-width:2px,color:#08273f
+  classDef blue fill:#dbe8f7,stroke:#1f5fae,color:#10233f
+  classDef green fill:#dff3e4,stroke:#2e7d4f,color:#123b22
+  classDef prop fill:#ffffff,stroke:#2e7d4f,color:#123b22,stroke-dasharray:5 4
+  classDef node fill:#eef1f5,stroke:#5b6475,color:#1d2433
+  classDef sys fill:#f1f1f1,stroke:#8a8f99,color:#1d2433,stroke-dasharray:4 3
+</script>
+
+<script type="text/plain" data-n="14" data-slug="figura-14-paso-a-green" data-title="Figura 14. Paso de Blue a Green propuesto (iteraciones de BG-02)" data-cap="Secuencia de puertas de la auditoría BG-02 (07/11). Cada puerta se detiene ante cualquier diferencia de contexto, base de destino, Secret, política o salud de Blue. Hoy el proceso está en la iteración 2, antes del primer paso: nada de esto se ha ejecutado contra Green.">
+flowchart LR
+  A["1A · Fundación<br/>namespace, cuota, SA, NetworkPolicy,<br/>canary de red<br/>Estado: hecho"]:::done
+  B["1B · Datos Green<br/>PostgreSQL y MinIO con PVC,<br/>8 pruebas de aislamiento y persistencia<br/>Estado: PASS operativo, evidencia pendiente"]:::done
+  C["2a · Migración controlada<br/>imagen sin Flyway, Job de migración<br/>con identidad de base verificada<br/>Estado: propuesto"]:::prop
+  D["2b · Backend Green<br/>2–3 réplicas, HPA, /readyz,<br/>60 respuestas de verify-green.sh<br/>Estado: propuesto"]:::prop
+  E["3 · Cambio de tráfico<br/>proxy /api/ de NBIG206 hacia Green;<br/>Blue queda para volver atrás<br/>Estado: sin diseño de entrada aún"]:::prop
+  A --> B --> C --> D --> E
+  E -.->|"rollback: el proxy vuelve a Blue"| B
+  classDef done fill:#dff3e4,stroke:#2e7d4f,color:#123b22
+  classDef prop fill:#ffffff,stroke:#2e7d4f,color:#123b22,stroke-dasharray:5 4
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.min.js"></script>
+<script>
+  mermaid.initialize({
+    startOnLoad: false,
+    theme: 'neutral',
+    securityLevel: 'strict',
+    htmlLabels: false,
+    flowchart: { htmlLabels: false, curve: 'basis', nodeSpacing: 40, rankSpacing: 55, subGraphTitleMargin: { top: 12, bottom: 18 } },
+    sequence: { useMaxWidth: false, mirrorActors: false, wrap: true, width: 170 },
+    class: { htmlLabels: false }
+  });
+
+  const container = document.getElementById('figs');
+  const sources = [...document.querySelectorAll('script[type="text/plain"][data-n]')];
+
+  function download(name, blob) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  }
+
+  function svgText(svg) {
+    const copy = svg.cloneNode(true);
+    copy.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+    const box = svg.getBBox();
+    const w = Math.ceil(svg.viewBox.baseVal?.width || box.width);
+    const h = Math.ceil(svg.viewBox.baseVal?.height || box.height);
+    copy.setAttribute('width', w);
+    copy.setAttribute('height', h);
+    copy.style.maxWidth = 'none';
+    return { text: new XMLSerializer().serializeToString(copy), w, h };
+  }
+
+  function toPng(svg, name) {
+    const { text, w, h } = svgText(svg);
+    const img = new Image();
+    img.onload = () => {
+      const scale = 2;
+      const canvas = document.createElement('canvas');
+      canvas.width = w * scale;
+      canvas.height = h * scale;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      canvas.toBlob(blob => download(name, blob), 'image/png');
+    };
+    img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(text);
+  }
+
+  (async () => {
+    for (const src of sources) {
+      const n = src.dataset.n;
+      const sec = document.createElement('section');
+      const slug = src.dataset.slug || 'figura-' + n;
+      sec.innerHTML = `<h2>${src.dataset.title}</h2><p class="cap">${src.dataset.cap}</p>
+        <div class="tools"><button data-k="svg">Descargar SVG</button><button data-k="png">Descargar PNG</button></div>
+        <div class="fig"></div><details><summary>Código Mermaid</summary><pre></pre></details>`;
+      sec.querySelector('pre').textContent = src.textContent.trim();
+      container.append(sec);
+      const fig = sec.querySelector('.fig');
+      try {
+        const { svg } = await mermaid.render('m' + n, src.textContent.trim());
+        fig.innerHTML = svg;
+        const el = fig.querySelector('svg');
+        sec.querySelector('[data-k=svg]').onclick = () => download(slug + '.svg', new Blob([svgText(el).text], { type: 'image/svg+xml' }));
+        sec.querySelector('[data-k=png]').onclick = () => toPng(el, slug + '.png');
+      } catch (e) {
+        fig.innerHTML = `<p class="err">No se pudo dibujar: ${String(e.message || e).slice(0, 300)}</p>`;
+        console.error('figura', n, e);
+      }
+    }
+  })();
+</script>
+</body>
+</html>
