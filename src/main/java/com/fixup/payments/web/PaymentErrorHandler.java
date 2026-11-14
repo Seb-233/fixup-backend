@@ -50,6 +50,13 @@ class PaymentErrorHandler {
                 exception.getMessage(), request.getRequestURI()));
     }
 
+    @ExceptionHandler(com.fixup.payments.api.PaymentGatewayUnavailableException.class)
+    ResponseEntity<ErrorResponse> gatewayUnavailable(com.fixup.payments.api.PaymentGatewayUnavailableException exception,
+            HttpServletRequest request) {
+        return ResponseEntity.status(503).body(new ErrorResponse(503, exception.code(),
+                exception.getMessage(), request.getRequestURI()));
+    }
+
     @ExceptionHandler(PaymentConflictException.class)
     ResponseEntity<ErrorResponse> conflict(PaymentConflictException exception,
             HttpServletRequest request) {

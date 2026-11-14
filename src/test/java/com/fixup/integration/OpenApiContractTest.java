@@ -65,7 +65,9 @@ class OpenApiContractTest {
                 "/payments/me", "/payments/me/earnings", "/payments/me/payouts", "/payments/me/debts",
                 "/payments/debts/{debtId}/pay", "/payments/cash-settlements/jobs/{jobId}",
                 "/payments/{paymentId}",
-                "/payments/{paymentId}/attempts", "/properties", "/properties/{propertyId}", "/properties/me",
+                "/payments/{paymentId}/attempts", "/payments/wompi", "/payments/{paymentId}/wompi/checkout",
+                "/payments/{paymentId}/wompi/transactions/{transactionId}", "/payments/wompi/events", "/payments/wompi/transactions",
+                "/properties", "/properties/{propertyId}", "/properties/me",
                 "/properties/search", "/locations/geocode", "/locations/reverse-geocode",
                 "/properties/bulk/validate", "/properties/bulk/import",
                 "/notifications/me", "/notifications/{id}/read", "/notifications/read-all",
@@ -362,6 +364,14 @@ class OpenApiContractTest {
                 .contains("reference", "amount", "instrument").doesNotContain("outcome", "ownerUserId", "paymentMethod", "scenario");
         assertThat(paths.get("/payments/{paymentId}/attempts").get("post").get("parameters").toString())
                 .contains("Idempotency-Key", "uuid");
+        // INT-01: el webhook de Wompi es público (se autentica por checksum); los demás exigen Bearer.
+        assertThat(paths.get("/payments/wompi/events").get("post").get("security").toString()).isEqualTo("[]");
+        for (String path : java.util.List.of("/payments/{paymentId}/wompi/checkout", "/payments/{paymentId}/wompi/transactions/{transactionId}")) {
+            assertThat(paths.get(path).get("post").get("security").toString()).as(path).contains("bearerAuth");
+        }
+        assertThat(paths.get("/payments/wompi/transactions").get("get").get("security").toString()).contains("bearerAuth");
+        assertThat(contract.at("/components/schemas/WompiReconciliation/enum").toString())
+                .contains("RECORDED", "NOT_RECORDED", "DUPLICATE", "FOREIGN");
         assertThat(contract.at("/components/schemas/SandboxPaymentInstrument/enum").toString())
                 .contains("SANDBOX_CARD", "SANDBOX_PSE", "SANDBOX_NEQUI").doesNotContain("CASH", "TRANSFER");
         Files.createDirectories(Path.of("target"));

@@ -75,12 +75,16 @@ public class SimulateRepairPayment {
             case PENDING -> "PENDING";
             case ERROR -> "ERROR";
         };
-        return process(actor, current, new PaymentAttemptCommand(current.reference(), current.amount(),
+        return process(actor.internalUserId(), current, new PaymentAttemptCommand(current.reference(), current.amount(),
                 com.fixup.payments.api.PaymentMethod.SANDBOX_CARD, UUID.randomUUID()), scenario).detail();
     }
 
     @Transactional
     public PaymentAttemptResult attempt(CurrentActor actor, UUID paymentId, PaymentAttemptCommand command) {
+        if (command.instrument() == com.fixup.payments.api.PaymentMethod.WOMPI) {
+            throw new PaymentConflictException("INVALID_INSTRUMENT",
+                    "Wompi payments start at POST /payments/{paymentId}/wompi/checkout");
+        }
         var current = payments.findByIdForUpdate(paymentId).orElseThrow(PaymentNotFoundException::new);
         authorization.requirePayer(actor, current);
         requireSupported(current);
@@ -104,13 +108,24 @@ public class SimulateRepairPayment {
         if (current.status() == PaymentStatus.APPROVED) {
             throw new PaymentConflictException("PAYMENT_ALREADY_APPROVED", "An approved payment cannot be paid again");
         }
-        return process(actor, current, command, environment.getProperty("fixup.payments.sandbox.scenario", "APPROVE")).result();
+        return process(actor.internalUserId(), current, command,
+                environment.getProperty("fixup.payments.sandbox.scenario", "APPROVE")).result();
     }
 
-    private Processed process(CurrentActor actor, RepairPayment current, PaymentAttemptCommand command,
+    private Processed process(UUID attemptedBy, RepairPayment current, PaymentAttemptCommand command,
             String scenario) {
         var result = gateway.charge(new com.fixup.payments.domain.PaymentGateway.Attempt(current.id(),
                 command.reference(), command.amount(), command.instrument(), scenario));
+        return record(attemptedBy, current, command, scenario, result);
+    }
+
+    /**
+     * Applies one provider decision while the caller holds the payment row lock. Shared by the
+     * sandbox and by Wompi (INT-01) so both pass through the same audit row, earning, debt
+     * settlement, job opening and notifications.
+     */
+    Processed record(UUID attemptedBy, RepairPayment current, PaymentAttemptCommand command, String scenario,
+            com.fixup.payments.domain.PaymentGateway.Result result) {
         // PostgreSQL stores microseconds: initial responses must equal subsequent persisted replays.
         Instant now = clock.instant().truncatedTo(java.time.temporal.ChronoUnit.MICROS);
         RepairPayment updated = switch (result.status()) {
@@ -121,7 +136,7 @@ public class SimulateRepairPayment {
         };
 
         var audit = new SimulatedPaymentAttempt(UUID.randomUUID(), current.id(),
-                result.status(), updated.status(), actor.internalUserId(), now, command.operationKey(),
+                result.status(), updated.status(), attemptedBy, now, command.operationKey(),
                 command.reference(), command.amount(), command.instrument(), scenario, result.transactionId(), result.failureReason());
         attempts.create(audit);
         payments.update(updated);
@@ -136,19 +151,20 @@ public class SimulateRepairPayment {
                     updated.requestId(), updated.ownerUserId(), updated.fixerUserId(), updated.amount(),
                     ApprovedPaymentPurpose.valueOf(updated.purpose().name()), now));
         }
-        notifyParticipants(actor, updated, result.failureReason());
+        notifyParticipants(attemptedBy, updated, result.failureReason(),
+                command.instrument() == com.fixup.payments.api.PaymentMethod.WOMPI);
         return new Processed(PaymentDetail.from(updated, authorization.context(updated.quotationId())), PaymentAttemptResult.of(audit));
     }
 
-    private record Processed(PaymentDetail detail, PaymentAttemptResult result) { }
+    record Processed(PaymentDetail detail, PaymentAttemptResult result) { }
 
-    private void notifyParticipants(CurrentActor actor, RepairPayment payment, String failureReason) {
+    private void notifyParticipants(UUID attemptedBy, RepairPayment payment, String failureReason, boolean wompi) {
         boolean approved = payment.status() == PaymentStatus.APPROVED;
         if (!approved && payment.status() != PaymentStatus.DECLINED && payment.status() != PaymentStatus.ERROR) return;
         var type = approved ? com.fixup.notifications.api.NotificationType.PAYMENT_APPROVED
                 : com.fixup.notifications.api.NotificationType.PAYMENT_DECLINED;
         var recipients = new java.util.LinkedHashSet<UUID>();
-        recipients.add(actor.internalUserId());
+        recipients.add(attemptedBy);
         recipients.add(payment.ownerUserId());
         if (approved) recipients.add(payment.fixerUserId());
         for (var recipient : recipients) {
@@ -160,15 +176,16 @@ public class SimulateRepairPayment {
             } else if (beneficiary) {
                 body = service ? "El servicio quedó pagado. El trabajo está habilitado y el ingreso retenido hasta el cierre."
                         : "Se liquidó el saldo pendiente. El ingreso está disponible.";
-            } else if (recipient.equals(payment.ownerUserId()) && !recipient.equals(actor.internalUserId())) {
-                body = "Tu administrador registró el pago simulado completo de la reparación: " + payment.reference();
+            } else if (recipient.equals(payment.ownerUserId()) && !recipient.equals(attemptedBy)) {
+                body = (wompi ? "Tu administrador pagó en Wompi la reparación: "
+                        : "Tu administrador registró el pago simulado completo de la reparación: ") + payment.reference();
             } else {
-                body = "Pago simulado completo registrado: " + payment.reference();
+                body = (wompi ? "Pago aprobado por Wompi: " : "Pago simulado completo registrado: ") + payment.reference();
             }
             events.publishEvent(new com.fixup.notifications.api.NotificationRequested(recipient, type,
                     approved ? "Pago aprobado" : "Pago no aprobado",
                     body, beneficiary ? (service ? "/jobs/me" : "/payments/earnings") : "/requests/" + payment.requestId(), payment.id(), "PAYMENT",
-                    java.util.Map.of("attemptedByUserId", actor.internalUserId().toString(),
+                    java.util.Map.of("attemptedByUserId", attemptedBy.toString(),
                             "ownerUserId", payment.ownerUserId().toString(), "status", payment.status().name())));
         }
     }
