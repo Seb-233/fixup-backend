@@ -7222,6 +7222,65 @@
         } ]
       }
     },
+    "/administration/audit/status-changes" : {
+      "get" : {
+        "tags" : [ "status-audit-controller" ],
+        "summary" : "List audited status changes",
+        "description" : "Administrative trace of state transitions across requests, contracts, payments and jobs.",
+        "operationId" : "list_1",
+        "parameters" : [ {
+          "name" : "resourceType",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "enum" : [ "REPAIR_REQUEST", "RENTAL_CONTRACT", "REPAIR_PAYMENT", "JOB" ]
+          }
+        }, {
+          "name" : "resourceId",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        }, {
+          "name" : "limit",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "default" : 100
+          }
+        } ],
+        "responses" : {
+          "401" : {
+            "description" : "Missing or invalid bearer token",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403" : {
+            "description" : "Missing PLATFORM_ADMIN role",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
+    },
     "/media/me/portfolio/pieces/{pieceId}" : {
       "delete" : {
         "tags" : [ "portfolio-controller" ],
@@ -10547,11 +10606,6 @@
       "Pageable" : {
         "type" : "object",
         "properties" : {
-          "page" : {
-            "type" : "integer",
-            "format" : "int32",
-            "minimum" : 0
-          },
           "size" : {
             "type" : "integer",
             "format" : "int32",
@@ -10562,6 +10616,11 @@
             "items" : {
               "type" : "string"
             }
+          },
+          "page" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 0
           }
         }
       },
