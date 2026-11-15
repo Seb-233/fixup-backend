@@ -48,7 +48,7 @@ class PostgresFinancialStabilizationIT {
     @Test
     void activeSchemaAndHibernateValidateWithoutArchivedTables() {
         flyway.validate();
-        assertThat(flyway.info().applied()).hasSize(41);
+        assertThat(flyway.info().applied()).hasSize(43);
         assertThat(flyway.info().pending()).isEmpty();
         assertThat(context.getEnvironment().getProperty("spring.jpa.hibernate.ddl-auto")).isEqualTo("validate");
         assertThat(jdbc.queryForObject("SELECT count(*) FROM information_schema.tables "
