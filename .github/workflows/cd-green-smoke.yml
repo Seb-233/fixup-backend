@@ -1,0 +1,36 @@
+name: Green - Runner Smoke Test
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: green-smoke-test
+  cancel-in-progress: false
+
+jobs:
+  smoke:
+    name: Validate dedicated runner and scoped Kubernetes identity
+    if: ${{ github.ref == 'refs/heads/main' }}
+    runs-on: [fixup-green-deploy]
+    timeout-minutes: 5
+    steps:
+      - name: Verify identity and cluster access
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(id -un)" = "fixup-cd-green"
+          test -r "$HOME/.kube/config"
+          test "$(stat -c '%a' "$HOME/.kube/config")" = "600"
+          command -v kubectl
+          kubectl -n fixup-green get deployment fixup-backend-green
+          kubectl -n fixup-green get pods -l 'fixup.environment=green,fixup.role=backend'
+          green=$(kubectl auth can-i patch deployment/fixup-backend-green -n fixup-green)
+          blue=$(kubectl auth can-i patch deployment/fixup-backend -n fixup || true)
+          test "$green" = "yes"
+          test "$blue" = "no"
+          echo "GREEN_RUNNER_SMOKE=PASS"
+          echo "GREEN_PATCH=ALLOWED"
+          echo "BLUE_PATCH=DENIED"
+          echo "KUBERNETES_MODIFIED=false"
