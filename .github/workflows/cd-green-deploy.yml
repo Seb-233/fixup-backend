@@ -1,0 +1,198 @@
+name: Green - Automatic Deployment
+
+on:
+  workflow_run:
+    workflows: ["Backend CI"]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fixup-green-automatic-deploy-main
+  cancel-in-progress: false
+
+env:
+  IMAGE: ghcr.io/seb-233/fixup-backend
+  CI_SHA: ${{ github.event.workflow_run.head_sha }}
+
+jobs:
+  publish:
+    name: Publish tested main commit to GHCR
+    if: >-
+      ${{ github.event.workflow_run.conclusion == 'success' &&
+          github.event.workflow_run.event == 'push' &&
+          github.event.workflow_run.head_repository.full_name == github.repository &&
+          github.event.workflow_run.head_branch == 'main' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - name: Checkout exact validated commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CI_SHA }}
+          persist-credentials: false
+
+      - name: Verify checked-out commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$CI_SHA"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Authenticate GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and publish immutable commit image
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ env.IMAGE }}:sha-${{ env.CI_SHA }}
+          cache-from: type=registry,ref=${{ env.IMAGE }}:buildcache
+
+      - name: Verify published digest
+        shell: bash
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          [[ "$DIGEST" =~ ^sha256:[a-f0-9]{64}$ ]]
+          echo "PUBLISHED_IMAGE=${IMAGE}@${DIGEST}" >> "$GITHUB_STEP_SUMMARY"
+          echo "VALIDATED_COMMIT=${CI_SHA}" >> "$GITHUB_STEP_SUMMARY"
+
+  deploy:
+    name: Deploy image only to Green
+    needs: publish
+    if: ${{ needs.publish.result == 'success' }}
+    runs-on: [fixup-green-deploy]
+    timeout-minutes: 12
+    permissions:
+      contents: read
+    env:
+      DIGEST: ${{ needs.publish.outputs.digest }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Verify runner and digest
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(id -un)" = "fixup-cd-green"
+          command -v kubectl
+          test -r "$HOME/.kube/config"
+          test "$(stat -c '%a' "$HOME/.kube/config")" = "600"
+          [[ "$DIGEST" =~ ^sha256:[a-f0-9]{64}$ ]]
+
+      - name: Require commit still at main HEAD
+        id: freshness
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import os
+          import urllib.request
+
+          repository = os.environ["GITHUB_REPOSITORY"]
+          url = f"https://api.github.com/repos/{repository}/git/ref/heads/main"
+          request = urllib.request.Request(
+              url,
+              headers={
+                  "Authorization": "Bearer " + os.environ["GH_TOKEN"],
+                  "Accept": "application/vnd.github+json",
+                  "X-GitHub-Api-Version": "2022-11-28",
+              },
+          )
+          with urllib.request.urlopen(request, timeout=20) as response:
+              actual = json.load(response)["object"]["sha"]
+
+          expected = os.environ["CI_SHA"]
+          fresh = actual == expected
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as out:
+              out.write(f"promote={'true' if fresh else 'false'}\n")
+          print("MAIN_COMMIT_CURRENT=" + str(fresh).lower())
+          if not fresh:
+              print("Skipping deployment: main advanced since this CI completed.")
+          PY
+
+      - name: Check restricted Kubernetes permission
+        if: ${{ steps.freshness.outputs.promote == 'true' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(kubectl auth can-i patch deployment/fixup-backend-green -n fixup-green)" = "yes"
+          test "$(kubectl auth can-i patch deployment/fixup-backend -n fixup || true)" = "no"
+          kubectl -n fixup-green get deployment fixup-backend-green
+
+      - name: Update Green and verify RollingUpdate
+        if: ${{ steps.freshness.outputs.promote == 'true' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TARGET="${IMAGE}@${DIGEST}"
+          OLD="$(kubectl -n fixup-green get deployment fixup-backend-green -o jsonpath='{.spec.template.spec.containers[?(@.name=="backend")].image}')"
+          [[ "$OLD" =~ ^ghcr\.io/seb-233/fixup-backend@sha256:[a-f0-9]{64}$ ]]
+          echo "PREVIOUS_IMAGE=$OLD"
+
+          if [ "$OLD" != "$TARGET" ]; then
+            kubectl -n fixup-green set image deployment/fixup-backend-green "backend=$TARGET"
+            if ! kubectl -n fixup-green rollout status deployment/fixup-backend-green --timeout=300s; then
+              echo "Green rollout failed. Restoring previous image."
+              kubectl -n fixup-green set image deployment/fixup-backend-green "backend=$OLD"
+              kubectl -n fixup-green rollout status deployment/fixup-backend-green --timeout=300s || true
+              exit 1
+            fi
+          else
+            echo "Green already runs the requested digest."
+          fi
+
+          kubectl -n fixup-green get deployment fixup-backend-green -o json | python3 -c '
+          import json
+          import os
+          import sys
+
+          deployment = json.load(sys.stdin)
+          spec = deployment["spec"]
+          status = deployment.get("status", {})
+          images = [c["image"] for c in spec["template"]["spec"]["containers"] if c["name"] == "backend"]
+          expected = os.environ["IMAGE"] + "@" + os.environ["DIGEST"]
+          replicas = spec.get("replicas", 2)
+          if images != [expected]:
+              raise SystemExit("Unexpected deployed image")
+          if status.get("observedGeneration", 0) < deployment["metadata"]["generation"]:
+              raise SystemExit("Controller has not observed the new generation")
+          if status.get("readyReplicas", 0) < 2:
+              raise SystemExit("Less than two ready Green replicas")
+          if status.get("updatedReplicas", 0) != replicas:
+              raise SystemExit("Not all Green replicas are updated")
+          if status.get("availableReplicas", 0) < 2:
+              raise SystemExit("Less than two available Green replicas")
+          print("GREEN_DEPLOYMENT=VERIFIED")
+          print("GREEN_READY=" + str(status.get("readyReplicas", 0)))
+          print("DEPLOYED_IMAGE=" + images[0])
+          '
+
+          {
+            echo "GREEN_DEPLOYMENT=VERIFIED"
+            echo "CI_SHA=${CI_SHA}"
+            echo "DEPLOYED_IMAGE=${TARGET}"
+            echo "DEPLOY_FINISHED_UTC=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Report skipped stale deployment
+        if: ${{ steps.freshness.outputs.promote == 'false' }}
+        shell: bash
+        run: echo "GREEN_DEPLOYMENT=SKIPPED_STALE_COMMIT" >> "$GITHUB_STEP_SUMMARY"
