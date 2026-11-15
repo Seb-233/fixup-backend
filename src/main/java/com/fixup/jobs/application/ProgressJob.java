@@ -1,5 +1,8 @@
 package com.fixup.jobs.application;
 
+import com.fixup.audit.api.AuditedResourceType;
+import com.fixup.audit.api.StatusAuditTrail;
+import com.fixup.audit.api.StatusChangeCommand;
 import com.fixup.fixers.api.FixerEligibility;
 import com.fixup.identityaccess.api.CurrentActor;
 import com.fixup.jobs.api.JobNotFoundException;
@@ -31,24 +34,29 @@ public class ProgressJob {
     private final FixerEligibility eligibility;
     private final RepairRequestDirectory requests;
     private final JobNotices notices;
+    private final StatusAuditTrail auditTrail;
 
     ProgressJob(Jobs jobs, JobRecords records, FixerEligibility eligibility, RepairRequestDirectory requests,
-            JobNotices notices) {
+            JobNotices notices, StatusAuditTrail auditTrail) {
         this.jobs = jobs;
         this.records = records;
         this.eligibility = eligibility;
         this.requests = requests;
         this.notices = notices;
+        this.auditTrail = auditTrail;
     }
 
     @Transactional
     public JobSummary schedule(CurrentActor actor, UUID jobId, Instant when, String note) {
         var job = lockOwnJob(actor, jobId);
         var now = Instant.now();
+        var previousStatus = job.status().name();
         var scheduled = job.schedule(when, note, now);
         jobs.update(scheduled);
         records.log(new JobLogEntry(UUID.randomUUID(), jobId, scheduled.status(), scheduled.progressNote(),
                 actor.internalUserId(), now));
+        auditTrail.record(StatusChangeCommand.user(AuditedResourceType.JOB, jobId, previousStatus,
+                scheduled.status().name(), actor.internalUserId(), actor.externalSubject(), now));
         var request = requests.require(job.requestId());
         notices.progressed(scheduled, request, NotificationType.JOB_STATUS_CHANGED, "Trabajo programado",
                 "El técnico agendó \"" + request.title() + "\" para el " + WHEN.format(when) + ".");
@@ -59,10 +67,13 @@ public class ProgressJob {
     public JobSummary start(CurrentActor actor, UUID jobId, String note) {
         var job = lockOwnJob(actor, jobId);
         var now = Instant.now();
+        var previousStatus = job.status().name();
         var started = job.start(note, now);
         jobs.update(started);
         records.log(new JobLogEntry(UUID.randomUUID(), jobId, started.status(), started.progressNote(),
                 actor.internalUserId(), now));
+        auditTrail.record(StatusChangeCommand.user(AuditedResourceType.JOB, jobId, previousStatus,
+                started.status().name(), actor.internalUserId(), actor.externalSubject(), now));
         var request = requests.require(job.requestId());
         notices.progressed(started, request, NotificationType.JOB_STATUS_CHANGED, "Trabajo en ejecución",
                 "El técnico empezó a trabajar en \"" + request.title() + "\".");

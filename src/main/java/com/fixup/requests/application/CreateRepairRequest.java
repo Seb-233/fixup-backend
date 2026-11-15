@@ -1,5 +1,8 @@
 package com.fixup.requests.application;
 
+import com.fixup.audit.api.AuditedResourceType;
+import com.fixup.audit.api.StatusAuditTrail;
+import com.fixup.audit.api.StatusChangeCommand;
 import com.fixup.contracts.api.TenancyDirectory;
 import com.fixup.identityaccess.api.CurrentActor;
 import com.fixup.identityaccess.api.Role;
@@ -25,6 +28,7 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.UUID;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -47,11 +51,14 @@ public class CreateRepairRequest implements RepairRequestCreation {
     private final ApplicationEventPublisher events;
     private final Clock clock;
     private final OwnerDebtDirectory debts;
+    private final StatusAuditTrail auditTrail;
 
+    @Autowired
     CreateRepairRequest(RepairRequests requests, MediaAttachmentService mediaAttachmentService,
                         PropertyDirectory propertyDirectory, TenancyDirectory tenancy,
                         RepairSpecialtyClassifier classifier, RequestNotifications notifications,
-                        ApplicationEventPublisher events, OwnerDebtDirectory debts, Clock clock) {
+                        ApplicationEventPublisher events, OwnerDebtDirectory debts, Clock clock,
+                        StatusAuditTrail auditTrail) {
         this.requests = requests;
         this.propertyDirectory = propertyDirectory;
         this.tenancy = tenancy;
@@ -61,6 +68,15 @@ public class CreateRepairRequest implements RepairRequestCreation {
         this.events = events;
         this.clock = clock;
         this.debts = debts;
+        this.auditTrail = auditTrail;
+    }
+
+    CreateRepairRequest(RepairRequests requests, MediaAttachmentService mediaAttachmentService,
+                        PropertyDirectory propertyDirectory, TenancyDirectory tenancy,
+                        RepairSpecialtyClassifier classifier, RequestNotifications notifications,
+                        ApplicationEventPublisher events, OwnerDebtDirectory debts, Clock clock) {
+        this(requests, mediaAttachmentService, propertyDirectory, tenancy, classifier, notifications,
+                events, debts, clock, command -> { });
     }
 
     @Transactional
@@ -78,13 +94,16 @@ public class CreateRepairRequest implements RepairRequestCreation {
         UrgencyLevel urgency = draft.urgencyLevel() == null ? UrgencyLevel.MEDIUM : draft.urgencyLevel();
         var context = new RepairRequest.PropertyContext(property.id(), property.city(), property.name(),
                 property.address(), property.ownerUserId(), property.managerUserId());
+        Instant now = Instant.now(clock);
         var request = RepairRequest.open(UUID.randomUUID(), context, actor.internalUserId(), specialty,
                 draft.title().trim(), draft.description().trim(), mediaIds, urgency,
-                draft.paymentMethod(), Instant.now(clock));
+                draft.paymentMethod(), now);
         requests.create(request);
+        auditTrail.record(StatusChangeCommand.user(AuditedResourceType.REPAIR_REQUEST, request.id(), null,
+                request.status().name(), actor.internalUserId(), actor.externalSubject(), now));
 
         if (urgency == UrgencyLevel.URGENT) {
-            notifications.urgentRequestCreated(request.id(), request.ownerUserId(), request.title(), Instant.now(clock));
+            notifications.urgentRequestCreated(request.id(), request.ownerUserId(), request.title(), now);
         }
         notifyDecisionMakers(request);
         return RepairRequestSummary.of(request);

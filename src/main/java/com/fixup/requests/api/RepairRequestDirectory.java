@@ -37,7 +37,8 @@ public interface RepairRequestDirectory {
      *
      * @throws RepairRequestConflictException when the request no longer admits an assignment.
      */
-    void assign(UUID requestId, UUID fixerUserId);
+    void assign(UUID requestId, UUID fixerUserId, UUID changedByUserId, String changedBySubject,
+            java.time.Instant changedAt);
 
     /**
      * Completes an assigned request inside the caller's transaction, validating owner and fixer.

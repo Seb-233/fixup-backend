@@ -1,5 +1,8 @@
 package com.fixup.jobs.application;
 
+import com.fixup.audit.api.AuditedResourceType;
+import com.fixup.audit.api.StatusAuditTrail;
+import com.fixup.audit.api.StatusChangeCommand;
 import com.fixup.jobs.api.JobOpening;
 import com.fixup.jobs.api.JobOpeningCommand;
 import com.fixup.jobs.domain.Job;
@@ -7,6 +10,7 @@ import com.fixup.jobs.domain.JobLogEntry;
 import com.fixup.jobs.domain.JobRecords;
 import com.fixup.jobs.domain.Jobs;
 import java.util.UUID;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -15,10 +19,17 @@ import org.springframework.transaction.annotation.Transactional;
 class OpenAssignedJob implements JobOpening {
     private final Jobs jobs;
     private final JobRecords records;
+    private final StatusAuditTrail auditTrail;
 
-    OpenAssignedJob(Jobs jobs, JobRecords records) {
+    @Autowired
+    OpenAssignedJob(Jobs jobs, JobRecords records, StatusAuditTrail auditTrail) {
         this.jobs = jobs;
         this.records = records;
+        this.auditTrail = auditTrail;
+    }
+
+    OpenAssignedJob(Jobs jobs, JobRecords records) {
+        this(jobs, records, command -> { });
     }
 
     @Override
@@ -38,5 +49,8 @@ class OpenAssignedJob implements JobOpening {
         // identify the actor who initiated the operation; the note must not claim otherwise.
         records.log(new JobLogEntry(UUID.randomUUID(), job.id(), job.status(),
                 "Trabajo asignado", job.ownerUserId(), job.createdAt()));
+        auditTrail.record(new StatusChangeCommand(AuditedResourceType.JOB, job.id(), null,
+                job.status().name(), command.changedByUserId(), command.changedBySubject(),
+                command.occurredAt()));
     }
 }

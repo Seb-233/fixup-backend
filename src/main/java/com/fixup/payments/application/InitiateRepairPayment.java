@@ -1,5 +1,8 @@
 package com.fixup.payments.application;
 
+import com.fixup.audit.api.AuditedResourceType;
+import com.fixup.audit.api.StatusAuditTrail;
+import com.fixup.audit.api.StatusChangeCommand;
 import com.fixup.payments.api.PaymentConflictException;
 import com.fixup.payments.api.PaymentInitiation;
 import com.fixup.payments.api.PaymentInitiationCommand;
@@ -9,6 +12,7 @@ import com.fixup.payments.domain.RepairPayment;
 import com.fixup.payments.domain.RepairPaymentMethod;
 import com.fixup.payments.domain.RepairPayments;
 import java.util.UUID;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,9 +21,16 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 class InitiateRepairPayment implements PaymentInitiation {
     private final RepairPayments payments;
+    private final StatusAuditTrail auditTrail;
+
+    @Autowired
+    InitiateRepairPayment(RepairPayments payments, StatusAuditTrail auditTrail) {
+        this.payments = payments;
+        this.auditTrail = auditTrail;
+    }
 
     InitiateRepairPayment(RepairPayments payments) {
-        this.payments = payments;
+        this(payments, command -> { });
     }
 
     @Override
@@ -45,6 +56,9 @@ class InitiateRepairPayment implements PaymentInitiation {
                 command.ownerUserId(), command.fixerUserId(), command.amount(), method,
                 PaymentPurpose.SERVICE, command.occurredAt());
         payments.create(payment);
+        auditTrail.record(new StatusChangeCommand(AuditedResourceType.REPAIR_PAYMENT, payment.id(), null,
+                payment.status().name(), command.changedByUserId(), command.changedBySubject(),
+                command.occurredAt()));
         return result(payment);
     }
 

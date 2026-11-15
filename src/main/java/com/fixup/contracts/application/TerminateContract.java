@@ -1,5 +1,8 @@
 package com.fixup.contracts.application;
 
+import com.fixup.audit.api.AuditedResourceType;
+import com.fixup.audit.api.StatusAuditTrail;
+import com.fixup.audit.api.StatusChangeCommand;
 import com.fixup.contracts.api.ContractAccessDeniedException;
 import com.fixup.contracts.domain.RentalContract;
 import com.fixup.contracts.domain.RentalContracts;
@@ -17,10 +20,13 @@ import java.util.UUID;
 public class TerminateContract {
     private final RentalContracts contracts;
     private final CurrentActorProvider currentActorProvider;
+    private final StatusAuditTrail auditTrail;
 
-    public TerminateContract(RentalContracts contracts, CurrentActorProvider currentActorProvider) {
+    public TerminateContract(RentalContracts contracts, CurrentActorProvider currentActorProvider,
+            StatusAuditTrail auditTrail) {
         this.contracts = contracts;
         this.currentActorProvider = currentActorProvider;
+        this.auditTrail = auditTrail;
     }
 
     public ContractResponse execute(UUID id, String reason) {
@@ -38,7 +44,12 @@ public class TerminateContract {
             }
         }
 
+        var previousStatus = contract.status().name();
         contract.terminate(reason);
-        return ContractResponse.from(contracts.save(contract));
+        var saved = contracts.save(contract);
+        auditTrail.record(StatusChangeCommand.user(AuditedResourceType.RENTAL_CONTRACT, saved.id(),
+                previousStatus, saved.status().name(), actor.internalUserId(), actor.externalSubject(),
+                saved.updatedAt()));
+        return ContractResponse.from(saved);
     }
 }

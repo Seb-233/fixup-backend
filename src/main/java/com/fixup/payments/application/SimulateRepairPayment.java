@@ -1,5 +1,8 @@
 package com.fixup.payments.application;
 
+import com.fixup.audit.api.AuditedResourceType;
+import com.fixup.audit.api.StatusAuditTrail;
+import com.fixup.audit.api.StatusChangeCommand;
 import com.fixup.identityaccess.api.CurrentActor;
 import com.fixup.payments.api.PaymentApproved;
 import com.fixup.payments.api.ApprovedPaymentPurpose;
@@ -20,6 +23,7 @@ import com.fixup.payments.domain.SimulatedPaymentAttempts;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.UUID;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -36,11 +40,13 @@ public class SimulateRepairPayment {
     private final PaymentAuthorization authorization;
     private final com.fixup.payments.domain.PaymentGateway gateway;
     private final org.springframework.core.env.Environment environment;
+    private final StatusAuditTrail auditTrail;
 
+    @Autowired
     SimulateRepairPayment(RepairPayments payments, SimulatedPaymentAttempts attempts,
             FixerEarnings earnings, OwnerDebts debts, ApplicationEventPublisher events, Clock clock,
             PaymentAuthorization authorization, com.fixup.payments.domain.PaymentGateway gateway,
-            org.springframework.core.env.Environment environment) {
+            org.springframework.core.env.Environment environment, StatusAuditTrail auditTrail) {
         this.payments = payments;
         this.attempts = attempts;
         this.earnings = earnings;
@@ -50,6 +56,15 @@ public class SimulateRepairPayment {
         this.authorization = authorization;
         this.gateway = gateway;
         this.environment = environment;
+        this.auditTrail = auditTrail;
+    }
+
+    SimulateRepairPayment(RepairPayments payments, SimulatedPaymentAttempts attempts,
+            FixerEarnings earnings, OwnerDebts debts, ApplicationEventPublisher events, Clock clock,
+            PaymentAuthorization authorization, com.fixup.payments.domain.PaymentGateway gateway,
+            org.springframework.core.env.Environment environment) {
+        this(payments, attempts, earnings, debts, events, clock, authorization, gateway,
+                environment, command -> { });
     }
 
     @Transactional
@@ -125,6 +140,9 @@ public class SimulateRepairPayment {
                 command.reference(), command.amount(), command.instrument(), scenario, result.transactionId(), result.failureReason());
         attempts.create(audit);
         payments.update(updated);
+        auditTrail.record(StatusChangeCommand.user(AuditedResourceType.REPAIR_PAYMENT, updated.id(),
+                current.status().name(), updated.status().name(), actor.internalUserId(),
+                actor.externalSubject(), now));
 
         if (updated.status() == PaymentStatus.APPROVED) {
             if (updated.purpose() == PaymentPurpose.SERVICE) {
@@ -134,7 +152,8 @@ public class SimulateRepairPayment {
             }
             events.publishEvent(new PaymentApproved(updated.id(), updated.quotationId(),
                     updated.requestId(), updated.ownerUserId(), updated.fixerUserId(), updated.amount(),
-                    ApprovedPaymentPurpose.valueOf(updated.purpose().name()), now));
+                    ApprovedPaymentPurpose.valueOf(updated.purpose().name()), now,
+                    actor.internalUserId(), actor.externalSubject()));
         }
         notifyParticipants(actor, updated, result.failureReason());
         return new Processed(PaymentDetail.from(updated, authorization.context(updated.quotationId())), PaymentAttemptResult.of(audit));
