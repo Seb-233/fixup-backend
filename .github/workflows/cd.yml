@@ -1,13 +1,9 @@
 name: Backend CD
 
-# Triggers only when Backend CI completes successfully on main.
-# This keeps CI and CD decoupled: CI runs on all branches/PRs,
-# CD only promotes a green main build to the cluster.
+# Blue is a recovery deployment only. Green handles automatic promotion.
+# Run this workflow explicitly from the main branch when Blue must be restored.
 on:
-  workflow_run:
-    workflows: ["Backend CI"]
-    types: [completed]
-    branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -27,19 +23,19 @@ jobs:
     runs-on: self-hosted
     environment: Production  # secrets come from this GitHub Environment
     # Only run if the triggering CI workflow actually passed
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    if: ${{ github.ref == 'refs/heads/main' }}
 
     steps:
       # ── 1. Source ────────────────────────────────────────────
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ github.sha }}
 
       - name: Compute short SHA
         id: sha
         run: |
-          SHORT=$(echo "${{ github.event.workflow_run.head_sha }}" | cut -c1-7)
+          SHORT=$(echo "${{ github.sha }}" | cut -c1-7)
           echo "short=${SHORT}" >> "$GITHUB_OUTPUT"
 
       # ── 2. Docker build & push to ghcr.io ───────────────────
