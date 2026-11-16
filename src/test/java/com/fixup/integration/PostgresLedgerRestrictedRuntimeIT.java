@@ -84,6 +84,7 @@ class PostgresLedgerRestrictedRuntimeIT {
     @Autowired ObjectMapper mapper;
     /** La conexión de la aplicación: fixup_runtime. */
     @Autowired JdbcTemplate runtime;
+    @Autowired org.flywaydb.core.Flyway flyway;
 
     private static DriverManagerDataSource administratorSource;
     private static boolean readerProvisioned;
@@ -97,9 +98,22 @@ class PostgresLedgerRestrictedRuntimeIT {
         }
         administrator = new JdbcTemplate(administratorSource);
         if (!readerProvisioned) {
+            flyway.validate();
+            assertThat(flyway.info().pending()).isEmpty();
+            assertThat(administrator.queryForObject(
+                    "SELECT installed_by FROM flyway_schema_history WHERE version = '48' AND success",
+                    String.class)).isEqualTo(POSTGRES.getUsername()).isNotEqualTo(RUNTIME);
+            assertThat(administrator.queryForObject("""
+                    SELECT COUNT(*) FROM pg_auth_members m JOIN pg_roles r ON r.oid = m.roleid
+                    WHERE r.rolname = 'fixup_ledger_auditor'
+                    """, Integer.class)).as("V48 no concede el lector a ningún login, incluido Flyway").isZero();
             assertThat(administrator.queryForObject("SELECT pg_has_role(?, 'fixup_ledger_auditor', 'MEMBER')",
                     Boolean.class, RUNTIME)).as("Flyway no concede el lector al login de la aplicación").isFalse();
+            assertThatThrownBy(() -> asAuditor("SELECT COUNT(*) FROM repair_payments"))
+                    .as("el runtime no puede asumir el lector tras una instalación limpia sin aprovisionar")
+                    .hasStackTraceContaining("permission denied");
             provisionReader(RUNTIME);
+            assertThat(asAuditor("SELECT COUNT(*) FROM repair_payments")).isNotNull();
             readerProvisioned = true;
         }
         SecurityContextHolder.clearContext();

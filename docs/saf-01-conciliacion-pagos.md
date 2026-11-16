@@ -68,8 +68,8 @@ Si una regla nueva necesita otra columna, hay que concederla en una migración.
 
 ### Aprovisionar un runtime distinto de Flyway
 
-V48 concede el lector al migrador (`CURRENT_USER`), siguiendo V10. Cuando la aplicación usa otro
-login, es obligatorio ejecutar **después de migrar y antes de habilitar la conciliación** el script
+V48 crea el lector y sus permisos de lectura, sin conceder membresía al migrador ni al runtime.
+Es obligatorio ejecutar **después de migrar y antes de habilitar la conciliación** el script
 administrativo `scripts/provision-ledger-reader.sql`. Es un paso de aprovisionamiento, no una
 operación del backend. No se cambian Kubernetes, `fixup_app` ni las credenciales de la aplicación.
 
@@ -91,6 +91,8 @@ preparado. No se debe ejecutar contra Blue/Green o bases compartidas durante las
 
 `PostgresLedgerRestrictedRuntimeIT` ejecuta el mismo archivo operativo: Flyway crea el auditor
 como administrador, el runtime arranca sin su membresía, y el script la concede después. La prueba
+comprueba en una instalación limpia que V48 no concede ninguna membresía y que el runtime no
+puede asumir el lector hasta ejecutar el script. También
 revoca y repone la concesión, comprueba que no hay herencia ni opción de administración y que
 `SET LOCAL ROLE` se revierte al terminar la transacción.
 
