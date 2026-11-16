@@ -167,7 +167,7 @@ flowchart LR
 <script type="text/plain" data-n="13" data-slug="figura-13-produccion-blue-green" data-title="Figura 13. Despliegue: producción (Blue con tráfico, Green desplegado sin tráfico)" data-cap="Azul: Blue, namespace fixup, que hoy atiende el tráfico productivo. Verde: Green, namespace fixup-green en el mismo nodo, desplegado y probado según operación (15/11): 2 réplicas listas, HPA de 2 a 4, PDB minAvailable 1, base y almacenamiento propios, NetworkPolicy que lo aísla de Blue. Green no recibe tráfico productivo: SERVICE-GREEN solo reparte entre sus dos réplicas. Naranja punteado: lo previsto, que es la conmutación del 100 % del tráfico a Green tras su aprobación.">
 flowchart TB
   USR["Usuarios<br/>[navegador o Android]"]:::person
-  DOM["Dominio público de Fix#amp;Rent<br/>[HTTPS]"]:::sys
+  DOM["Dominio público<br/>de la plataforma<br/>[HTTPS]"]:::sys
   AUTH0["Auth0"]:::sys
   subgraph VF["VM-FRONTEND · k3s"]
     direction LR
@@ -177,13 +177,13 @@ flowchart TB
   subgraph VB["VM-BACKEND · k3s (un nodo)"]
     direction TB
     GW["API-GATEWAY<br/>[Ingress]"]:::node
-    subgraph BLUE["namespace fixup · BLUE (tráfico productivo)"]
+    subgraph BLUE["BLUE · fixup (con tráfico)"]
       direction TB
       BE["API Blue<br/>[Deployment, 1 réplica, RollingUpdate]"]:::blue
       PG[("PostgreSQL<br/>[StatefulSet + volumen]")]:::blue
       MN["MinIO<br/>[StatefulSet + volumen]"]:::blue
     end
-    subgraph GREEN["namespace fixup-green · GREEN<br/>desplegado, sin tráfico productivo"]
+    subgraph GREEN["GREEN · fixup-green (sin tráfico)"]
       direction TB
       SG["SERVICE-GREEN<br/>[Service interno, 2 endpoints]"]:::green
       GBE["API Green<br/>[2 réplicas, HPA 2–4, PDB minAvailable 1,<br/>imagen por digest, Flyway apagado]"]:::green
