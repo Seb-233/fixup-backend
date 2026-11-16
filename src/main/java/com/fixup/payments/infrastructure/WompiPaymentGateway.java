@@ -178,9 +178,14 @@ class WompiPaymentGateway implements HostedCheckoutGateway {
                     "Wompi did not answer; the payment was not changed", failure);
         }
         JsonNode data = body == null ? null : body.path("data");
-        if (data == null || data.isMissingNode() || !data.hasNonNull("id")) {
+        if (data == null || !transactionId.equals(text(data, "id"))
+                || !nonBlankText(data, "reference") || !nonBlankText(data, "currency")
+                || !nonBlankText(data, "status")
+                || !data.path("amount_in_cents").isIntegralNumber()
+                || !data.path("amount_in_cents").canConvertToLong()
+                || data.path("amount_in_cents").longValue() <= 0) {
             throw new PaymentGatewayUnavailableException("PAYMENT_GATEWAY_UNAVAILABLE",
-                    "Wompi answered without a transaction");
+                    "Wompi answered without a complete matching transaction; retry verification");
         }
         return Optional.of(new ProviderTransaction(data.path("id").asText(), data.path("reference").asText(),
                 data.path("amount_in_cents").asLong(-1), data.path("currency").asText(),
@@ -325,6 +330,10 @@ class WompiPaymentGateway implements HostedCheckoutGateway {
 
     private static String text(JsonNode node, String field) {
         return node.hasNonNull(field) ? node.path(field).asText() : null;
+    }
+
+    private static boolean nonBlankText(JsonNode node, String field) {
+        return node.path(field).isTextual() && !node.path(field).textValue().isBlank();
     }
 
     private void requireEnabled() {

@@ -231,6 +231,21 @@ al volver del checkout el backend consulta la transacción.
 
 ## Pruebas automáticas
 
+Una respuesta HTTP 200 incompleta de la API de Wompi no confirma el webhook: la verificación exige
+el mismo id consultado, referencia, moneda, estado y centavos enteros positivos representables en
+`long`. Si falta un campo o el monto pierde precisión, el backend responde 503 para reintentar,
+sin registrar intentos, ingresos ni trabajos. Un monto válido pero distinto al checkout sigue
+siendo un rechazo de negocio; no se confunde con una respuesta incompleta del proveedor.
+
+### Orden de integración y Flyway
+
+V45 (checkout), V46 (RLS) y V47 (resolución del webhook) permanecen en INT-01. V43/V44 pertenecen
+al PR #57 y deben integrarse antes de instalar V45-V47 en una base que deba recibir Auditoría.
+Una instalación aislada de esta rama deja ese hueco: puede validar sus propias migraciones,
+pero no demuestra la secuencia completa #57 → #54 → #61 (V48). Si V45-V47 ya se aplicaron sin
+V43/V44, no habilitar `outOfOrder` ni modificar checksums para ocultarlo; revisar ese historial
+antes del despliegue. Las pruebas PostgreSQL requieren un daemon Docker y bases desechables.
+
 - `WompiPaymentGatewayTest`: firma de integridad contra el ejemplo oficial de Wompi, checksum de
   eventos, consulta con llave privada y Wompi caído.
 - `PostgresWompiDisabledIT`: llaves y API de producción rechazadas de punta a punta; la pasarela

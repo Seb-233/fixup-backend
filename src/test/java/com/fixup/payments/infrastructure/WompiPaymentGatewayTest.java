@@ -140,6 +140,44 @@ class WompiPaymentGatewayTest {
     }
 
     @Test
+    void incompleteOrMismatchedProviderResponsesRequireRetryInsteadOfLosingTheEvent() throws IOException {
+        var response = new AtomicReference<String>();
+        server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/v1/transactions/", exchange -> {
+            byte[] body = response.get().getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().add("Content-Type", "application/json");
+            exchange.sendResponseHeaders(200, body.length);
+            exchange.getResponseBody().write(body);
+            exchange.close();
+        });
+        server.start();
+        var wompi = gateway("http://127.0.0.1:" + server.getAddress().getPort() + "/v1");
+        String valid = """
+                {"data":{"id":"1234-1-1","reference":"FXR-ABC","amount_in_cents":10000000,
+                "currency":"COP","status":"APPROVED"}}
+                """;
+        var mapper = new ObjectMapper();
+        for (String field : java.util.List.of("id", "reference", "amount_in_cents", "currency", "status")) {
+            var incomplete = mapper.readTree(valid);
+            ((com.fasterxml.jackson.databind.node.ObjectNode) incomplete.get("data")).remove(field);
+            response.set(incomplete.toString());
+            assertThatThrownBy(() -> wompi.findTransaction("1234-1-1")).as("missing " + field)
+                    .isInstanceOf(PaymentGatewayUnavailableException.class);
+        }
+        for (String invalid : java.util.List.of(
+                valid.replace("1234-1-1", "1234-1-2"), valid.replace("FXR-ABC", " "),
+                valid.replace("10000000", "10000000.5"), valid.replace("10000000", "9223372036854775808"),
+                valid.replace("10000000", "0"), valid.replace("\"COP\"", "null"),
+                valid.replace("\"APPROVED\"", "{}"))) {
+            response.set(invalid);
+            assertThatThrownBy(() -> wompi.findTransaction("1234-1-1"))
+                    .isInstanceOf(PaymentGatewayUnavailableException.class);
+        }
+        response.set(valid);
+        assertThat(wompi.findTransaction("1234-1-1")).isPresent();
+    }
+
+    @Test
     void unreachableWompiIsReportedAsUnavailable() {
         assertThatThrownBy(() -> gateway("http://127.0.0.1:1/v1").findTransaction("1234-1-1"))
                 .isInstanceOf(PaymentGatewayUnavailableException.class);

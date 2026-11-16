@@ -514,6 +514,25 @@ class PostgresWompiPaymentIT {
     }
 
     @Test
+    void anIncompleteProviderResponseDoesNotAcknowledgeAndLoseASignedApproval() throws Exception {
+        accepted();
+        String reference = checkout("owner").get("reference").asText();
+        var untouched = snapshot();
+        // HTTP 200 del proveedor no implica que su respuesta sea utilizable para contabilizar.
+        TRANSACTIONS.put("71717-2-PARTIAL", "{\"id\":\"71717-2-PARTIAL\"}");
+        webhook("71717-2-PARTIAL", "APPROVED", 10_000_000, EVENTS_SECRET)
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.code").value("PAYMENT_GATEWAY_UNAVAILABLE"));
+        assertThat(snapshot()).isEqualTo(untouched);
+
+        transaction("71717-2-PARTIAL", reference, 10_000_000, "APPROVED");
+        webhook("71717-2-PARTIAL", "APPROVED", 10_000_000, EVENTS_SECRET).andExpect(status().isOk());
+        assertThat(count("simulated_payment_attempts")).isEqualTo(1);
+        assertThat(count("fixer_earnings")).isEqualTo(1);
+        assertThat(count("jobs")).isEqualTo(1);
+    }
+
+    @Test
     void concurrentReturnsAndWebhooksRecordTheTransactionExactlyOnce() throws Exception {
         accepted();
         String reference = checkout("owner").get("reference").asText();
