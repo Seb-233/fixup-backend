@@ -134,37 +134,40 @@ public class PayWithWompi {
         if (transactionId.isEmpty()) {
             return false;
         }
-        var transaction = wompi.findTransaction(transactionId.get());
-        if (transaction.isEmpty()) {
-            log.warn("Evento de Wompi para la transacción {} que la API no reconoce", transactionId.get());
-            return true;
-        }
-        var opener = settlement.openerOf(transaction.get().reference());
-        if (opener.isEmpty()) {
-            log.warn("Evento de Wompi no aplicado: la referencia de la transacción {} no es de FixUp",
-                    transaction.get().id());
-            return true;
-        }
-        Set<Role> roles = Stream.of(Role.OWNER, Role.REAL_ESTATE_MANAGER)
-                .filter(role -> users.hasActiveRole(opener.get(), role))
-                .collect(Collectors.toUnmodifiableSet());
-        if (roles.isEmpty()) {
-            log.warn("Evento de Wompi no aplicado: quien abrió el checkout de la transacción {} ya no puede pagar",
-                    transaction.get().id());
-            return true;
-        }
-        var actor = new CurrentActor(opener.get(), WEBHOOK_SUBJECT, roles, UserStatus.ACTIVE);
+        var transaction = wompi.findTransaction(transactionId.get())
+                // Evento auténtico de una transacción que la API todavía no devuelve: que Wompi lo reenvíe.
+                .orElseThrow(() -> new PaymentGatewayUnavailableException("WOMPI_TRANSACTION_NOT_READY",
+                        "Wompi signed an event for a transaction its API does not return yet"));
         var previous = DatabaseActorContext.current();
-        DatabaseActorContext.set(new DatabaseActorContext.Actor(opener.get(),
-                roles.stream().map(Enum::name).collect(Collectors.toUnmodifiableSet())));
+        // La referencia se resuelve sin actor (resolución acotada, ver WompiCheckouts.openerOf).
+        DatabaseActorContext.clear();
         try {
-            var result = settlement.settle(transaction.get(), null, actor);
+            var opener = settlement.openerOf(transaction.reference());
+            if (opener.isEmpty()) {
+                log.warn("Evento de Wompi no aplicado: la referencia de la transacción {} no es de FixUp",
+                        transaction.id());
+                return true;
+            }
+            Set<Role> roles = Stream.of(Role.OWNER, Role.REAL_ESTATE_MANAGER)
+                    .filter(role -> users.hasActiveRole(opener.get(), role))
+                    .collect(Collectors.toUnmodifiableSet());
+            if (roles.isEmpty()) {
+                log.warn("Evento de Wompi no aplicado: quien abrió el checkout de la transacción {} ya no puede "
+                        + "pagar; queda sin registrar en la conciliación", transaction.id());
+                return true;
+            }
+            var actor = new CurrentActor(opener.get(), WEBHOOK_SUBJECT, roles, UserStatus.ACTIVE);
+            DatabaseActorContext.set(new DatabaseActorContext.Actor(opener.get(),
+                    roles.stream().map(Enum::name).collect(Collectors.toUnmodifiableSet())));
+            var result = settlement.settle(transaction, null, actor);
             log.info("Evento de Wompi aplicado: transacción {} {} -> pago {}", result.transactionId(),
                     result.transactionStatus(), result.paymentStatus());
         } catch (PaymentConflictException | PaymentAccessDeniedException notApplied) {
-            // No se reintenta: Wompi solo reenvía si no hay 200, y el caso queda en la conciliación.
-            log.warn("Evento de Wompi no aplicado para la transacción {}: {}", transaction.get().id(),
-                    notApplied.getMessage());
+            // Rechazo de negocio (pagador no vigente, monto o moneda distintos): reintentar no lo cambia,
+            // así que se responde 200 y el caso queda en la conciliación de administración. Cualquier
+            // otra falla (base de datos, permisos) sale como error y Wompi reenvía el evento.
+            log.warn("Evento de Wompi no aplicado para la transacción {}: {}; queda en la conciliación",
+                    transaction.id(), notApplied.getMessage());
         } finally {
             previous.ifPresentOrElse(DatabaseActorContext::set, DatabaseActorContext::clear);
         }

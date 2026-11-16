@@ -10,6 +10,13 @@ public interface WompiCheckouts {
 
     Optional<WompiCheckout> findByReference(String reference);
 
+    /**
+     * Quién abrió el checkout de una referencia, para el webhook, que todavía no tiene actor. Es una
+     * resolución acotada: no pasa por las políticas de lectura de usuarios (que sin actor no dejan ver
+     * nada) y no devuelve nada más del checkout. Solo responde a una sesión sin actor.
+     */
+    Optional<UUID> openerOf(String reference);
+
     /** Pago de FixUp detrás de cada referencia de checkout conocida (las ajenas no aparecen). */
     Map<String, CheckoutPayment> paymentsByReference(Collection<String> references);
 

@@ -84,6 +84,19 @@ Reglas que se cumplen siempre:
   `requirePayer` y el RLS de su sesión (`SET LOCAL ROLE fixup_app`), igual que cuando él vuelve del
   checkout. Si ya no es el pagador vigente (por ejemplo, el propietario revocó la delegación), no se
   registra nada y la transacción aparece "Sin registrar" en la conciliación.
+- **El webhook encuentra el checkout sin `BYPASSRLS`.** Cuando llega el evento todavía no hay actor, y
+  las políticas de `wompi_checkouts` (con `FORCE ROW LEVEL SECURITY`) no muestran ninguna fila a una
+  sesión sin actor. Para saber quién abrió el checkout no se abre SELECT a nadie: la función
+  `app_wompi_checkout_opener(referencia)` (V47, `SECURITY DEFINER`, mismo patrón que V38) pertenece a
+  un rol sin login, sin herencia, sin membresías y sin `BYPASSRLS`, que solo puede leer las columnas
+  `reference` y `created_by_user_id`. La función devuelve únicamente el id de quien abrió el checkout y
+  se niega si la sesión ya tiene un actor, así que un usuario no puede usarla para resolver referencias
+  ajenas. El resultado se aplica después con ese actor y las políticas de siempre.
+- **Qué responde el webhook.** 401 si la firma falta o no coincide. 200 si el evento se aplicó o si
+  reintentarlo no cambia nada (referencia que no es de FixUp, pagador que ya no está vigente, monto o
+  moneda distintos, transacción todavía PENDING): esos casos quedan en la conciliación. 503 si Wompi no
+  responde o todavía no devuelve la transacción del evento, y 500 ante cualquier falla interna: en
+  ambos Wompi reenvía el evento. Un pago que debía registrarse nunca se da por recibido con un 200.
 - **La llamada HTTP a Wompi va fuera de la transacción de base de datos:** no se retiene una conexión
   mientras Wompi responde (timeouts de 3 s de conexión y 8 s de lectura). Si Wompi falla o tarda, la
   respuesta es 503 `PAYMENT_GATEWAY_UNAVAILABLE`, el pago no cambia y, en el webhook, el 503 hace que
@@ -101,21 +114,33 @@ Reglas que se cumplen siempre:
 
 ## Migraciones
 
-`V45__wompi_checkouts.sql` (común) y `V46__wompi_checkouts_rls.sql` (PostgreSQL) son aditivas: una
-tabla nueva y la ampliación del CHECK de `simulated_payment_attempts` para aceptar `WOMPI`. No se edita
-ninguna versión aplicada. Las versiones V43 y V44 quedan para la bitácora de estados (backend #57),
-que debe fusionarse antes: Flyway no aplica versiones menores después de una mayor (`outOfOrder` está
-apagado). Verificado con migración limpia (todas las pruebas con Testcontainers), con la
-actualización de una base poblada en V40 hasta la última versión más `flyway validate`
+`V45__wompi_checkouts.sql` (común), `V46__wompi_checkouts_rls.sql` y
+`V47__wompi_checkout_opener_resolution.sql` (PostgreSQL) son aditivas: una tabla nueva, la ampliación
+del CHECK de `simulated_payment_attempts` para aceptar `WOMPI`, y el rol y la función de resolución del
+webhook. No se edita ninguna versión aplicada (la corrección del webhook va en V47, no en V46).
+
+**Orden con la bitácora de estados (backend #57).** V43 y V44 son de #57, que debe fusionarse antes:
+Flyway no aplica versiones menores después de una mayor (`outOfOrder` está apagado). La secuencia final
+es V43 → V44 (auditoría) → V45 → V46 → V47 (Wompi). Al rebasar esta rama sobre #57 solo hay que
+ajustar cuatro conteos de versiones en pruebas (`PostgresRentalContractIT`,
+`PostgresDigitalPaymentMigrationIT`, `PostgresFinancialStabilizationIT` y
+`PostgresPropertyOwnerDebtIT`), que pasan a incluir 43 y 44.
+
+Verificado con migración limpia (todas las pruebas con Testcontainers), con la actualización de una
+base poblada en V40 hasta la última versión más `flyway validate`
 (`PostgresDigitalPaymentMigrationIT`) y con la lista exacta de versiones activas
-(`PostgresRentalContractIT`).
+(`PostgresRentalContractIT`). Las mismas pruebas se ejecutaron sobre la combinación local de
+`develop` + #57 + esta rama (V43 a V47 en instalación limpia y en actualización).
+
+V47 la aplica el usuario de migraciones (crea un rol y cambia el dueño de una función, igual que V38);
+el usuario de ejecución del backend no necesita DDL.
 
 ## Despliegue y rollback (Blue/Green)
 
 - **Apagar Wompi no requiere desplegar:** basta quitar las llaves (o dejarlas de producción, que
   se rechazan) y reiniciar. Los pagos existentes y la pasarela simulada siguen igual
   (`PostgresWompiDisabledIT`).
-- **El esquema es compatible hacia atrás:** la versión anterior arranca con V45/V46 aplicadas
+- **El esquema es compatible hacia atrás:** la versión anterior arranca con V45, V46 y V47 aplicadas
   (Flyway ignora las migraciones futuras por omisión e Hibernate valida solo sus tablas).
 - **Volver a la versión anterior es seguro solo mientras no haya intentos Wompi.** Esa versión no
   conoce el instrumento `WOMPI` y fallaría al leer esos intentos (JPA `EnumType.STRING`). Antes de
@@ -131,7 +156,7 @@ actualización de una base poblada en V40 hasta la última versión más `flyway
 |-----|---------------|-----------|
 | RNF-05 Integridad e idempotencia | Monto firmado, transacción releída en Wompi, referencia/monto/moneda validados, bloqueo del pago, llave de operación y `gateway_transaction_id` únicos, RLS | `PostgresWompiPaymentIT`: concurrencia, duplicados, montos y referencias ajenos, matriz RLS, cobro doble |
 | RNF-15 Compatibilidad de contrato | Endpoints nuevos y aditivos; el resto del contrato no cambia; Wompi apagado no altera la pasarela simulada | `OpenApiContractTest`, `PostgresWompiDisabledIT` |
-| RNF-16 Errores de sistemas externos | Timeouts cortos, 503 sin cambiar el pago, reintento del webhook, PENDING que se vuelve a consultar, credenciales rechazadas | `PostgresWompiPaymentIT` (Wompi caído y lento), `WompiPaymentGatewayTest` |
+| RNF-16 Errores de sistemas externos | Timeouts cortos, 503 sin cambiar el pago, reintento del webhook, PENDING que se vuelve a consultar, credenciales rechazadas, revisión y compensación documentadas | `PostgresWompiPaymentIT` (Wompi caído y lento), `WompiPaymentGatewayTest` |
 
 ## Endpoints
 
@@ -153,19 +178,46 @@ que el backend rechaza esos retornos con `WOMPI_RETURN_URL_LOCAL`. En local se a
 ## Ver las transacciones (administración)
 
 En el menú de Administración, **Supervisión → Transacciones Wompi** (`/administration/wompi-transactions`)
-lista en vivo las transacciones del comercio con la llave privada (`GET /v1/transactions` de Wompi),
-del ambiente de las llaves configuradas. Filtra por fechas (por omisión los últimos 30 días, máximo
+lista en vivo las transacciones del comercio en el sandbox con la llave privada de prueba
+(`GET /v1/transactions` de Wompi). Filtra por fechas (por omisión los últimos 30 días, máximo
 366) y por estado (por omisión las aprobadas). Los datos del comprador no salen de Wompi. Cada
 transacción dice cómo quedó en FixUp:
 
 | Estado en FixUp | Qué significa |
 |-----------------|---------------|
 | Registrada | FixUp registró ese resultado en el pago |
-| Sin registrar | Wompi la resolvió, pero el pagador no volvió del checkout y no llegó el webhook |
+| Sin registrar | Wompi la resolvió, pero FixUp no la registró: no llegó ni el retorno ni el webhook, o quien abrió el checkout ya no era el pagador vigente |
 | En espera | Wompi todavía no la resuelve |
 | Cobro doble | Aprobada para un pago que ya estaba aprobado por otra transacción: reembolsarla en Wompi |
 | Monto distinto | La referencia es de FixUp, pero el monto o la moneda no coinciden con el checkout |
 | Ajena a FixUp | La referencia no salió de un checkout de FixUp (otra tienda o pruebas en el comercio) |
+
+## Revisión y compensación de transacciones (sandbox)
+
+Todo esto se hace con el comercio de pruebas; no hay dinero real. Una vez por jornada de pruebas, y
+siempre después de una caída de Wompi o del backend, la administración abre **Transacciones Wompi**
+con estado "Todas" y el rango de fechas afectado, y resuelve lo que no esté "Registrada":
+
+| Estado | Revisión | Compensación |
+|--------|----------|--------------|
+| Sin registrar (aprobada en Wompi) | Abrir el pago en FixUp y confirmar quién es el pagador vigente | El pagador vigente abre `/payments/{id}?id=<transacción>` (el enlace de retorno): FixUp vuelve a consultar a Wompi y registra el pago una sola vez |
+| Sin registrar (rechazada o con error) | Ninguna: el pago sigue pendiente | El pagador abre un checkout nuevo |
+| En espera | Volver a mirar más tarde; Wompi la resuelve y avisa por el webhook | Ninguna |
+| Cobro doble | Confirmar que el pago ya estaba aprobado por otra transacción | Anular o reembolsar la segunda transacción desde el panel de Wompi (sandbox). FixUp no crea un segundo ingreso |
+| Monto distinto | Comparar el monto y la moneda con el checkout; no debería ocurrir con la firma de integridad | Anular o reembolsar en el panel de Wompi y abrir un checkout nuevo |
+| Ajena a FixUp | Otra tienda o pruebas manuales en el mismo comercio | Ninguna |
+
+Cada caso deja rastro en el log del backend ("Evento de Wompi no aplicado…", "Doble cobro en Wompi…")
+con el id de la transacción, sin datos del comprador ni llaves.
+
+## Secretos
+
+- Las llaves solo viven en variables de entorno o en `.env.wompi` (permisos 600); `.gitignore` excluye
+  `.env` y `.env.*`. En el repositorio no hay llaves: las de las pruebas son valores inventados
+  (`pub_test_it`…) y el secreto `prod_integrity_Z5mM…` de `WompiPaymentGatewayTest` es el ejemplo
+  público de la documentación de Wompi, usado para comprobar la firma.
+- Los logs nombran la regla que falló o el id de la transacción; nunca una llave, un secreto, la firma
+  ni el cuerpo de una respuesta de Wompi.
 
 ## Probar en sandbox
 
@@ -183,7 +235,15 @@ al volver del checkout el backend consulta la transacción.
   eventos, consulta con llave privada y Wompi caído.
 - `PostgresWompiDisabledIT`: llaves y API de producción rechazadas de punta a punta; la pasarela
   simulada sigue aprobando.
-- `PostgresWompiPaymentIT` (PostgreSQL 17 con RLS y triggers, Wompi falso local): aprobación por
+- `PostgresWompiPaymentIT` corre el backend con privilegios equivalentes al runtime de Green: las
+  migraciones las aplica otro usuario y el de ejecución (`fixup_runtime`) no es superusuario, no tiene
+  `BYPASSRLS` ni DDL, no es dueño de las tablas y solo es miembro de `fixup_app`. Con ese usuario se
+  prueba el webhook sin retorno del navegador (pago aprobado, un intento, un ingreso, un trabajo),
+  el evento duplicado, el retorno tardío, PENDING, evento sin firma, con otra llave o alterado,
+  referencia ajena, monto y moneda distintos, delegación revocada, rol retirado, sesión vencida al
+  volver, evento que llega antes de que la API devuelva la transacción (503 y reintento) y que una
+  sesión de usuario no puede usar la función de resolución.
+- El mismo `PostgresWompiPaymentIT` (PostgreSQL 17 con RLS y triggers, Wompi falso local): aprobación por
   retorno y por webhook sin duplicados, rechazo y reintento con referencia nueva, transacción
   pendiente, firma inválida, monto o referencia ajenos, origen de retorno no permitido y pagadores
   sin permiso, la vista de administración (registrada, sin registrar, pendiente, ajena, monto

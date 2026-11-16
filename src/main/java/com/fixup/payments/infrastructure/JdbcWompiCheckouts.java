@@ -7,8 +7,10 @@ import java.sql.Timestamp;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.jdbc.core.ConnectionCallback;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
@@ -17,6 +19,7 @@ import org.springframework.stereotype.Repository;
 class JdbcWompiCheckouts implements WompiCheckouts {
     private final JdbcTemplate jdbc;
     private final NamedParameterJdbcTemplate named;
+    private volatile Boolean postgres;
 
     JdbcWompiCheckouts(JdbcTemplate jdbc) {
         this.jdbc = jdbc;
@@ -38,6 +41,29 @@ class JdbcWompiCheckouts implements WompiCheckouts {
                 r.getString("reference"), r.getObject("payment_id", UUID.class), r.getLong("amount_in_cents"),
                 r.getObject("created_by_user_id", UUID.class), r.getTimestamp("created_at").toInstant()),
                 reference).stream().findFirst();
+    }
+
+    /**
+     * En PostgreSQL va por app_wompi_checkout_opener (V47): la tabla tiene FORCE ROW LEVEL SECURITY y
+     * el runtime no es superusuario ni tiene BYPASSRLS, así que sin actor un SELECT directo no ve
+     * ninguna fila. H2 (pruebas de contrato) no tiene RLS ni esa función.
+     */
+    @Override
+    public Optional<UUID> openerOf(String reference) {
+        String sql = postgres() ? "SELECT app_wompi_checkout_opener(?)"
+                : "SELECT created_by_user_id FROM wompi_checkouts WHERE reference = ?";
+        return jdbc.query(sql, (r, n) -> r.getObject(1, UUID.class), reference).stream()
+                .filter(Objects::nonNull).findFirst();
+    }
+
+    private boolean postgres() {
+        Boolean known = postgres;
+        if (known == null) {
+            known = "PostgreSQL".equals(jdbc.execute(
+                    (ConnectionCallback<String>) connection -> connection.getMetaData().getDatabaseProductName()));
+            postgres = known;
+        }
+        return known;
     }
 
     @Override

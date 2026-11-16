@@ -36,6 +36,9 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.datasource.DataSourceTransactionManager;
+import org.springframework.jdbc.datasource.DriverManagerDataSource;
+import org.springframework.jdbc.datasource.SingleConnectionDataSource;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -52,7 +55,12 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 /**
  * INT-01: Wompi de punta a punta contra PostgreSQL con RLS y triggers reales. La API de Wompi es un
  * servidor HTTP local que responde como el sandbox; el resto (firma, verificación, libro, trabajo,
- * notificaciones) es el código de producción.
+ * notificaciones) es el código real del backend.
+ *
+ * <p>El backend se conecta con privilegios equivalentes al runtime de Green: otro usuario aplica las
+ * migraciones y es dueño de las tablas; el de ejecución no es superusuario, no tiene BYPASSRLS ni DDL
+ * y solo es miembro de fixup_app. Los datos de cada prueba se preparan y se comprueban con una
+ * conexión administrativa aparte.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -63,19 +71,25 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 class PostgresWompiPaymentIT {
     private static final String EVENTS_SECRET = "test_events_it";
     private static final String INTEGRITY_SECRET = "test_integrity_it";
+    private static final long TIMESTAMP = 1_700_000_000L;
     private static final Map<String, String> TRANSACTIONS = new ConcurrentHashMap<>();
     private static final Map<String, String> CREATED = new ConcurrentHashMap<>();
     /** Fallas simuladas de Wompi por id de transacción: "500" o "SLOW" (más que el read-timeout). */
     private static final Map<String, String> FAILURES = new ConcurrentHashMap<>();
     private static final HttpServer WOMPI = fakeWompi();
 
-    @Container static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:17-alpine");
+    /** El backend se conecta como fixup_runtime (ver green_runtime_roles.sql), no como superusuario. */
+    @Container static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:17-alpine")
+            .withInitScript("db/green_runtime_roles.sql");
 
     @DynamicPropertySource
     static void properties(DynamicPropertyRegistry r) {
         r.add("spring.datasource.url", POSTGRES::getJdbcUrl);
-        r.add("spring.datasource.username", POSTGRES::getUsername);
-        r.add("spring.datasource.password", POSTGRES::getPassword);
+        r.add("spring.datasource.username", () -> "fixup_runtime");
+        r.add("spring.datasource.password", () -> "runtime-it");
+        // Las migraciones corren con otro usuario, como el Job de migración de Green.
+        r.add("spring.flyway.user", POSTGRES::getUsername);
+        r.add("spring.flyway.password", POSTGRES::getPassword);
         r.add("fixup.payments.wompi.public-key", () -> "pub_test_it");
         r.add("fixup.payments.wompi.private-key", () -> "prv_test_it");
         r.add("fixup.payments.wompi.integrity-secret", () -> INTEGRITY_SECRET);
@@ -87,13 +101,33 @@ class PostgresWompiPaymentIT {
 
     @Autowired MockMvc mvc;
     @Autowired ObjectMapper mapper;
-    @Autowired JdbcTemplate jdbc;
-    @Autowired IntegrationDatabaseCleaner cleaner;
-    @Autowired PlatformTransactionManager transactions;
+    /** Conexión del backend: fixup_runtime. Solo se usa para demostrar con qué privilegios corre. */
+    @Autowired JdbcTemplate runtime;
+    /** Conexión administrativa (dueña de las tablas) para preparar datos y comprobar resultados. */
+    private JdbcTemplate jdbc;
+    private IntegrationDatabaseCleaner cleaner;
+    private PlatformTransactionManager transactions;
     private UUID owner, fixer, manager, property, request, quotation, payment;
 
-    @BeforeEach void setup() { cleaner.clean(); TRANSACTIONS.clear(); CREATED.clear(); FAILURES.clear(); }
-    @AfterEach void cleanup() { cleaner.clean(); }
+    @BeforeEach void setup() {
+        var admin = new DriverManagerDataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+        jdbc = new JdbcTemplate(new SingleConnectionDataSource(connection(admin), true));
+        transactions = new DataSourceTransactionManager(jdbc.getDataSource());
+        cleaner = new IntegrationDatabaseCleaner(jdbc, transactions);
+        cleaner.clean(); TRANSACTIONS.clear(); CREATED.clear(); FAILURES.clear();
+    }
+    @AfterEach void cleanup() {
+        cleaner.clean();
+        ((SingleConnectionDataSource) jdbc.getDataSource()).destroy();
+    }
+
+    private static java.sql.Connection connection(DriverManagerDataSource source) {
+        try {
+            return source.getConnection();
+        } catch (java.sql.SQLException e) {
+            throw new IllegalStateException(e);
+        }
+    }
 
     @Test
     void approvedCheckoutOpensTheJobOnceThroughReturnAndWebhook() throws Exception {
@@ -325,6 +359,161 @@ class PostgresWompiPaymentIT {
     }
 
     @Test
+    void theBackendRunsAsAGreenEquivalentRuntimeAndResolvesCheckoutsOnlyThroughTheBoundedFunction() throws Exception {
+        accepted();
+        String reference = checkout("owner").get("reference").asText();
+
+        // Privilegios reales de la conexión del backend: ni superusuario, ni BYPASSRLS, ni dueña, ni DDL.
+        assertThat(runtime.queryForObject("SELECT current_user", String.class)).isEqualTo("fixup_runtime");
+        assertThat(runtime.queryForObject("SELECT rolsuper OR rolbypassrls OR rolcreaterole OR rolcreatedb "
+                + "FROM pg_roles WHERE rolname = current_user", Boolean.class)).isFalse();
+        assertThat(runtime.queryForObject("SELECT tableowner FROM pg_tables WHERE tablename = 'wompi_checkouts'",
+                String.class)).isNotIn("fixup_runtime", "fixup_app", "fixup_wompi_checkout_resolver");
+        assertThat(runtime.queryForObject("SELECT has_schema_privilege(current_user, 'public', 'CREATE')", Boolean.class)).isFalse();
+
+        // Sin actor, el runtime no ve ninguna fila con un SELECT directo: no hay lectura general.
+        assertThat(count("wompi_checkouts")).isEqualTo(1);
+        assertThat(runtime.queryForObject("SELECT count(*) FROM wompi_checkouts", Integer.class)).isZero();
+        // La función acotada sí resuelve la referencia, y solo devuelve quién la abrió.
+        assertThat(runtime.queryForObject("SELECT app_wompi_checkout_opener(?)", UUID.class, reference)).isEqualTo(owner);
+        assertThat(runtime.queryForObject("SELECT app_wompi_checkout_opener(?)", UUID.class, "OTRA-TIENDA-1")).isNull();
+        // Una sesión de usuario (cualquier rol) no puede usarla para resolver referencias.
+        UUID admin = provision("admin", "PLATFORM_ADMIN");
+        for (var session : Map.of(owner, "OWNER", fixer, "FIXER", admin, "PLATFORM_ADMIN").entrySet()) {
+            assertThatThrownBy(() -> asActor(session.getKey(), session.getValue(),
+                    () -> jdbc.queryForObject("SELECT app_wompi_checkout_opener(?)", UUID.class, reference)))
+                    .as(session.getValue()).hasStackTraceContaining("not available to user sessions");
+        }
+
+        // El rol dueño de la función no puede entrar, no hereda, no tiene miembros y solo lee dos columnas.
+        assertThat(jdbc.queryForObject("SELECT rolcanlogin OR rolinherit OR rolsuper OR rolbypassrls FROM pg_roles "
+                + "WHERE rolname = 'fixup_wompi_checkout_resolver'", Boolean.class)).isFalse();
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM pg_auth_members m JOIN pg_roles r ON r.oid IN (m.roleid, m.member) "
+                + "WHERE r.rolname = 'fixup_wompi_checkout_resolver'", Integer.class)).isZero();
+        assertThat(jdbc.queryForObject("SELECT has_column_privilege('fixup_wompi_checkout_resolver','wompi_checkouts','payment_id','SELECT') "
+                + "OR has_column_privilege('fixup_wompi_checkout_resolver','wompi_checkouts','amount_in_cents','SELECT') "
+                + "OR has_table_privilege('fixup_wompi_checkout_resolver','wompi_checkouts','INSERT') "
+                + "OR has_table_privilege('fixup_wompi_checkout_resolver','repair_payments','SELECT')", Boolean.class)).isFalse();
+        assertThat(jdbc.queryForObject("SELECT proacl::text FROM pg_proc WHERE proname = 'app_wompi_checkout_opener'", String.class))
+                .contains("fixup_app=X/").doesNotContain("{=X/").doesNotContain(",=X/");
+    }
+
+    @Test
+    void webhookWithoutBrowserReturnRecordsTheApprovedPaymentExactlyOnce() throws Exception {
+        accepted();
+        String reference = checkout("owner").get("reference").asText();
+        transaction("31313-1-TX", reference, 10_000_000, "PENDING");
+        var untouched = snapshot();
+
+        // Sin firma, con otra llave o con el contenido alterado después de firmar: 401 y nada cambia.
+        signedWebhook("31313-1-TX", "APPROVED", 10_000_000, null).andExpect(status().isUnauthorized());
+        webhook("31313-1-TX", "APPROVED", 10_000_000, "wrong-secret").andExpect(status().isUnauthorized());
+        signedWebhook("31313-1-TX", "APPROVED", 10_000_000, sha256("31313-1-TX" + "APPROVED" + 100 + TIMESTAMP + EVENTS_SECRET))
+                .andExpect(status().isUnauthorized());
+        // PENDING: evento auténtico, pero Wompi todavía no resuelve; no se registra nada.
+        webhook("31313-1-TX", "PENDING", 10_000_000, EVENTS_SECRET).andExpect(status().isOk());
+        assertThat(snapshot()).isEqualTo(untouched);
+
+        // Wompi aprueba y avisa. El pagador nunca vuelve del checkout.
+        transaction("31313-1-TX", reference, 10_000_000, "APPROVED");
+        webhook("31313-1-TX", "APPROVED", 10_000_000, EVENTS_SECRET).andExpect(status().isOk());
+        assertThat(jdbc.queryForObject("SELECT status FROM repair_payments", String.class)).isEqualTo("APPROVED");
+        assertThat(jdbc.queryForMap("SELECT instrument, resulting_status, gateway_transaction_id, attempted_by_user_id FROM simulated_payment_attempts"))
+                .containsEntry("instrument", "WOMPI").containsEntry("resulting_status", "APPROVED")
+                .containsEntry("gateway_transaction_id", "31313-1-TX").containsEntry("attempted_by_user_id", owner);
+        assertThat(count("simulated_payment_attempts")).isEqualTo(1);
+        assertThat(count("fixer_earnings")).isEqualTo(1);
+        assertThat(count("jobs")).isEqualTo(1);
+
+        // Reenvíos del mismo evento y el retorno tardío del pagador no duplican nada.
+        var recorded = snapshot();
+        webhook("31313-1-TX", "APPROVED", 10_000_000, EVENTS_SECRET).andExpect(status().isOk());
+        webhook("31313-1-TX", "APPROVED", 10_000_000, EVENTS_SECRET).andExpect(status().isOk());
+        confirm("owner", "31313-1-TX").andExpect(status().isOk()).andExpect(jsonPath("$.paymentStatus").value("APPROVED"));
+        assertThat(snapshot()).isEqualTo(recorded);
+    }
+
+    @Test
+    void webhookForForeignOrMismatchedTransactionsRecordsNothingAndLeavesThemInReconciliation() throws Exception {
+        accepted();
+        provision("admin", "PLATFORM_ADMIN");
+        String reference = checkout("owner").get("reference").asText();
+        transaction("41414-1-FOREIGN", "OTRA-TIENDA-1", 10_000_000, "APPROVED");
+        transaction("41414-2-CHEAP", reference, 100, "APPROVED");
+        transaction("41414-3-USD", reference, 10_000_000, "APPROVED", "USD");
+        var untouched = snapshot();
+
+        webhook("41414-1-FOREIGN", "APPROVED", 10_000_000, EVENTS_SECRET).andExpect(status().isOk());
+        webhook("41414-2-CHEAP", "APPROVED", 100, EVENTS_SECRET).andExpect(status().isOk());
+        webhook("41414-3-USD", "APPROVED", 10_000_000, EVENTS_SECRET).andExpect(status().isOk());
+        confirm("owner", "41414-3-USD").andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("WOMPI_AMOUNT_MISMATCH"));
+        assertThat(snapshot()).isEqualTo(untouched);
+
+        Map<String, String> reconciliation = new java.util.HashMap<>();
+        json(transactions("admin", "?status=ALL&from=2026-11-01&until=2026-11-14").andExpect(status().isOk()).andReturn())
+                .get("items").forEach(item -> reconciliation.put(item.get("transactionId").asText(), item.get("reconciliation").asText()));
+        assertThat(reconciliation).containsEntry("41414-1-FOREIGN", "FOREIGN").containsEntry("41414-2-CHEAP", "AMOUNT_MISMATCH")
+                .containsEntry("41414-3-USD", "AMOUNT_MISMATCH");
+    }
+
+    @Test
+    void webhookFromAnOpenerWhoLostTheRoleIsNotRecordedAndThePayerCanStillSettleIt() throws Exception {
+        accepted();
+        String reference = checkout("manager").get("reference").asText();
+        transaction("51515-1-APPROVED", reference, 10_000_000, "APPROVED");
+        jdbc.update("DELETE FROM user_roles WHERE user_id = ? AND role = 'REAL_ESTATE_MANAGER'", manager);
+        var untouched = snapshot();
+
+        webhook("51515-1-APPROVED", "APPROVED", 10_000_000, EVENTS_SECRET).andExpect(status().isOk());
+        assertThat(snapshot()).isEqualTo(untouched);
+
+        // Revisión: el pagador vigente registra la transacción autorizada que quedó sin registrar.
+        confirm("owner", "51515-1-APPROVED").andExpect(status().isOk()).andExpect(jsonPath("$.paymentStatus").value("APPROVED"));
+        assertThat(count("simulated_payment_attempts")).isEqualTo(1);
+        assertThat(count("jobs")).isEqualTo(1);
+    }
+
+    @Test
+    void returnAfterAnExpiredSessionChangesNothingAndTheWebhookStillSettlesThePayment() throws Exception {
+        accepted();
+        String reference = checkout("owner").get("reference").asText();
+        transaction("61616-1-APPROVED", reference, 10_000_000, "APPROVED");
+        var untouched = snapshot();
+
+        // El pagador vuelve del checkout con la sesión vencida: sin token no se verifica ni se abre nada.
+        mvc.perform(post("/payments/" + payment + "/wompi/transactions/61616-1-APPROVED")).andExpect(status().isUnauthorized());
+        mvc.perform(post("/payments/" + payment + "/wompi/checkout").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"returnUrl\":\"http://fixup.localhost:4200/payments/" + payment + "\"}")).andExpect(status().isUnauthorized());
+        mvc.perform(get("/payments/wompi/transactions")).andExpect(status().isUnauthorized());
+        assertThat(snapshot()).isEqualTo(untouched);
+
+        // El webhook no depende de esa sesión.
+        webhook("61616-1-APPROVED", "APPROVED", 10_000_000, EVENTS_SECRET).andExpect(status().isOk());
+        assertThat(jdbc.queryForObject("SELECT status FROM repair_payments", String.class)).isEqualTo("APPROVED");
+        var recorded = snapshot();
+        // Al iniciar sesión otra vez, la verificación pendiente del retorno es idempotente.
+        confirm("owner", "61616-1-APPROVED").andExpect(status().isOk()).andExpect(jsonPath("$.paymentStatus").value("APPROVED"))
+                .andExpect(jsonPath("$.attempt.gatewayTransactionId").value("61616-1-APPROVED"));
+        assertThat(snapshot()).isEqualTo(recorded);
+        assertThat(count("simulated_payment_attempts")).isEqualTo(1);
+    }
+
+    @Test
+    void anAuthenticEventForATransactionTheApiDoesNotReturnYetAsksWompiToRetry() throws Exception {
+        accepted();
+        String reference = checkout("owner").get("reference").asText();
+        var untouched = snapshot();
+        webhook("71717-1-LATE", "APPROVED", 10_000_000, EVENTS_SECRET).andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.code").value("WOMPI_TRANSACTION_NOT_READY"));
+        assertThat(snapshot()).isEqualTo(untouched);
+
+        transaction("71717-1-LATE", reference, 10_000_000, "APPROVED");
+        webhook("71717-1-LATE", "APPROVED", 10_000_000, EVENTS_SECRET).andExpect(status().isOk());
+        assertThat(jdbc.queryForObject("SELECT status FROM repair_payments", String.class)).isEqualTo("APPROVED");
+        assertThat(count("simulated_payment_attempts")).isEqualTo(1);
+    }
+
+    @Test
     void concurrentReturnsAndWebhooksRecordTheTransactionExactlyOnce() throws Exception {
         accepted();
         String reference = checkout("owner").get("reference").asText();
@@ -410,26 +599,34 @@ class PostgresWompiPaymentIT {
     }
 
     private ResultActions webhook(String id, String status, long cents, String secret) throws Exception {
-        long timestamp = 1_700_000_000L;
-        String checksum = sha256(id + status + cents + timestamp + secret);
+        return signedWebhook(id, status, cents, sha256(id + status + cents + TIMESTAMP + secret));
+    }
+
+    /** Evento con el checksum dado; nulo lo envía sin firma (ni cabecera ni campo). */
+    private ResultActions signedWebhook(String id, String status, long cents, String checksum) throws Exception {
+        long timestamp = TIMESTAMP;
         String body = """
                 {"event":"transaction.updated","data":{"transaction":{"id":"%s","amount_in_cents":%d,
                 "reference":"ignorada","currency":"COP","payment_method_type":"CARD","status":"%s"}},
                 "environment":"test","signature":{"properties":["transaction.id","transaction.status",
                 "transaction.amount_in_cents"],"checksum":"%s"},"timestamp":%d,"sent_at":"2026-11-14T12:00:00.000Z"}
-                """.formatted(id, cents, status, checksum, timestamp);
-        return mvc.perform(post("/payments/wompi/events").contentType(MediaType.APPLICATION_JSON)
-                .header("X-Event-Checksum", checksum).content(body));
+                """.formatted(id, cents, status, checksum == null ? "" : checksum, timestamp);
+        var event = post("/payments/wompi/events").contentType(MediaType.APPLICATION_JSON).content(body);
+        return mvc.perform(checksum == null ? event : event.header("X-Event-Checksum", checksum));
     }
 
     private static void transaction(String id, String reference, long cents, String status) {
+        transaction(id, reference, cents, status, "COP");
+    }
+
+    private static void transaction(String id, String reference, long cents, String status, String currency) {
         // created_at crece con cada alta (para comprobar el orden) y no cambia cuando la transacción se resuelve.
         String created = CREATED.computeIfAbsent(id,
                 ignored -> java.time.Instant.parse("2026-11-14T15:00:00Z").plusSeconds(CREATED.size()).toString());
         TRANSACTIONS.put(id, """
-                {"id":"%s","reference":"%s","amount_in_cents":%d,"currency":"COP","status":"%s",
+                {"id":"%s","reference":"%s","amount_in_cents":%d,"currency":"%s","status":"%s",
                 "payment_method_type":"CARD","status_message":%s,"created_at":"%s","customer_email":"comprador@example.test"}
-                """.formatted(id, reference, cents, status, status.equals("DECLINED") ? "\"Fondos insuficientes\"" : "null", created));
+                """.formatted(id, reference, cents, currency, status, status.equals("DECLINED") ? "\"Fondos insuficientes\"" : "null", created));
     }
 
     private static HttpServer fakeWompi() {

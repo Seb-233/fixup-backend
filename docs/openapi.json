@@ -2115,7 +2115,7 @@
       "post" : {
         "tags" : [ "wompi-controller" ],
         "summary" : "Wompi event webhook (transaction.updated)",
-        "description" : "Public. Authenticity comes from the SHA-256 checksum signed with the events secret; the transaction is then read again from the Wompi API.",
+        "description" : "Public. Authenticity comes from the SHA-256 checksum signed with the sandbox events secret; the transaction is then read again from the Wompi API and applied as the user who opened the checkout. 200 means the event was applied or cannot be applied by retrying (not a FixUp reference, payer no longer authorized, amount mismatch); 503 asks Wompi to send it again.",
         "operationId" : "event",
         "parameters" : [ {
           "name" : "X-Event-Checksum",
@@ -2137,7 +2137,7 @@
         },
         "responses" : {
           "200" : {
-            "description" : "Event accepted"
+            "description" : "Event processed; no retry needed"
           },
           "401" : {
             "description" : "Missing or invalid bearer token",
@@ -5561,7 +5561,8 @@
     "/payments/wompi" : {
       "get" : {
         "tags" : [ "wompi-controller" ],
-        "summary" : "Tell whether the Wompi gateway is configured and in which environment",
+        "summary" : "Tell whether the Wompi sandbox gateway is configured",
+        "description" : "environment is always sandbox when enabled; other keys leave the gateway disabled.",
         "operationId" : "status",
         "responses" : {
           "401" : {
@@ -5634,7 +5635,7 @@
       "get" : {
         "tags" : [ "wompi-controller" ],
         "summary" : "List the merchant's Wompi transactions reconciled with FixUp payments",
-        "description" : "Platform administrators only. Reads the Wompi API with the private key (sandbox or production, per the configured keys). Dates are inclusive, default to the last 30 days and span at most 366 days. status is APPROVED (default), DECLINED, VOIDED, ERROR, PENDING or ALL. Buyer data stays in Wompi.",
+        "description" : "Platform administrators only. Reads the Wompi sandbox API with the private test key (sandbox is the only supported environment). Dates are inclusive, default to the last 30 days and span at most 366 days. status is APPROVED (default), DECLINED, VOIDED, ERROR, PENDING or ALL. Buyer data stays in Wompi.",
         "operationId" : "transactions",
         "parameters" : [ {
           "name" : "from",

@@ -64,7 +64,8 @@ class WompiController {
 
     @GetMapping("/wompi")
     @SecurityRequirement(name = "bearerAuth")
-    @Operation(summary = "Tell whether the Wompi gateway is configured and in which environment")
+    @Operation(summary = "Tell whether the Wompi sandbox gateway is configured",
+            description = "environment is always sandbox when enabled; other keys leave the gateway disabled.")
     @ApiResponse(responseCode = "200", description = "Gateway availability")
     WompiStatus status() {
         actors.currentActor();
@@ -74,8 +75,8 @@ class WompiController {
     @GetMapping("/wompi/transactions")
     @SecurityRequirement(name = "bearerAuth")
     @Operation(summary = "List the merchant's Wompi transactions reconciled with FixUp payments",
-            description = "Platform administrators only. Reads the Wompi API with the private key (sandbox or "
-                    + "production, per the configured keys). Dates are inclusive, default to the last 30 days and span "
+            description = "Platform administrators only. Reads the Wompi sandbox API with the private test key "
+                    + "(sandbox is the only supported environment). Dates are inclusive, default to the last 30 days and span "
                     + "at most 366 days. status is APPROVED (default), DECLINED, VOIDED, ERROR, PENDING or ALL. "
                     + "Buyer data stays in Wompi.")
     @ApiResponse(responseCode = "200", description = "One page of Wompi transactions, newest first")
@@ -113,9 +114,12 @@ class WompiController {
     @PostMapping(value = "/wompi/events", consumes = MediaType.APPLICATION_JSON_VALUE)
     @SecurityRequirements
     @Operation(summary = "Wompi event webhook (transaction.updated)",
-            description = "Public. Authenticity comes from the SHA-256 checksum signed with the events secret; "
-                    + "the transaction is then read again from the Wompi API.")
-    @ApiResponse(responseCode = "200", description = "Event accepted")
+            description = "Public. Authenticity comes from the SHA-256 checksum signed with the sandbox events "
+                    + "secret; the transaction is then read again from the Wompi API and applied as the user who "
+                    + "opened the checkout. 200 means the event was applied or cannot be applied by retrying "
+                    + "(not a FixUp reference, payer no longer authorized, amount mismatch); 503 asks Wompi to "
+                    + "send it again.")
+    @ApiResponse(responseCode = "200", description = "Event processed; no retry needed")
     @ApiResponse(responseCode = "401", description = "Invalid event signature")
     ResponseEntity<Void> event(@RequestBody String rawEvent,
             @RequestHeader(value = "X-Event-Checksum", required = false) String checksum) {

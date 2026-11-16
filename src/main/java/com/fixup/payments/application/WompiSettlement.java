@@ -10,7 +10,6 @@ import com.fixup.payments.domain.PaymentGateway;
 import com.fixup.payments.domain.PaymentStatus;
 import com.fixup.payments.domain.RepairPayments;
 import com.fixup.payments.domain.SimulatedPaymentAttempts;
-import com.fixup.payments.domain.WompiCheckout;
 import com.fixup.payments.domain.WompiCheckouts;
 import java.nio.charset.StandardCharsets;
 import java.util.Locale;
@@ -49,11 +48,13 @@ public class WompiSettlement {
 
     /**
      * Quién abrió el checkout de una referencia. Lo usa solo el webhook, antes de tener actor, para
-     * saber con qué identidad aplicar el evento; no expone nada del pago.
+     * saber con qué identidad aplicar el evento; no expone nada del pago. No lee la tabla con los
+     * privilegios de la conexión: usa la resolución acotada de {@link WompiCheckouts#openerOf}, que
+     * funciona con un runtime sin BYPASSRLS.
      */
     @Transactional(readOnly = true)
     public Optional<UUID> openerOf(String reference) {
-        return checkouts.findByReference(reference).map(WompiCheckout::createdByUserId);
+        return checkouts.openerOf(reference);
     }
 
     /**
@@ -106,7 +107,6 @@ public class WompiSettlement {
             return WompiTransactionResult.of(transaction, payment.status(), null);
         }
 
-        UUID attemptedBy = actor.internalUserId();
         String scenario = ("WOMPI_" + (transaction.paymentMethodType() == null ? "CHECKOUT"
                 : transaction.paymentMethodType())).toUpperCase(Locale.ROOT);
         String failure = switch (outcome) {
@@ -115,7 +115,7 @@ public class WompiSettlement {
             case ERROR -> "Wompi reportó un error en la transacción" + reason(transaction);
             default -> null;
         };
-        var processed = recorder.record(attemptedBy, payment,
+        var processed = recorder.record(actor, payment,
                 new PaymentAttemptCommand(payment.reference(), payment.amount(), PaymentMethod.WOMPI, operationKey),
                 scenario.length() > 32 ? scenario.substring(0, 32) : scenario,
                 new PaymentGateway.Result(outcome, transaction.id(), failure));
