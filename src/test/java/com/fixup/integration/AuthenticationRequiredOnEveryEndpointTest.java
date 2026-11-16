@@ -26,12 +26,21 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
  * carries no credentials, so a new endpoint added without protection makes this test fail.
  * It checks authentication only; authorization per resource (403/404) is covered by the RLS and
  * contract tests.
+ *
+ * <p>Las operaciones de {@link #PUBLIC_OPERATIONS} son publicas por diseno: no las llama un usuario
+ * con sesion sino un tercero que se autentica por otro medio (el webhook de Wompi, que valida el
+ * checksum SHA-256 del evento). Exigirles un bearer haria fallar la prueba, asi que se listan de
+ * forma explicita: cualquier endpoint nuevo sin proteccion sigue suspendiendo, porque solo estas
+ * excepciones -- y ninguna mas -- se toleran.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 class AuthenticationRequiredOnEveryEndpointTest {
     private static final Set<String> HTTP_METHODS = Set.of("get", "post", "put", "patch", "delete");
+
+    /** Operaciones "METODO /ruta" que no exigen bearer y cuya autenticacion vive fuera del token. */
+    private static final Set<String> PUBLIC_OPERATIONS = Set.of("POST /payments/wompi/events");
 
     @Autowired MockMvc mvc;
 
@@ -59,16 +68,32 @@ class AuthenticationRequiredOnEveryEndpointTest {
             String uri = operation.path().replaceAll("\\{[^}]+}", UUID.randomUUID().toString());
             int status = mvc.perform(request(HttpMethod.valueOf(operation.method()), uri))
                     .andReturn().getResponse().getStatus();
-            if (status != 401) {
+            if (status != 401 && !PUBLIC_OPERATIONS.contains(operation.method() + " " + operation.path())) {
                 notRejected.add(operation.method() + " " + operation.path() + " -> " + status);
             }
         }
 
         System.out.println("RNF-11 | operaciones del contrato recorridas sin token: " + operations.size()
-                + " | respondieron 401: " + (operations.size() - notRejected.size()));
+                + " | respondieron 401: " + (operations.size() - PUBLIC_OPERATIONS.size() - notRejected.size()));
         notRejected.forEach(line -> System.out.println("RNF-11 |   NO RECHAZADA: " + line));
 
         assertThat(notRejected).as("operations that did not answer 401 without credentials").isEmpty();
+    }
+
+    @Test
+    void thePublicOperationsAllowlistOnlyListsDocumentedOperationsThatAreActuallyPublic() throws Exception {
+        var documented = contractOperations().stream()
+                .map(operation -> operation.method() + " " + operation.path()).toList();
+        assertThat(documented).as("la lista de excepciones no puede contener rutas que ya no existen")
+                .containsAll(PUBLIC_OPERATIONS);
+
+        for (String operation : PUBLIC_OPERATIONS) {
+            var parts = operation.split(" ", 2);
+            int status = mvc.perform(request(HttpMethod.valueOf(parts[0]), parts[1]))
+                    .andReturn().getResponse().getStatus();
+            assertThat(status).as("%s sigue siendo publica: ya no hay que exceptuarla", operation)
+                    .isNotEqualTo(401);
+        }
     }
 
     @Test
