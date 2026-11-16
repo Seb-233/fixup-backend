@@ -7683,6 +7683,26 @@
         "summary" : "Run the payment ledger reconciliation now and return its result",
         "operationId" : "reconciliation",
         "responses" : {
+          "200" : {
+            "description" : "The ledger was read: totals in whole COP, rows scanned per table, every conservation equation and every broken invariant with a sample of row ids",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/LedgerReconciliation"
+                }
+              }
+            }
+          },
+          "503" : {
+            "description" : "No result: LEDGER_UNREADABLE (the ledger could not be read) or LEDGER_RECONCILIATION_BUSY (another instance is reconciling). Never means 'no findings'",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "401" : {
             "description" : "Missing or invalid bearer token",
             "content" : {
@@ -7699,16 +7719,6 @@
               "application/json" : {
                 "schema" : {
                   "$ref" : "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "200" : {
-            "description" : "Totals and every broken invariant with a sample of row ids",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/LedgerReconciliation"
                 }
               }
             }
@@ -11208,6 +11218,11 @@
       "Pageable" : {
         "type" : "object",
         "properties" : {
+          "page" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 0
+          },
           "size" : {
             "type" : "integer",
             "format" : "int32",
@@ -11218,11 +11233,6 @@
             "items" : {
               "type" : "string"
             }
-          },
-          "page" : {
-            "type" : "integer",
-            "format" : "int32",
-            "minimum" : 0
           }
         }
       },
@@ -11312,6 +11322,28 @@
           }
         }
       },
+      "LedgerBalance" : {
+        "type" : "object",
+        "properties" : {
+          "code" : {
+            "type" : "string"
+          },
+          "description" : {
+            "type" : "string"
+          },
+          "expected" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "actual" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "holds" : {
+            "type" : "boolean"
+          }
+        }
+      },
       "LedgerFinding" : {
         "type" : "object",
         "properties" : {
@@ -11350,11 +11382,53 @@
           "totals" : {
             "$ref" : "#/components/schemas/LedgerTotals"
           },
+          "scanned" : {
+            "$ref" : "#/components/schemas/LedgerScanned"
+          },
+          "balances" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/LedgerBalance"
+            }
+          },
           "findings" : {
             "type" : "array",
             "items" : {
               "$ref" : "#/components/schemas/LedgerFinding"
             }
+          }
+        }
+      },
+      "LedgerScanned" : {
+        "type" : "object",
+        "properties" : {
+          "payments" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "paymentAttempts" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "earnings" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "payouts" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "payoutEntries" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "debts" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "cashSettlements" : {
+            "type" : "integer",
+            "format" : "int64"
           }
         }
       },
@@ -11365,7 +11439,27 @@
             "type" : "integer",
             "format" : "int64"
           },
+          "serviceCollected" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "debtCollected" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
           "earningsGross" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "serviceEarningsGross" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "debtEarningsGross" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "legacyEarningsGross" : {
             "type" : "integer",
             "format" : "int64"
           },
@@ -11393,7 +11487,39 @@
             "type" : "integer",
             "format" : "int64"
           },
+          "composedPayouts" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "legacyPayouts" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "payoutEntriesNet" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "legacyPaidOutNet" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "paidDebts" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
           "outstandingDebts" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "cashAgreed" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "cashReceived" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "cashOutstanding" : {
             "type" : "integer",
             "format" : "int64"
           }

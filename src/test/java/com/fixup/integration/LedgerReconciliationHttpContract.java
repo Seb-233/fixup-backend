@@ -1,5 +1,6 @@
 package com.fixup.integration;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.hasSize;
@@ -9,7 +10,11 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assumptions;
@@ -29,6 +34,10 @@ import org.springframework.test.web.servlet.request.RequestPostProcessor;
  * cuadra. Después se rompe el libro a propósito, escribiendo directo en la base como lo haría un
  * script o una migración equivocada, y se comprueba que la conciliación lo detecta con el
  * identificador exacto de la fila.
+ *
+ * <p>Las nueve reglas y las ecuaciones por tipo de operación se prueban sobre el libro
+ * representativo de {@link LedgerFixture}: primero cuadra completo (sin falsos positivos) y luego
+ * cada prueba introduce un solo descuadre y exige exactamente la regla que le corresponde.
  */
 abstract class LedgerReconciliationHttpContract {
 
@@ -132,15 +141,287 @@ abstract class LedgerReconciliationHttpContract {
                 .andExpect(jsonPath("$.findings[0].sample", hasItem(earningId.toString())));
     }
 
+    // ---------- libro representativo: sin falsos positivos ----------
+
+    @Test
+    void aRepresentativeLedgerWithServiceAndDebtPaymentsIsConsistent() throws Exception {
+        provisionAdmin();
+        new LedgerFixture(jdbc).seed();
+
+        JsonNode report = reconcile();
+
+        assertThat(report.get("consistent").asBoolean()).as(report.toPrettyString()).isTrue();
+        assertThat(report.get("balanced").asBoolean()).isTrue();
+        assertThat(report.get("findings")).isEmpty();
+        assertThat(report.get("balances")).hasSize(10).allSatisfy(balance -> {
+            assertThat(balance.get("holds").asBoolean()).as(balance.toString()).isTrue();
+            assertThat(balance.get("expected").asLong()).isEqualTo(balance.get("actual").asLong());
+        });
+        JsonNode totals = report.get("totals");
+        // El pago de saldo pendiente no se mezcla con los servicios: cada uno contra su propio ingreso.
+        assertThat(totals.get("serviceCollected").asLong()).isEqualTo(LedgerFixture.SERVICE_COLLECTED);
+        assertThat(totals.get("serviceEarningsGross").asLong()).isEqualTo(LedgerFixture.SERVICE_COLLECTED);
+        assertThat(totals.get("debtCollected").asLong()).isEqualTo(LedgerFixture.DEBT_COLLECTED);
+        assertThat(totals.get("debtEarningsGross").asLong()).isEqualTo(LedgerFixture.DEBT_COLLECTED);
+        assertThat(totals.get("paidDebts").asLong()).isEqualTo(LedgerFixture.DEBT_COLLECTED);
+        assertThat(totals.get("collected").asLong())
+                .isEqualTo(LedgerFixture.SERVICE_COLLECTED + LedgerFixture.DEBT_COLLECTED);
+        // Lo anterior al libro digital se ve aparte y no descuadra.
+        assertThat(totals.get("legacyEarningsGross").asLong()).isEqualTo(LedgerFixture.LEGACY_GROSS);
+        assertThat(totals.get("legacyPayouts").asLong()).isEqualTo(LedgerFixture.LEGACY_PAYOUT);
+        assertThat(totals.get("legacyPaidOutNet").asLong()).isEqualTo(LedgerFixture.LEGACY_PAYOUT);
+        assertThat(totals.get("earningsGross").asLong()).isEqualTo(LedgerFixture.EARNINGS_GROSS);
+        assertThat(totals.get("commission").asLong()).isEqualTo(LedgerFixture.COMMISSION);
+        assertThat(totals.get("net").asLong()).isEqualTo(LedgerFixture.EARNINGS_GROSS - LedgerFixture.COMMISSION);
+        assertThat(totals.get("heldNet").asLong()).isEqualTo(LedgerFixture.HELD_NET);
+        assertThat(totals.get("availableNet").asLong()).isEqualTo(LedgerFixture.AVAILABLE_NET);
+        assertThat(totals.get("paidOutNet").asLong())
+                .isEqualTo(LedgerFixture.COMPOSED_PAYOUT + LedgerFixture.LEGACY_PAYOUT);
+        assertThat(totals.get("composedPayouts").asLong()).isEqualTo(LedgerFixture.COMPOSED_PAYOUT);
+        assertThat(totals.get("payoutEntriesNet").asLong()).isEqualTo(LedgerFixture.COMPOSED_PAYOUT);
+        // Efectivo histórico: lo recibido en mano no es plata cobrada por la plataforma.
+        assertThat(totals.get("cashAgreed").asLong()).isEqualTo(1_050_000L);
+        assertThat(totals.get("cashReceived").asLong()).isEqualTo(700_000L);
+        assertThat(totals.get("cashOutstanding").asLong()).isEqualTo(350_000L);
+        assertThat(totals.get("outstandingDebts").asLong()).isEqualTo(150_000L);
+        // "Sin hallazgos" sobre un libro que sí se leyó completo, con filas de varios dueños.
+        JsonNode scanned = report.get("scanned");
+        assertThat(scanned.get("payments").asLong()).isEqualTo(7);
+        assertThat(scanned.get("paymentAttempts").asLong()).isEqualTo(8);
+        assertThat(scanned.get("earnings").asLong()).isEqualTo(6);
+        assertThat(scanned.get("payouts").asLong()).isEqualTo(2);
+        assertThat(scanned.get("payoutEntries").asLong()).isEqualTo(2);
+        assertThat(scanned.get("debts").asLong()).isEqualTo(2);
+        assertThat(scanned.get("cashSettlements").asLong()).isEqualTo(3);
+    }
+
+    // ---------- una anomalía real por cada una de las nueve reglas ----------
+
+    @Test
+    void rule1AServicePaymentThatLostItsEarning() throws Exception {
+        var ledger = seededLedger();
+        ledger.tamper("DELETE FROM fixer_earnings WHERE id = ?", ledger.heldService.earning);
+
+        JsonNode report = reconcile();
+
+        assertBroken(report, Map.of("SERVICE_PAYMENT_WITHOUT_EARNING", ledger.heldService.payment));
+        assertUnbalanced(report, "SERVICE_COLLECTED_EQUALS_SERVICE_EARNINGS");
+    }
+
+    @Test
+    void rule2AnEarningWithNoPaymentBehindIt() throws Exception {
+        var ledger = seededLedger();
+        var invented = new LedgerFixture.Case();
+        ledger.write(db -> ledger.earning(db, invented, ledger.fixer1, 70_000, "AVAILABLE", LedgerFixture.now()));
+
+        JsonNode report = reconcile();
+
+        assertBroken(report, Map.of("EARNING_WITHOUT_APPROVED_PAYMENT", invented.earning));
+        assertUnbalanced(report, "EVERY_EARNING_HAS_ONE_ORIGIN");
+    }
+
+    @Test
+    void rule3APesoMovedFromCommissionToNet() throws Exception {
+        var ledger = seededLedger();
+        ledger.tamper("UPDATE fixer_earnings SET commission_amount = commission_amount - 1, "
+                + "net_amount = net_amount + 1 WHERE id = ?", ledger.availableService.earning);
+
+        JsonNode report = reconcile();
+
+        assertBroken(report, Map.of("EARNING_COMMISSION_MISMATCH", ledger.availableService.earning));
+        // Las sumas siguen cuadrando: solo la regla fila a fila lo ve.
+        assertUnbalanced(report);
+    }
+
+    @Test
+    void rule4APayoutThatSaysMoreThanItsEntries() throws Exception {
+        var ledger = seededLedger();
+        ledger.tamper("UPDATE payouts SET amount = amount + 1000 WHERE id = ?", ledger.composedPayout);
+
+        JsonNode report = reconcile();
+
+        assertBroken(report, Map.of("PAYOUT_TOTAL_MISMATCH", ledger.composedPayout));
+        assertUnbalanced(report, "PAYOUTS_EQUAL_THEIR_ENTRIES");
+    }
+
+    @Test
+    void rule5AnEarningInAPayoutThatIsAvailableAgain() throws Exception {
+        var ledger = seededLedger();
+        ledger.tamper("UPDATE fixer_earnings SET status = 'AVAILABLE', paid_out_at = NULL WHERE id = ?",
+                ledger.paidOutService.earning);
+
+        JsonNode report = reconcile();
+
+        assertBroken(report, Map.of("PAYOUT_ENTRY_MISMATCH", ledger.paidOutService.earning));
+        assertUnbalanced(report, "PAYOUT_ENTRIES_EQUAL_PAID_OUT_EARNINGS");
+    }
+
+    @Test
+    void rule5AnEarningMarkedAsPaidOutWithoutAnyPayout() throws Exception {
+        var ledger = seededLedger();
+        ledger.tamper("UPDATE fixer_earnings SET status = 'PAID_OUT', paid_out_at = ? WHERE id = ?",
+                LedgerFixture.now(), ledger.secondAvailableService.earning);
+
+        JsonNode report = reconcile();
+
+        assertBroken(report, Map.of("PAYOUT_ENTRY_MISMATCH", ledger.secondAvailableService.earning));
+        // No hay ecuación de sumas para esto: por eso existe la regla fila a fila.
+        assertUnbalanced(report);
+    }
+
+    @Test
+    void rule6ADebtMarkedAsPaidWhoseOnlyPaymentWasDeclined() throws Exception {
+        var ledger = seededLedger();
+        ledger.tamper("UPDATE owner_debts SET status = 'PAID', settled_at = ? WHERE id = ?", LedgerFixture.now(),
+                ledger.pendingDebt.debt);
+
+        JsonNode report = reconcile();
+
+        assertBroken(report, Map.of("PAID_DEBT_WITHOUT_PAYMENT", ledger.pendingDebt.debt));
+        assertUnbalanced(report, "DEBT_COLLECTED_EQUALS_PAID_DEBTS");
+    }
+
+    @Test
+    void rule7AnApprovedDebtPaymentThatSettledNothing() throws Exception {
+        var ledger = seededLedger();
+        ledger.write(db -> {
+            db.update("UPDATE repair_payments SET status = 'APPROVED', completed_at = ? WHERE id = ?",
+                    LedgerFixture.now(), ledger.pendingDebt.payment);
+            ledger.attempt(db, ledger.pendingDebt.payment, UUID.randomUUID(), "APPROVED", ledger.owner2);
+        });
+
+        JsonNode report = reconcile();
+
+        assertBroken(report, Map.of("DEBT_PAYMENT_NOT_APPLIED", ledger.pendingDebt.payment));
+        assertUnbalanced(report, "DEBT_COLLECTED_EQUALS_DEBT_EARNINGS", "DEBT_COLLECTED_EQUALS_PAID_DEBTS");
+    }
+
+    @Test
+    void rule8ACashSettlementWhoseDebtChangedAmount() throws Exception {
+        var ledger = seededLedger();
+        ledger.tamper("UPDATE owner_debts SET amount = 140000 WHERE id = ?", ledger.pendingDebt.debt);
+
+        JsonNode report = reconcile();
+
+        assertBroken(report, Map.of("CASH_SETTLEMENT_DEBT_MISMATCH", ledger.pendingDebt.settlement));
+        assertUnbalanced(report, "CASH_OUTSTANDING_EQUALS_DEBTS");
+    }
+
+    @Test
+    void rule9AnApprovedPaymentWithNoApprovedAttempt() throws Exception {
+        var ledger = seededLedger();
+        ledger.tamper("DELETE FROM simulated_payment_attempts WHERE id = ?",
+                ledger.secondAvailableService.approvedAttempt);
+
+        JsonNode report = reconcile();
+
+        assertBroken(report, Map.of("APPROVED_PAYMENT_WITHOUT_APPROVED_ATTEMPT",
+                ledger.secondAvailableService.payment));
+        assertUnbalanced(report);
+    }
+
+    /**
+     * El caso que ninguna regla fila a fila ve: un pago de saldo aprobado sobre una cotización que ya
+     * se cobró como servicio, apoyado en el mismo ingreso. Todas las filas tienen pareja; lo que no
+     * cuadra es que el mismo ingreso respalde dos cobros.
+     */
+    @Test
+    void theSameEarningCannotBackAServiceAndADebtPayment() throws Exception {
+        var ledger = seededLedger();
+        var twin = ledger.availableService;
+        ledger.write(db -> {
+            db.update("""
+                    INSERT INTO repair_payments (id, quotation_id, request_id, owner_user_id, fixer_user_id, amount,
+                        payment_method, purpose, status, created_at, updated_at, completed_at, reference)
+                    SELECT ?, quotation_id, request_id, owner_user_id, fixer_user_id, amount, payment_method,
+                        'OUTSTANDING_BALANCE', status, created_at, updated_at, completed_at, ?
+                    FROM repair_payments WHERE id = ?
+                    """, twin.debt, "FXR-" + twin.debt.toString().replace("-", "").toUpperCase(), twin.payment);
+            ledger.attempt(db, twin.debt, UUID.randomUUID(), "APPROVED", ledger.owner2);
+            ledger.cashSettlement(db, twin, ledger.owner2, ledger.fixer1, 1_200_000, 0);
+            ledger.debt(db, twin, ledger.owner2, ledger.fixer1, 1_200_000, "PAID");
+        });
+
+        JsonNode report = reconcile();
+
+        assertThat(report.get("consistent").asBoolean()).isFalse();
+        assertThat(report.get("findings")).isEmpty();
+        assertUnbalanced(report, "EVERY_EARNING_HAS_ONE_ORIGIN");
+    }
+
+    private LedgerFixture seededLedger() throws Exception {
+        provisionAdmin();
+        return new LedgerFixture(jdbc).seed();
+    }
+
+    private JsonNode reconcile() throws Exception {
+        var result = mvc.perform(get("/administration/payments/reconciliation").with(identity(ADMIN)))
+                .andExpect(status().isOk()).andReturn();
+        return mapper.readTree(result.getResponse().getContentAsString());
+    }
+
+    /** Exactamente estas reglas, cada una con una sola fila y su identificador. */
+    private static void assertBroken(JsonNode report, Map<String, UUID> expected) {
+        assertThat(report.get("consistent").asBoolean()).as(report.toPrettyString()).isFalse();
+        List<String> codes = new ArrayList<>();
+        for (JsonNode finding : report.get("findings")) {
+            String code = finding.get("code").asText();
+            codes.add(code);
+            assertThat(expected).as(report.get("findings").toPrettyString()).containsKey(code);
+            assertThat(finding.get("count").asLong()).as(code).isEqualTo(1);
+            assertThat(finding.get("sample")).as(code).hasSize(1);
+            assertThat(finding.get("sample").get(0).asText()).as(code).isEqualTo(expected.get(code).toString());
+            assertThat(finding.get("description").asText()).isNotBlank();
+        }
+        assertThat(codes).containsExactlyInAnyOrderElementsOf(expected.keySet());
+    }
+
+    /** Exactamente estas ecuaciones dejan de cuadrar; las demás siguen cuadrando. */
+    private static void assertUnbalanced(JsonNode report, String... equations) {
+        List<String> broken = new ArrayList<>();
+        for (JsonNode balance : report.get("balances")) {
+            if (!balance.get("holds").asBoolean()) {
+                broken.add(balance.get("code").asText());
+                assertThat(balance.get("expected").asLong()).isNotEqualTo(balance.get("actual").asLong());
+            }
+        }
+        assertThat(broken).as(report.get("balances").toPrettyString()).containsExactlyInAnyOrder(equations);
+        assertThat(report.get("balanced").asBoolean()).isEqualTo(equations.length == 0);
+    }
+
     @Test
     void onlyAnActivePlatformAdminCanReconcile() throws Exception {
+        provisionAdmin();
         String owner = "auth0|ledger-owner-forbidden";
+        String fixer = "auth0|ledger-fixer-forbidden";
         provisionWithRole(owner, "OWNER");
+        provisionWithRole(fixer, "FIXER");
 
-        mvc.perform(get("/administration/payments/reconciliation").with(identity(owner)))
-                .andExpect(status().isForbidden());
         mvc.perform(get("/administration/payments/reconciliation"))
                 .andExpect(status().isUnauthorized());
+        mvc.perform(get("/administration/payments/reconciliation").with(identity(owner)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.totals").doesNotExist());
+        mvc.perform(get("/administration/payments/reconciliation").with(identity(fixer)))
+                .andExpect(status().isForbidden());
+        mvc.perform(get("/administration/payments/reconciliation").with(identity(ADMIN)))
+                .andExpect(status().isOk());
+
+        jdbc.update("UPDATE users SET status = 'SUSPENDED' WHERE auth0_subject = ?", ADMIN);
+        mvc.perform(get("/administration/payments/reconciliation").with(identity(ADMIN)))
+                .andExpect(status().isForbidden());
+    }
+
+    /** Solo sumas, conteos e identificadores de fila: nada que identifique a una persona. */
+    @Test
+    void theReportExposesNoPersonalData() throws Exception {
+        var ledger = seededLedger();
+        ledger.tamper("DELETE FROM fixer_earnings WHERE id = ?", ledger.heldService.earning);
+
+        String body = reconcile().toString();
+
+        assertThat(body).doesNotContain(ledger.owner1.toString(), ledger.owner2.toString(), ledger.owner3.toString(),
+                ledger.fixer1.toString(), ledger.fixer2.toString(), "FXR-", "@", "auth0|");
     }
 
     // ---------- fixtures ----------
@@ -188,31 +469,11 @@ abstract class LedgerReconciliationHttpContract {
     }
 
     /**
-     * Escribe directo en la base como lo haría un script o una migración con privilegios. En
-     * PostgreSQL desactiva los triggers de la sesión (session_replication_role = replica), que es
-     * justo el caso que la conciliación existe para atrapar.
+     * Escribe directo en la base como lo haría un script o una migración con privilegios, saltando
+     * triggers y llaves foráneas: justo el caso que la conciliación existe para atrapar.
      */
     private void tamperBypassingTriggers(String sql, Object... args) {
-        if (!movesRealMoney()) {
-            jdbc.update(sql, args);
-            return;
-        }
-        jdbc.execute((org.springframework.jdbc.core.ConnectionCallback<Void>) connection -> {
-            try (var bypass = connection.createStatement()) {
-                bypass.execute("SET session_replication_role = replica");
-            }
-            try (var statement = connection.prepareStatement(sql)) {
-                for (int i = 0; i < args.length; i++) {
-                    statement.setObject(i + 1, args[i]);
-                }
-                statement.executeUpdate();
-            } finally {
-                try (var restore = connection.createStatement()) {
-                    restore.execute("SET session_replication_role = origin");
-                }
-            }
-            return null;
-        });
+        new LedgerFixture(jdbc).tamper(sql, args);
     }
 
     private void provisionAdmin() throws Exception {

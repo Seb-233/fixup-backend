@@ -13,17 +13,18 @@ public enum LedgerInvariant {
     SERVICE_PAYMENT_WITHOUT_EARNING(
             "Pago de servicio aprobado sin un ingreso del técnico por el mismo monto"),
     EARNING_WITHOUT_APPROVED_PAYMENT(
-            "Ingreso del técnico sin un pago aprobado que lo respalde"),
+            "Ingreso del técnico, posterior al corte digital, sin un pago aprobado que lo respalde"),
     EARNING_COMMISSION_MISMATCH(
             "La comisión guardada no corresponde a la tarifa copiada en el ingreso"),
     PAYOUT_TOTAL_MISMATCH(
             "La transferencia no suma lo mismo que sus ingresos"),
     PAYOUT_ENTRY_MISMATCH(
-            "Un ingreso incluido en una transferencia no está marcado como transferido o cambió de neto"),
+            "Un ingreso incluido en una transferencia no está marcado como transferido o cambió de neto, "
+                    + "o figura transferido sin una transferencia que lo contenga"),
     PAID_DEBT_WITHOUT_PAYMENT(
             "Deuda marcada como pagada sin un pago aprobado por el mismo monto"),
     DEBT_PAYMENT_NOT_APPLIED(
-            "Pago de saldo aprobado cuya deuda sigue pendiente"),
+            "Pago de saldo aprobado cuya deuda sigue pendiente o que no dejó el ingreso del técnico"),
     CASH_SETTLEMENT_DEBT_MISMATCH(
             "El saldo pendiente de una liquidación en efectivo no coincide con la deuda registrada"),
     APPROVED_PAYMENT_WITHOUT_APPROVED_ATTEMPT(

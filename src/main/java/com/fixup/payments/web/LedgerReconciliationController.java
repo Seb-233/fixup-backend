@@ -36,7 +36,11 @@ class LedgerReconciliationController {
 
     @GetMapping("/reconciliation")
     @Operation(summary = "Run the payment ledger reconciliation now and return its result")
-    @ApiResponse(responseCode = "200", description = "Totals and every broken invariant with a sample of row ids")
+    @ApiResponse(responseCode = "200", description = "The ledger was read: totals in whole COP, rows scanned per "
+            + "table, every conservation equation and every broken invariant with a sample of row ids")
+    @ApiResponse(responseCode = "503", description = "No result: LEDGER_UNREADABLE (the ledger could not be read) "
+            + "or LEDGER_RECONCILIATION_BUSY (another instance is reconciling). Never means 'no findings'",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     LedgerReconciliation reconciliation() {
         return reconcile.runNow(actors.currentActor());
     }

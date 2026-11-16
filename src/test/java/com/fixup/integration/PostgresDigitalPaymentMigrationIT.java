@@ -61,10 +61,11 @@ class PostgresDigitalPaymentMigrationIT {
         var historicalPayout=jdbc.queryForMap("SELECT * FROM payouts");
         var historicalJob=jdbc.queryForMap("SELECT * FROM jobs");
         var latest = configuration.target("latest").load();
-        // V41-V42 (cutover) and V45-V47 (INT-01, Wompi checkouts; V43-V44 belong to the status audit log).
-        assertThat(latest.migrate().migrationsExecuted).isEqualTo(5);
+        // V41-V42 (cutover), V45-V47 (INT-01, Wompi checkouts; V43-V44 belong to the status audit log)
+        // and V48 (SAF-01, ledger reconciliation reader).
+        assertThat(latest.migrate().migrationsExecuted).isEqualTo(6);
         latest.validate();
-        assertThat(latest.info().applied()).hasSize(44);
+        assertThat(latest.info().applied()).hasSize(45);
         assertThat(jdbc.queryForList("SELECT version, checksum FROM flyway_schema_history WHERE installed_rank <= 39 ORDER BY installed_rank")).isEqualTo(v40History);
         assertThat(jdbc.queryForMap("SELECT * FROM fixer_earnings")).isEqualTo(historicalEarning);
         assertThat(jdbc.queryForMap("SELECT * FROM payouts")).containsAllEntriesOf(historicalPayout).containsEntry("operation_key",null);
