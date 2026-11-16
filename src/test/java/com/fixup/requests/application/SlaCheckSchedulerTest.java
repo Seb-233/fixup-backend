@@ -1,6 +1,10 @@
 package com.fixup.requests.application;
 
 import com.fixup.fixers.api.Specialty;
+import com.fixup.identityaccess.api.Role;
+import com.fixup.identityaccess.api.UserDirectory;
+import com.fixup.notifications.api.NotificationRequested;
+import com.fixup.notifications.api.NotificationType;
 import com.fixup.requests.api.RepairRequestStatus;
 import com.fixup.requests.api.PaymentMethod;
 import com.fixup.requests.api.SlaBreached;
@@ -43,6 +47,7 @@ class SlaCheckSchedulerTest {
     @Autowired SlaCheckScheduler scheduler;
     @Autowired Clock clock;
     @MockBean RepairRequests requests;
+    @MockBean UserDirectory userDirectory;
     @Autowired ApplicationEvents events;
 
     private Instant baseNow;
@@ -113,6 +118,63 @@ class SlaCheckSchedulerTest {
                 .orElseThrow();
         assertThat(saved.status()).isEqualTo(RepairRequestStatus.SLA_BREACHED);
         assertThat(saved.lastEscalationNotifiedAt()).isNotNull();
+    }
+
+    @Test
+    void warningRequestTransitionsToSlaBreachedWhenDeadlinePasses() {
+        Instant deadline = baseNow.minus(Duration.ofHours(1));
+        RepairRequest warning = urgentWithDeadline(deadline, RepairRequestStatus.SLA_WARNING);
+        when(requests.findUrgentUnresolved()).thenReturn(List.of(warning));
+
+        scheduler.checkSlas();
+
+        ArgumentCaptor<RepairRequest> captor = ArgumentCaptor.forClass(RepairRequest.class);
+        verify(requests).update(captor.capture());
+        assertThat(captor.getValue().status()).isEqualTo(RepairRequestStatus.SLA_BREACHED);
+        assertThat(captor.getValue().lastEscalationNotifiedAt()).isEqualTo(baseNow);
+        assertThat(events.stream(SlaBreached.class)).hasSize(1);
+    }
+
+    @Test
+    void escalationNotifiesPlatformAdministratorOnBreach() {
+        UUID adminId = UUID.fromString("44444444-4444-4444-4444-444444444444");
+        when(userDirectory.activeUsersWithRole(Role.PLATFORM_ADMIN))
+                .thenReturn(List.of(new UserDirectory.UserCard(adminId, "Admin Plataforma")));
+
+        Instant deadline = baseNow.minus(Duration.ofHours(1));
+        RepairRequest assigned = urgentWithDeadline(deadline, RepairRequestStatus.ASSIGNED);
+        when(requests.findUrgentUnresolved()).thenReturn(List.of(assigned));
+        when(requests.findById(requestId)).thenReturn(Optional.of(assigned));
+
+        scheduler.checkSlas();
+
+        var toAdmin = events.stream(NotificationRequested.class)
+                .filter(notification -> adminId.equals(notification.recipientUserId()))
+                .toList();
+        assertThat(toAdmin).isNotEmpty();
+        assertThat(toAdmin).allSatisfy(notification ->
+                assertThat(notification.type()).isEqualTo(NotificationType.REQUEST_SLA_BREACHED));
+    }
+
+    @Test
+    void escalationNotifiesPlatformAdministratorOnWarning() {
+        UUID adminId = UUID.fromString("44444444-4444-4444-4444-444444444444");
+        when(userDirectory.activeUsersWithRole(Role.PLATFORM_ADMIN))
+                .thenReturn(List.of(new UserDirectory.UserCard(adminId, "Admin Plataforma")));
+
+        Instant deadline = baseNow.plus(Duration.ofHours(5));
+        RepairRequest open = urgentWithDeadline(deadline, RepairRequestStatus.OPEN);
+        when(requests.findUrgentUnresolved()).thenReturn(List.of(open));
+        when(requests.findById(requestId)).thenReturn(Optional.of(open));
+
+        scheduler.checkSlas();
+
+        var toAdmin = events.stream(NotificationRequested.class)
+                .filter(notification -> adminId.equals(notification.recipientUserId()))
+                .toList();
+        assertThat(toAdmin).isNotEmpty();
+        assertThat(toAdmin).allSatisfy(notification ->
+                assertThat(notification.type()).isEqualTo(NotificationType.REQUEST_SLA_WARNING));
     }
 
     @Test

@@ -6,7 +6,7 @@ import com.fixup.requests.api.SlaState;
 import com.fixup.requests.api.UrgencyLevel;
 import com.fixup.fixers.api.Specialty;
 import com.fixup.requests.domain.RepairRequest;
-import java.time.Duration;
+import com.fixup.requests.domain.SlaPolicy;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -17,8 +17,6 @@ public record RepairRequestSummary(UUID id, UUID propertyId, UUID ownerUserId, S
         UrgencyLevel urgencyLevel, Instant slaDeadline, SlaState slaState,
         UUID requestedByUserId, UUID managerUserId, String propertyName, String propertyAddress,
         String propertyCity, Instant completedAt) {
-
-    private static final Duration WARNING_THRESHOLD = Duration.ofMinutes((long) (48 * 60 * 0.20));
 
     public static RepairRequestSummary of(RepairRequest request) {
         SlaState slaState = computeSlaState(request);
@@ -31,23 +29,6 @@ public record RepairRequestSummary(UUID id, UUID propertyId, UUID ownerUserId, S
     }
 
     private static SlaState computeSlaState(RepairRequest request) {
-        if (request.slaDeadline() == null) {
-            return SlaState.NONE;
-        }
-        if (request.status() == RepairRequestStatus.SLA_BREACHED) {
-            return SlaState.BREACHED;
-        }
-        if (request.status() == RepairRequestStatus.SLA_WARNING) {
-            return SlaState.WARNING;
-        }
-        Instant now = Instant.now();
-        if (request.slaDeadline().isBefore(now)) {
-            return SlaState.BREACHED;
-        }
-        Duration remaining = Duration.between(now, request.slaDeadline());
-        if (remaining.compareTo(WARNING_THRESHOLD) <= 0) {
-            return SlaState.WARNING;
-        }
-        return SlaState.ON_TRACK;
+        return SlaPolicy.stateOf(request.status(), request.slaDeadline(), Instant.now());
     }
 }

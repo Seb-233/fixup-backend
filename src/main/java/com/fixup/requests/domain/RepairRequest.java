@@ -10,7 +10,6 @@ import com.fixup.requests.api.RepairRequestStatus;
 import com.fixup.requests.api.PaymentMethod;
 import com.fixup.requests.api.UrgencyLevel;
 import com.fixup.fixers.api.Specialty;
-import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Set;
@@ -30,7 +29,6 @@ public record RepairRequest(UUID id, UUID propertyId, String propertyCity, UUID 
         Instant completedAt) {
 
     public static final int MAX_PHOTOS = 6;
-    private static final Duration URGENT_SLA_DURATION = Duration.ofHours(48);
     private static final Set<RepairRequestStatus> CLOSED = Set.of(RepairRequestStatus.COMPLETED,
             RepairRequestStatus.CANCELLED);
 
@@ -87,7 +85,7 @@ public record RepairRequest(UUID id, UUID propertyId, String propertyCity, UUID 
         }
         UrgencyLevel effectiveUrgency = urgencyLevel == null ? UrgencyLevel.MEDIUM : urgencyLevel;
         Instant slaDeadline = UrgencyLevel.URGENT.equals(effectiveUrgency)
-                ? now.plus(URGENT_SLA_DURATION)
+                ? SlaPolicy.urgentDeadline(now)
                 : null;
         return new RepairRequest(id, property.propertyId(), property.city(), property.ownerUserId(), specialty, title,
                 description, mediaIds, RepairRequestStatus.OPEN, null, paymentMethod, now, now, effectiveUrgency, slaDeadline, null,
