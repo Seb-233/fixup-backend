@@ -173,37 +173,83 @@ estado, porque la mitad de la comprobabilidad de los flujos críticos vive en es
 
 | Pieza | Estado |
 | --- | --- |
-| `e2e/browser-certification.spec.ts` | 12 pruebas: ingreso, solicitud, cotización, pago en la pasarela simulada, trabajo, chat, pagos, portafolios, ingresos y gastos. **No la corre ningún flujo de CI** |
+| `e2e/web/flujos-criticos-rnf17.spec.ts` | **Los cuatro flujos de este requisito.** 8 pruebas, todas en verde, corrida del 16 de noviembre |
 | `e2e/web/navegacion-por-rol.spec.ts` | Navegación por rol, rutas protegidas, redirecciones, fallas 500/503 y barra móvil. Etiquetada `@smoke` y `@completo` |
+| `e2e/browser-certification.spec.ts` | 12 pruebas: ingreso, solicitud, cotización, pago en la pasarela simulada, trabajo, chat, pagos, portafolios, ingresos y gastos |
 | `.github/workflows/e2e-demo.yml` | Levanta un ambiente efímero —PostgreSQL, almacenamiento S3, backend compilado desde `develop` con perfil demo y semilla sintética, y `ng serve`— y publica el artefacto `e2e-navegacion-por-rol` con 14 días de retención |
 
-Lo que falta ahí es concreto y no es "montar Playwright":
+### Qué cubre el guion de los flujos críticos
 
-- **El flujo de CI solo dispara en *pull request* que toque `e2e/**`, `playwright.config.ts` o el
-  propio flujo.** Un cambio en la aplicación no ejecuta ninguna prueba de interfaz.
-- **`browser-certification.spec.ts` no se ejecuta en CI**, así que las 12 pruebas que más se parecen
-  a los flujos críticos no dejan evidencia.
-- **Ningún guion de interfaz es dueño de UC-01 ni de UC-16.** Las remodelaciones y el circuito de
-  verificación del técnico no se tocan desde el navegador en ninguna prueba.
-- **UC-13 y UC-19 están rozados**, no cubiertos: la certificación navega al trabajo y presenta
-  ingresos y gastos, pero no agenda, no inicia, no agrega evidencia ni verifica el contenido del
-  reporte.
+| Flujo | Qué verifica desde el navegador | Resultado |
+| --- | --- | --- |
+| UC-01 | La propietaria crea una remodelación con su requerimiento y la encuentra en la lista | Pasa |
+| UC-13 | Los tres desgloses y la comparación con el periodo anterior; el filtro de periodo; la descarga en CSV entrega un archivo con contenido | Pasa |
+| UC-16 | El técnico ve estado, especialidades y documentos; el administrador abre la cola de revisión y la propietaria recibe acceso denegado | Pasa |
+| UC-19 | El técnico abre el trabajo que la prueba creó y se exige que ofrezca agendar e iniciar, con su bitácora | Pasa |
+
+Dos de estas comprobaciones llegan donde el backend no llega, y por eso valen aparte del contrato
+HTTP: el reporte de gastos, cuyas ocho salidas sin verificar quedan cubiertas aquí —incluida la
+descarga en CSV, que bajó 2.884 bytes en la corrida—, y UC-19, que en el backend existe escondido en
+una clase de otro asunto.
+
+UC-19 no depende de lo que traiga la semilla: la prueba construye su propia precondición por la API
+recorriendo el camino real —la propietaria abre la solicitud, el técnico cotiza, ella acepta y el
+pago se aprueba en la pasarela simulada—, y el trabajo nace de ahí. Dos detalles que costaron
+depurar y conviene no deshacer:
+
+- **El texto de la solicitud decide quién puede cotizarla.** La especialidad la deduce
+  `RepairSpecialtyClassifier` por palabras clave, y el técnico solo puede cotizar si la tiene. El
+  título dice "fuga de agua en el lavamanos" para que clasifique como `PLUMBING`, una de las tres
+  del técnico sembrado.
+- **El trabajo se busca por su título, no se toma el primero de la lista.** El técnico de la
+  semilla tiene diecisiete trabajos; la primera versión de la prueba verificaba uno cualquiera. El
+  título lleva marca de tiempo y la prueba exige encontrar exactamente uno.
+
+Y una advertencia que vale para cualquier prueba de interfaz que se agregue aquí: los rótulos de
+los botones van completos y literales. Una expresión laxa como `/Agendar|Iniciar|Cerrar/` encuentra
+el botón de "Cerrar sesión" de la barra lateral y deja la prueba en verde sin haber verificado
+nada, que es peor que dejarla en rojo. Pasó, y se detectó revisando la evidencia, no el resultado.
+
+### Un hallazgo del camino: el perfil demo sobre H2 no puede crear solicitudes
+
+`CreateRepairRequest` comprueba la deuda del propietario llamando a
+`app_property_owner_has_outstanding_debt`, una función definida en `V38__property_owner_debt_check.sql`,
+que vive **solo** en `db/migration-postgres/postgresql/`. Sobre H2 esa función no existe, la consulta
+nativa falla y la creación responde 500.
+
+Como crear una remodelación abre una solicitud por requerimiento, el efecto alcanza a UC-01 y a la
+prueba de creación de solicitud de la certificación. En la práctica: **el perfil demo arranca sobre
+H2 por omisión, y así no sirve para probar estos flujos**. Hay que darle PostgreSQL, que es lo que
+`e2e-demo.yml` ya hace en CI y lo que hay que replicar en local.
+
+### Lo que faltaba y ya está hecho
+
+- **`browser-certification.spec.ts` no se ejecutaba en CI**, así que las 12 pruebas que más se
+  parecen a los flujos críticos no dejaban evidencia. Ahora corre, como paso informativo
+  (`continue-on-error`) hasta confirmar que queda verde en varias corridas seguidas.
+- **El disparador solo reaccionaba a cambios de las propias pruebas.** Se agregó `push` en ramas
+  `test/**`. Queda pendiente, como decisión del grupo, si vale la pena dispararlo también en los
+  *pull request* que tocan `src/**`: cuesta minutos de CI pero es lo que haría que un cambio de la
+  aplicación ejecute las pruebas de interfaz.
+- **El navegador estaba fijo en Chrome** (`channel: 'chrome'`), así que en cualquier máquina sin
+  Chrome en la ruta estándar la suite entera fallaba antes de abrir una sola página. Ahora se elige
+  con `PLAYWRIGHT_CHANNEL` (`msedge`, `chromium`), y por omisión sigue siendo Chrome.
 
 ## Lo que falta para cerrar RNF-17
 
-1. **Hacer que la certificación deje evidencia**: ejecutarla desde `e2e-demo.yml` y ampliar el
-   disparador para que un cambio de la aplicación también corra las pruebas de interfaz.
-2. **Un guion de interfaz dueño de UC-01, UC-13, UC-16 y UC-19**, los cuatro flujos que el requisito
-   nombra.
-3. **Un `JobHttpContract`** que sea dueño de UC-19 en el backend y corra en los dos motores,
+Los cuatro flujos críticos están verificados en la interfaz y el backend los cubre en distinto
+grado. Lo que queda es profundidad, no cobertura:
+
+1. **Un `JobHttpContract`** que sea dueño de UC-19 en el backend y corra en los dos motores,
    siguiendo el patrón de los otros nueve flujos.
-4. **Pruebas del reporte de gastos** que afirmen las agrupaciones y la comparación con el periodo
-   anterior, y que ejerciten la descarga en CSV.
-5. **Medir el render de la búsqueda** con Playwright, pendiente de RNF-01: su métrica dice "mostrar
+2. **Pruebas del reporte de gastos en el backend** que afirmen las agrupaciones y la comparación con
+   el periodo anterior, y que ejerciten la descarga en CSV. Hoy eso solo se verifica desde la
+   interfaz, que es mejor que nada pero deja el cálculo sin prueba propia.
+3. **Medir el render de la búsqueda** con Playwright, pendiente de RNF-01: su métrica dice "mostrar
    resultados en la interfaz" y lo medido hasta hoy es la API. Requiere sembrarle al ambiente de
    demostración un catálogo grande, porque la semilla sintética es diminuta.
 
-Los puntos 3 y 4 son trabajo acotado y no tocan código de producción: son pruebas sobre
+Los dos primeros son trabajo acotado y no tocan código de producción: son pruebas sobre
 comportamiento que ya existe.
 
 ---
