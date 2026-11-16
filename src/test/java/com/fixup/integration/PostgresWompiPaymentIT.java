@@ -1,6 +1,7 @@
 package com.fixup.integration;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -22,7 +23,10 @@ import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.function.Supplier;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -39,6 +43,8 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -59,6 +65,8 @@ class PostgresWompiPaymentIT {
     private static final String INTEGRITY_SECRET = "test_integrity_it";
     private static final Map<String, String> TRANSACTIONS = new ConcurrentHashMap<>();
     private static final Map<String, String> CREATED = new ConcurrentHashMap<>();
+    /** Fallas simuladas de Wompi por id de transacción: "500" o "SLOW" (más que el read-timeout). */
+    private static final Map<String, String> FAILURES = new ConcurrentHashMap<>();
     private static final HttpServer WOMPI = fakeWompi();
 
     @Container static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:17-alpine");
@@ -73,6 +81,7 @@ class PostgresWompiPaymentIT {
         r.add("fixup.payments.wompi.integrity-secret", () -> INTEGRITY_SECRET);
         r.add("fixup.payments.wompi.events-secret", () -> EVENTS_SECRET);
         r.add("fixup.payments.wompi.return-origins", () -> "http://fixup.localhost:4200");
+        r.add("fixup.payments.wompi.read-timeout", () -> "1s");
         r.add("fixup.payments.wompi.api-base-url", () -> "http://127.0.0.1:" + WOMPI.getAddress().getPort() + "/v1");
     }
 
@@ -80,9 +89,10 @@ class PostgresWompiPaymentIT {
     @Autowired ObjectMapper mapper;
     @Autowired JdbcTemplate jdbc;
     @Autowired IntegrationDatabaseCleaner cleaner;
+    @Autowired PlatformTransactionManager transactions;
     private UUID owner, fixer, manager, property, request, quotation, payment;
 
-    @BeforeEach void setup() { cleaner.clean(); TRANSACTIONS.clear(); CREATED.clear(); }
+    @BeforeEach void setup() { cleaner.clean(); TRANSACTIONS.clear(); CREATED.clear(); FAILURES.clear(); }
     @AfterEach void cleanup() { cleaner.clean(); }
 
     @Test
@@ -237,6 +247,150 @@ class PostgresWompiPaymentIT {
         transactions("admin", "?size=500").andExpect(status().isConflict());
     }
 
+    @Test
+    void rlsLetsOnlyTheCurrentPayerOpenAndReadCheckoutsAndNobodyChangeThem() throws Exception {
+        accepted();
+        UUID stranger = provision("stranger", "OWNER");
+        UUID tenant = provision("tenant", "TENANT");
+        UUID admin = provision("admin", "PLATFORM_ADMIN");
+        UUID otherManager = provision("other-manager", "REAL_ESTATE_MANAGER");
+        long cents = 10_000_000;
+        String sql = "INSERT INTO wompi_checkouts(reference,payment_id,amount_in_cents,created_by_user_id,created_at) "
+                + "VALUES (?,?,?,?,CURRENT_TIMESTAMP)";
+
+        assertThat(asActor(owner, "OWNER", () -> jdbc.update(sql, "RLS-OWNER", payment, cents, owner))).isEqualTo(1);
+        assertThat(asActor(manager, "REAL_ESTATE_MANAGER", () -> jdbc.update(sql, "RLS-MANAGER", payment, cents, manager))).isEqualTo(1);
+        jdbc.update(sql, "RLS-OWNER", payment, cents, owner);
+        jdbc.update(sql, "RLS-MANAGER", payment, cents, manager);
+
+        assertThat(asActor(owner, "OWNER", () -> count("wompi_checkouts"))).isEqualTo(2);
+        assertThat(asActor(manager, "REAL_ESTATE_MANAGER", () -> count("wompi_checkouts"))).isEqualTo(2);
+        assertThat(asActor(admin, "PLATFORM_ADMIN", () -> count("wompi_checkouts"))).isEqualTo(2);
+        for (var outsider : Map.of(stranger, "OWNER", tenant, "TENANT", fixer, "FIXER", otherManager, "REAL_ESTATE_MANAGER").entrySet()) {
+            assertThat(asActor(outsider.getKey(), outsider.getValue(), () -> count("wompi_checkouts"))).as(outsider.getValue()).isZero();
+        }
+
+        // Alta rechazada: a nombre de otro, monto distinto, terceros y administración.
+        assertThatThrownBy(() -> asActor(owner, "OWNER", () -> jdbc.update(sql, "RLS-X1", payment, cents, manager)))
+                .hasStackTraceContaining("row-level security");
+        assertThatThrownBy(() -> asActor(owner, "OWNER", () -> jdbc.update(sql, "RLS-X2", payment, 100L, owner)))
+                .hasStackTraceContaining("row-level security");
+        assertThatThrownBy(() -> asActor(stranger, "OWNER", () -> jdbc.update(sql, "RLS-X3", payment, cents, stranger)))
+                .hasStackTraceContaining("row-level security");
+        assertThatThrownBy(() -> asActor(otherManager, "REAL_ESTATE_MANAGER", () -> jdbc.update(sql, "RLS-X4", payment, cents, otherManager)))
+                .hasStackTraceContaining("row-level security");
+        assertThatThrownBy(() -> asActor(admin, "PLATFORM_ADMIN", () -> jdbc.update(sql, "RLS-X5", payment, cents, admin)))
+                .hasStackTraceContaining("row-level security");
+        // Nadie modifica ni borra: el rol de ejecución no tiene esos privilegios.
+        assertThatThrownBy(() -> asActor(owner, "OWNER", () -> jdbc.update("UPDATE wompi_checkouts SET amount_in_cents = 1")))
+                .hasStackTraceContaining("permission denied");
+        assertThatThrownBy(() -> asActor(admin, "PLATFORM_ADMIN", () -> jdbc.update("DELETE FROM wompi_checkouts")))
+                .hasStackTraceContaining("permission denied");
+        assertThat(jdbc.queryForObject("SELECT has_table_privilege('fixup_app','wompi_checkouts','UPDATE') "
+                + "OR has_table_privilege('fixup_app','wompi_checkouts','DELETE') "
+                + "OR has_table_privilege('fixup_app','wompi_checkouts','TRUNCATE')", Boolean.class)).isFalse();
+        assertThat(jdbc.queryForObject("SELECT relforcerowsecurity FROM pg_class WHERE relname = 'wompi_checkouts'", Boolean.class)).isTrue();
+
+        // Revocada la delegación, el administrador inmobiliario deja de ver y de poder abrir checkouts.
+        jdbc.update("UPDATE properties SET manager_user_id = NULL WHERE id = ?", property);
+        assertThat(asActor(manager, "REAL_ESTATE_MANAGER", () -> count("wompi_checkouts"))).isZero();
+        // Con el pago aprobado nadie abre otro checkout.
+        jdbc.update("UPDATE properties SET manager_user_id = ? WHERE id = ?", manager, property);
+        transaction("77777-1-APPROVED", "RLS-OWNER", cents, "APPROVED");
+        confirm("owner", "77777-1-APPROVED").andExpect(status().isOk()).andExpect(jsonPath("$.paymentStatus").value("APPROVED"));
+        assertThatThrownBy(() -> asActor(owner, "OWNER", () -> jdbc.update(sql, "RLS-X6", payment, cents, owner)))
+                .hasStackTraceContaining("row-level security");
+    }
+
+    @Test
+    void theWebhookAppliesTheResultUnderTheOpenersIsolationNotAsAnUnrestrictedProcess() throws Exception {
+        accepted();
+        provision("admin", "PLATFORM_ADMIN");
+        String reference = checkout("manager").get("reference").asText();
+        transaction("88888-1-APPROVED", reference, 10_000_000, "APPROVED");
+        // El propietario revoca la delegación antes de que llegue el evento.
+        jdbc.update("UPDATE properties SET manager_user_id = NULL WHERE id = ?", property);
+
+        webhook("88888-1-APPROVED", "APPROVED", 10_000_000, EVENTS_SECRET).andExpect(status().isOk());
+        assertThat(count("simulated_payment_attempts")).as("el webhook no salta el aislamiento").isZero();
+        assertThat(jdbc.queryForObject("SELECT status FROM repair_payments", String.class)).isEqualTo("PENDING");
+        var reconciliation = json(mvc.perform(get("/payments/wompi/transactions?status=ALL&from=2026-11-01&until=2026-11-14")
+                .with(identity("admin"))).andExpect(status().isOk()).andReturn());
+        assertThat(reconciliation.at("/items/0/reconciliation").asText()).isEqualTo("NOT_RECORDED");
+
+        // El pagador vigente sí puede registrarlo al volver del checkout.
+        confirm("owner", "88888-1-APPROVED").andExpect(status().isOk()).andExpect(jsonPath("$.paymentStatus").value("APPROVED"));
+        assertThat(jdbc.queryForObject("SELECT attempted_by_user_id FROM simulated_payment_attempts", UUID.class)).isEqualTo(owner);
+        assertThat(count("jobs")).isEqualTo(1);
+    }
+
+    @Test
+    void concurrentReturnsAndWebhooksRecordTheTransactionExactlyOnce() throws Exception {
+        accepted();
+        String reference = checkout("owner").get("reference").asText();
+        transaction("99999-1-APPROVED", reference, 10_000_000, "APPROVED");
+        var pool = Executors.newFixedThreadPool(8);
+        try {
+            var calls = new java.util.ArrayList<Callable<Integer>>();
+            for (int i = 0; i < 4; i++) {
+                calls.add(() -> confirm("owner", "99999-1-APPROVED").andReturn().getResponse().getStatus());
+                calls.add(() -> webhook("99999-1-APPROVED", "APPROVED", 10_000_000, EVENTS_SECRET).andReturn().getResponse().getStatus());
+            }
+            for (var outcome : pool.invokeAll(calls)) {
+                assertThat(outcome.get()).isEqualTo(200);
+            }
+        } finally {
+            pool.shutdownNow();
+        }
+        assertThat(count("simulated_payment_attempts")).isEqualTo(1);
+        assertThat(count("jobs")).isEqualTo(1);
+        assertThat(count("fixer_earnings")).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM notifications WHERE type = 'PAYMENT_APPROVED'", Integer.class))
+                .isEqualTo(jdbc.queryForObject("SELECT count(DISTINCT recipient_user_id) FROM notifications WHERE type = 'PAYMENT_APPROVED'", Integer.class));
+    }
+
+    @Test
+    void wompiDownOrSlowLeavesThePaymentUntouchedAndTheWebhookAsksForARetry() throws Exception {
+        accepted();
+        String reference = checkout("owner").get("reference").asText();
+        transaction("12121-1-APPROVED", reference, 10_000_000, "APPROVED");
+        var before = snapshot();
+        for (String failure : List.of("500", "SLOW")) {
+            FAILURES.put("12121-1-APPROVED", failure);
+            confirm("owner", "12121-1-APPROVED").andExpect(status().isServiceUnavailable())
+                    .andExpect(jsonPath("$.code").value("PAYMENT_GATEWAY_UNAVAILABLE"));
+            // Un 503 hace que Wompi reenvíe el evento más tarde.
+            webhook("12121-1-APPROVED", "APPROVED", 10_000_000, EVENTS_SECRET).andExpect(status().isServiceUnavailable());
+            assertThat(snapshot()).as(failure).isEqualTo(before);
+        }
+        FAILURES.clear();
+        confirm("owner", "12121-1-APPROVED").andExpect(status().isOk()).andExpect(jsonPath("$.paymentStatus").value("APPROVED"));
+        assertThat(count("simulated_payment_attempts")).isEqualTo(1);
+    }
+
+    @Test
+    void theSimulatedGatewayKeepsWorkingWithWompiEnabled() throws Exception {
+        accepted();
+        mvc.perform(post("/payments/" + payment + "/attempts").with(identity("owner")).header("Idempotency-Key", UUID.randomUUID())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"reference\":\"" + paymentReference() + "\",\"amount\":100000,\"instrument\":\"SANDBOX_CARD\"}"))
+                .andExpect(status().isOk());
+        assertThat(jdbc.queryForObject("SELECT status FROM repair_payments", String.class)).isEqualTo("APPROVED");
+        assertThat(jdbc.queryForObject("SELECT instrument FROM simulated_payment_attempts", String.class)).isEqualTo("SANDBOX_CARD");
+    }
+
+    private <T> T asActor(UUID id, String role, Supplier<T> action) {
+        var template = new TransactionTemplate(transactions);
+        return template.execute(tx -> {
+            jdbc.execute("SET LOCAL ROLE fixup_app");
+            jdbc.queryForObject("SELECT set_config('app.current_user_id', ?, true)", String.class, id.toString());
+            jdbc.queryForObject("SELECT set_config('app.current_user_roles', ?, true)", String.class, role);
+            T result = action.get();
+            tx.setRollbackOnly();
+            return result;
+        });
+    }
+
     private ResultActions transactions(String actor, String query) throws Exception {
         return mvc.perform(get("/payments/wompi/transactions" + query).with(identity(actor)));
     }
@@ -283,6 +437,14 @@ class PostgresWompiPaymentIT {
             var server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
             server.createContext("/v1/transactions/", exchange -> {
                 String id = exchange.getRequestURI().getPath().substring("/v1/transactions/".length());
+                String failure = FAILURES.get(id);
+                if ("SLOW".equals(failure)) {
+                    try { Thread.sleep(2_500); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+                } else if ("500".equals(failure)) {
+                    exchange.sendResponseHeaders(500, -1);
+                    exchange.close();
+                    return;
+                }
                 boolean authorized = "Bearer prv_test_it".equals(exchange.getRequestHeaders().getFirst("Authorization"));
                 String body = authorized && TRANSACTIONS.containsKey(id) ? "{\"data\":" + TRANSACTIONS.get(id) + "}" : null;
                 byte[] bytes = (body == null ? "{\"error\":{\"type\":\"NOT_FOUND_ERROR\"}}" : body).getBytes(StandardCharsets.UTF_8);
@@ -317,6 +479,7 @@ class PostgresWompiPaymentIT {
                 exchange.getResponseBody().write(bytes);
                 exchange.close();
             });
+            server.setExecutor(Executors.newCachedThreadPool());
             server.start();
             return server;
         } catch (IOException e) {

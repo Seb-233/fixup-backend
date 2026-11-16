@@ -13,8 +13,8 @@
 # eventos (test_events_…) y secreto de integridad (test_integrity_…).
 #
 # Escribe fixup-backend/.env.wompi (permisos 600, ignorado por git). Spring lo lee al arrancar
-# desde la carpeta del backend; no hay que tocar nada más. Si las llaves son de producción
-# (pub_prod_…), el backend usa production.wompi.co; si son de prueba, sandbox.wompi.co.
+# desde la carpeta del backend; no hay que tocar nada más. Solo se aceptan llaves del sandbox
+# (pub_test_…): el backend rechaza las de producción y queda con Wompi apagado.
 # ---------------------------------------------------------------------------
 set -euo pipefail
 
@@ -53,10 +53,11 @@ ask WOMPI_PRIVATE_KEY      "Llave privada   (prv_test_…)"        1
 ask WOMPI_INTEGRITY_SECRET "Secreto de integridad (test_integrity_…)" 1
 ask WOMPI_EVENTS_SECRET    "Secreto de eventos    (test_events_…)"    1
 
+# Solo sandbox: el alcance del proyecto no autoriza cobros reales, y el backend rechaza producción.
 case "$WOMPI_PUBLIC_KEY" in
   pub_test_*) env=test; api="https://sandbox.wompi.co/v1" ;;
-  pub_prod_*) env=prod; api="https://production.wompi.co/v1" ;;
-  *) echo "La llave pública debe empezar por pub_test_ o pub_prod_" >&2; exit 1 ;;
+  pub_prod_*) echo "Esas son llaves de producción. FixUp solo admite el sandbox de Wompi (pub_test_…)." >&2; exit 1 ;;
+  *) echo "La llave pública debe empezar por pub_test_" >&2; exit 1 ;;
 esac
 problems=()
 [[ "$WOMPI_PRIVATE_KEY" == "prv_${env}_"* ]]          || problems+=("la llave privada debe empezar por prv_${env}_")
@@ -64,7 +65,7 @@ problems=()
 [[ "$WOMPI_EVENTS_SECRET" == "${env}_events_"* ]]       || problems+=("el secreto de eventos debe empezar por ${env}_events_")
 if [[ ${#problems[@]} -gt 0 ]]; then
   printf 'Revisa las llaves: %s\n' "${problems[@]}" >&2
-  echo "(Las cuatro deben ser del mismo ambiente: todas de prueba o todas de producción.)" >&2
+  echo "(Las cuatro deben ser del ambiente de pruebas: pub_test_, prv_test_, test_integrity_ y test_events_.)" >&2
   exit 1
 fi
 WOMPI_RETURN_ORIGINS="${WOMPI_RETURN_ORIGINS:-$default_origins}"
@@ -73,7 +74,7 @@ WOMPI_RETURN_ORIGINS="${WOMPI_RETURN_ORIGINS:-$default_origins}"
 if command -v curl >/dev/null; then
   code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$api/merchants/$WOMPI_PUBLIC_KEY" || true)"
   if [[ "$code" == 200 ]]; then
-    echo "✔ Wompi reconoce la llave pública ($([[ $env == test ]] && echo sandbox || echo producción))."
+    echo "✔ Wompi reconoce la llave pública (sandbox)."
   else
     echo "⚠ No pude confirmar la llave pública con Wompi (HTTP $code). Revisa que esté bien copiada." >&2
   fi

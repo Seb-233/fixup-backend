@@ -1,22 +1,23 @@
 package com.fixup.payments.application;
 
 import com.fixup.identityaccess.api.CurrentActor;
+import com.fixup.identityaccess.api.Role;
+import com.fixup.identityaccess.api.UserDirectory;
+import com.fixup.identityaccess.api.UserStatus;
+import com.fixup.payments.api.PaymentAccessDeniedException;
 import com.fixup.payments.api.PaymentConflictException;
 import com.fixup.payments.api.PaymentGatewayUnavailableException;
-import com.fixup.payments.api.PaymentMethod;
 import com.fixup.payments.api.PaymentNotFoundException;
 import com.fixup.payments.domain.HostedCheckoutGateway;
 import com.fixup.payments.domain.HostedCheckoutGateway.ProviderTransaction;
-import com.fixup.payments.domain.PaymentGateway;
 import com.fixup.payments.domain.PaymentStatus;
 import com.fixup.payments.domain.RepairPayment;
 import com.fixup.payments.domain.RepairPaymentMethod;
 import com.fixup.payments.domain.RepairPayments;
-import com.fixup.payments.domain.SimulatedPaymentAttempts;
 import com.fixup.payments.domain.WompiCheckout;
 import com.fixup.payments.domain.WompiCheckouts;
+import com.fixup.shared.security.DatabaseActorContext;
 import java.net.URI;
-import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.time.Clock;
 import java.time.temporal.ChronoUnit;
@@ -41,8 +42,9 @@ import org.springframework.transaction.annotation.Transactional;
  *       ({@code FXR-…-XXXXXXXX}), la guarda con el monto exacto en centavos y devuelve la URL firmada.</li>
  *   <li>El pagador paga en la página de Wompi; FixUp nunca ve datos de tarjeta, PSE o Nequi.</li>
  *   <li>{@link #confirm} (al volver el navegador) y {@link #onEvent} (webhook firmado) consultan la
- *       transacción a Wompi con la llave privada y aplican el resultado. Los dos caminos convergen en
- *       {@link #settle} y son idempotentes: la llave de operación sale del id de la transacción.</li>
+ *       transacción a Wompi con la llave privada y aplican el resultado con un actor y su RLS. Los dos
+ *       caminos convergen en {@link WompiSettlement#settle} y son idempotentes: la llave de operación
+ *       sale del id de la transacción.</li>
  * </ol>
  * Un resultado PENDING no se registra: se vuelve a consultar hasta que Wompi lo resuelva.
  */
@@ -52,25 +54,26 @@ public class PayWithWompi {
     private static final String CURRENCY = "COP";
     private static final SecureRandom RANDOM = new SecureRandom();
 
+    static final String WEBHOOK_SUBJECT = "wompi:webhook";
+
     private final HostedCheckoutGateway wompi;
     private final WompiCheckouts checkouts;
     private final RepairPayments payments;
-    private final SimulatedPaymentAttempts attempts;
     private final PaymentAuthorization authorization;
-    private final SimulateRepairPayment recorder;
+    private final WompiSettlement settlement;
+    private final UserDirectory users;
     private final Clock clock;
     private final Set<String> returnOrigins;
 
     PayWithWompi(HostedCheckoutGateway wompi, WompiCheckouts checkouts, RepairPayments payments,
-            SimulatedPaymentAttempts attempts, PaymentAuthorization authorization, SimulateRepairPayment recorder,
-            Clock clock, @Value("${fixup.cors.allowed-origins:}") String corsOrigins,
+            PaymentAuthorization authorization, WompiSettlement settlement, UserDirectory users, Clock clock, @Value("${fixup.cors.allowed-origins:}") String corsOrigins,
             @Value("${fixup.payments.wompi.return-origins:}") String returnOrigins) {
         this.wompi = wompi;
         this.checkouts = checkouts;
         this.payments = payments;
-        this.attempts = attempts;
         this.authorization = authorization;
-        this.recorder = recorder;
+        this.settlement = settlement;
+        this.users = users;
         this.clock = clock;
         this.returnOrigins = Stream.concat(Arrays.stream(corsOrigins.split(",")), Arrays.stream(returnOrigins.split(",")))
                 .map(String::trim).filter(origin -> !origin.isEmpty())
@@ -103,23 +106,29 @@ public class PayWithWompi {
         return new WompiCheckoutSession(payment.id(), reference, amountInCents, CURRENCY, wompi.environment(), url);
     }
 
-    /** Llamado al volver del checkout con el id que Wompi agrega a la URL de retorno. */
-    @Transactional
+    /**
+     * Llamado al volver del checkout con el id que Wompi agrega a la URL de retorno. La consulta a
+     * Wompi va fuera de la transacción de base de datos (no retiene una conexión mientras Wompi
+     * responde); el resultado se aplica después, con el RLS del pagador.
+     */
     public WompiTransactionResult confirm(CurrentActor actor, UUID paymentId, String transactionId) {
         requireEnabled();
         var transaction = wompi.findTransaction(transactionId)
                 .orElseThrow(() -> new PaymentConflictException("WOMPI_TRANSACTION_NOT_FOUND",
                         "Wompi does not know this transaction"));
-        return settle(transaction, paymentId, actor);
+        return settlement.settle(transaction, paymentId, actor);
     }
 
     /**
      * Webhook {@code transaction.updated}. Solo se usa el id del evento firmado: el estado, el monto y
-     * la referencia se vuelven a pedir a Wompi. Corre sin actor, como los demás procesos internos.
+     * la referencia se vuelven a pedir a Wompi. El resultado no se aplica como proceso interno sin
+     * aislamiento: se aplica con la identidad de quien abrió el checkout (sus roles vigentes, leídos de
+     * la base), con las mismas reglas y el mismo RLS que cuando él vuelve del checkout. Si ya no es el
+     * pagador vigente, no se registra nada y la transacción queda "sin registrar" en la conciliación.
      *
      * @return falso si el evento no es auténtico
+     * @throws PaymentGatewayUnavailableException si Wompi no responde: el 503 hace que Wompi reintente
      */
-    @Transactional
     public boolean onEvent(String rawEvent, String checksumHeader) {
         var transactionId = wompi.verifiedTransactionId(rawEvent, checksumHeader);
         if (transactionId.isEmpty()) {
@@ -130,84 +139,36 @@ public class PayWithWompi {
             log.warn("Evento de Wompi para la transacción {} que la API no reconoce", transactionId.get());
             return true;
         }
+        var opener = settlement.openerOf(transaction.get().reference());
+        if (opener.isEmpty()) {
+            log.warn("Evento de Wompi no aplicado: la referencia de la transacción {} no es de FixUp",
+                    transaction.get().id());
+            return true;
+        }
+        Set<Role> roles = Stream.of(Role.OWNER, Role.REAL_ESTATE_MANAGER)
+                .filter(role -> users.hasActiveRole(opener.get(), role))
+                .collect(Collectors.toUnmodifiableSet());
+        if (roles.isEmpty()) {
+            log.warn("Evento de Wompi no aplicado: quien abrió el checkout de la transacción {} ya no puede pagar",
+                    transaction.get().id());
+            return true;
+        }
+        var actor = new CurrentActor(opener.get(), WEBHOOK_SUBJECT, roles, UserStatus.ACTIVE);
+        var previous = DatabaseActorContext.current();
+        DatabaseActorContext.set(new DatabaseActorContext.Actor(opener.get(),
+                roles.stream().map(Enum::name).collect(Collectors.toUnmodifiableSet())));
         try {
-            var result = settle(transaction.get(), null, null);
+            var result = settlement.settle(transaction.get(), null, actor);
             log.info("Evento de Wompi aplicado: transacción {} {} -> pago {}", result.transactionId(),
                     result.transactionStatus(), result.paymentStatus());
-        } catch (PaymentConflictException ignored) {
-            // Una referencia ajena a FixUp o inconsistente no se reintenta: Wompi solo reenvía si no hay 200.
-            log.warn("Evento de Wompi no aplicado ({}): {}", ignored.code(), ignored.getMessage());
+        } catch (PaymentConflictException | PaymentAccessDeniedException notApplied) {
+            // No se reintenta: Wompi solo reenvía si no hay 200, y el caso queda en la conciliación.
+            log.warn("Evento de Wompi no aplicado para la transacción {}: {}", transaction.get().id(),
+                    notApplied.getMessage());
+        } finally {
+            previous.ifPresentOrElse(DatabaseActorContext::set, DatabaseActorContext::clear);
         }
         return true;
-    }
-
-    private WompiTransactionResult settle(ProviderTransaction transaction, UUID expectedPaymentId, CurrentActor actor) {
-        var checkout = checkouts.findByReference(transaction.reference())
-                .orElseThrow(() -> new PaymentConflictException("WOMPI_REFERENCE_UNKNOWN",
-                        "The Wompi transaction does not belong to a FixUp checkout"));
-        if (expectedPaymentId != null && !checkout.paymentId().equals(expectedPaymentId)) {
-            throw new PaymentConflictException("WOMPI_PAYMENT_MISMATCH",
-                    "The Wompi transaction belongs to another payment");
-        }
-        if (transaction.amountInCents() != checkout.amountInCents() || !CURRENCY.equals(transaction.currency())) {
-            throw new PaymentConflictException("WOMPI_AMOUNT_MISMATCH",
-                    "The Wompi transaction amount differs from the checkout");
-        }
-        var payment = payments.findByIdForUpdate(checkout.paymentId()).orElseThrow(PaymentNotFoundException::new);
-        if (actor != null) {
-            authorization.requirePayer(actor, payment);
-        }
-        if (Math.multiplyExact(payment.amount(), 100L) != checkout.amountInCents()) {
-            throw new PaymentConflictException("WOMPI_AMOUNT_MISMATCH", "The payment amount changed after checkout");
-        }
-
-        UUID operationKey = UUID.nameUUIDFromBytes(("wompi:" + transaction.id()).getBytes(StandardCharsets.UTF_8));
-        var previous = attempts.findByOperation(payment.id(), operationKey);
-        if (previous.isPresent()) {
-            return WompiTransactionResult.of(transaction, payment.status(), PaymentAttemptResult.of(previous.get()));
-        }
-
-        PaymentStatus outcome = switch (transaction.status()) {
-            case "APPROVED" -> PaymentStatus.APPROVED;
-            case "DECLINED", "VOIDED" -> PaymentStatus.DECLINED;
-            case "ERROR" -> PaymentStatus.ERROR;
-            default -> PaymentStatus.PENDING;
-        };
-        if (outcome == PaymentStatus.PENDING) {
-            return WompiTransactionResult.of(transaction, payment.status(), null);
-        }
-        if (payment.status() == PaymentStatus.APPROVED) {
-            if (outcome == PaymentStatus.APPROVED) {
-                // El pago ya estaba cubierto por otra transacción: no se crea un segundo ingreso.
-                log.error("Doble cobro en Wompi: la transacción {} aprobó el pago {} que ya estaba aprobado; "
-                        + "hay que reembolsarla desde el panel de Wompi", transaction.id(), payment.id());
-            }
-            return WompiTransactionResult.of(transaction, payment.status(), null);
-        }
-
-        UUID attemptedBy = actor != null ? actor.internalUserId() : checkout.createdByUserId();
-        String scenario = ("WOMPI_" + (transaction.paymentMethodType() == null ? "CHECKOUT"
-                : transaction.paymentMethodType())).toUpperCase(Locale.ROOT);
-        String failure = switch (outcome) {
-            case DECLINED -> "VOIDED".equals(transaction.status()) ? "Wompi anuló la transacción"
-                    : "Wompi rechazó la transacción" + reason(transaction);
-            case ERROR -> "Wompi reportó un error en la transacción" + reason(transaction);
-            default -> null;
-        };
-        var processed = recorder.record(attemptedBy, payment,
-                new PaymentAttemptCommand(payment.reference(), payment.amount(), PaymentMethod.WOMPI, operationKey),
-                scenario.length() > 32 ? scenario.substring(0, 32) : scenario,
-                new PaymentGateway.Result(outcome, transaction.id(), failure));
-        return WompiTransactionResult.of(transaction, processed.detail().status(), processed.result());
-    }
-
-    private static String reason(ProviderTransaction transaction) {
-        String message = transaction.statusMessage();
-        if (message == null || message.isBlank()) {
-            return "";
-        }
-        String trimmed = message.strip();
-        return ": " + (trimmed.length() > 200 ? trimmed.substring(0, 200) : trimmed);
     }
 
     private String validatedReturnUrl(String returnUrl, UUID paymentId) {

@@ -57,8 +57,8 @@ fixup:
       private-key: ${WOMPI_PRIVATE_KEY:}
       integrity-secret: ${WOMPI_INTEGRITY_SECRET:}
       events-secret: ${WOMPI_EVENTS_SECRET:}
+      # Solo sandbox: vacío usa https://sandbox.wompi.co/v1; otra URL solo se acepta si es local (pruebas).
       api-base-url: ${WOMPI_API_BASE_URL:}
-      checkout-url: ${WOMPI_CHECKOUT_URL:https://checkout.wompi.co/p/}
       # Orígenes del frontend a los que Wompi puede devolver al pagador, además de los de CORS.
       return-origins: ${WOMPI_RETURN_ORIGINS:}
       connect-timeout: ${WOMPI_CONNECT_TIMEOUT:3s}

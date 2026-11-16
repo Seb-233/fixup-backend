@@ -61,7 +61,7 @@ class PostgresDigitalPaymentMigrationIT {
         var historicalPayout=jdbc.queryForMap("SELECT * FROM payouts");
         var historicalJob=jdbc.queryForMap("SELECT * FROM jobs");
         var latest = configuration.target("latest").load();
-        // V41-V42 (cutover) and V43-V44 (INT-01, Wompi checkouts).
+        // V41-V42 (cutover) and V45-V46 (INT-01, Wompi checkouts; V43-V44 belong to the status audit log).
         assertThat(latest.migrate().migrationsExecuted).isEqualTo(4);
         latest.validate();
         assertThat(latest.info().applied()).hasSize(43);

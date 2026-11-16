@@ -12,8 +12,10 @@ import java.net.InetSocketAddress;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.time.LocalDate;
 import java.util.Arrays;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 import org.junit.jupiter.api.AfterEach;
@@ -40,13 +42,54 @@ class WompiPaymentGatewayTest {
 
     @Test
     void disabledUntilAllFourKeysExist() {
-        var partial = new WompiPaymentGateway("pub_test_x", "prv_test_x", "", EVENTS_SECRET, "", "https://checkout.wompi.co/p/",
+        var partial = new WompiPaymentGateway("pub_test_x", "prv_test_x", "", EVENTS_SECRET, "",
                 Duration.ofSeconds(1), Duration.ofSeconds(1), new ObjectMapper());
         assertThat(partial.enabled()).isFalse();
         assertThatThrownBy(() -> partial.checkoutUrl(new CheckoutRequest("R", 100, "COP", null)))
                 .isInstanceOf(PaymentGatewayUnavailableException.class);
         assertThat(gateway("http://127.0.0.1:1").enabled()).isTrue();
         assertThat(gateway("http://127.0.0.1:1").environment()).isEqualTo("sandbox");
+    }
+
+    @Test
+    void productionCredentialsAreRejectedAndNothingIsSentToWompi() throws IOException {
+        var requests = new AtomicInteger();
+        server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/", exchange -> {
+            requests.incrementAndGet();
+            exchange.sendResponseHeaders(200, -1);
+            exchange.close();
+        });
+        server.start();
+        String local = "http://127.0.0.1:" + server.getAddress().getPort() + "/v1";
+        var production = gateway("pub_prod_key", "prv_prod_key", "prod_integrity_key", "prod_events_key", local);
+        var mixed = gateway("pub_test_key", "prv_prod_key", "test_integrity_key", EVENTS_SECRET, local);
+
+        for (var wompi : java.util.List.of(production, mixed)) {
+            assertThat(wompi.enabled()).isFalse();
+            assertThat(wompi.environment()).isEqualTo("sandbox");
+            assertThatThrownBy(() -> wompi.checkoutUrl(new CheckoutRequest("R", 100, "COP", null)))
+                    .isInstanceOf(PaymentGatewayUnavailableException.class).hasMessageContaining("not configured");
+            assertThatThrownBy(() -> wompi.findTransaction("1234-1-1")).isInstanceOf(PaymentGatewayUnavailableException.class);
+            assertThatThrownBy(() -> wompi.listTransactions(LocalDate.of(2026, 11, 1), LocalDate.of(2026, 11, 14), null, 1, 10))
+                    .isInstanceOf(PaymentGatewayUnavailableException.class);
+            String prodEvent = event(WompiPaymentGateway.sha256("1234-1610641025-49201APPROVED10000000" + "1530291411"
+                    + "prod_events_key"), "prod");
+            assertThat(wompi.verifiedTransactionId(prodEvent, null)).isEmpty();
+        }
+        assertThat(requests.get()).as("ninguna petición sale hacia la API").isZero();
+    }
+
+    @Test
+    void onlyTheSandboxApiOrALocalTestDoubleIsAccepted() {
+        assertThat(gateway("").enabled()).as("vacío = sandbox.wompi.co").isTrue();
+        assertThat(gateway(WompiPaymentGateway.SANDBOX_API).enabled()).isTrue();
+        assertThat(gateway("http://localhost:8099/v1").enabled()).isTrue();
+        assertThat(gateway("https://production.wompi.co/v1").enabled()).isFalse();
+        assertThat(gateway("https://evil.example/v1").enabled()).isFalse();
+        assertThat(gateway("https://sandbox.wompi.co.evil.example/v1").enabled()).isFalse();
+        assertThat(gateway("http://user@127.0.0.1:8099/v1").enabled()).isFalse();
+        assertThat(gateway("not a url").enabled()).isFalse();
     }
 
     @Test
@@ -115,6 +158,21 @@ class WompiPaymentGatewayTest {
         assertThat(wompi.verifiedTransactionId(event(WompiPaymentGateway.sha256("forged"), "test"), null)).isEmpty();
         assertThat(wompi.verifiedTransactionId(event(checksum, "prod"), null)).isEmpty();
         assertThat(wompi.verifiedTransactionId("not json", null)).isEmpty();
+        // Eventos manipulados: otro id o monto con la firma original, sin ambiente, otro tipo, sin timestamp.
+        assertThat(wompi.verifiedTransactionId(event.replace("1234-1610641025-49201", "1234-1610641025-49202"), null)).isEmpty();
+        assertThat(wompi.verifiedTransactionId(event.replace("10000000", "100"), null)).isEmpty();
+        assertThat(wompi.verifiedTransactionId(event.replace("\"environment\":\"test\",", ""), null)).isEmpty();
+        assertThat(wompi.verifiedTransactionId(event.replace("transaction.updated", "nequi_token.updated"), null)).isEmpty();
+        assertThat(wompi.verifiedTransactionId(event.replace("\"timestamp\":1530291411,", ""), null)).isEmpty();
+        assertThat(wompi.verifiedTransactionId(event.replace("1530291411", "1530291412"), null)).isEmpty();
+    }
+
+    @Test
+    void theSignatureMustCoverTheTransactionId() {
+        var wompi = gateway("http://127.0.0.1:1");
+        String checksum = WompiPaymentGateway.sha256("APPROVED10000000" + "1530291411" + EVENTS_SECRET);
+        String unsignedId = event(checksum, "test").replace("\"transaction.id\",", "");
+        assertThat(wompi.verifiedTransactionId(unsignedId, null)).isEmpty();
     }
 
     static String event(String checksum, String environment) {
@@ -130,8 +188,11 @@ class WompiPaymentGatewayTest {
     }
 
     private static WompiPaymentGateway gateway(String apiBaseUrl) {
-        return new WompiPaymentGateway("pub_test_key", "prv_test_key", "test_integrity_key", EVENTS_SECRET,
-                apiBaseUrl, "https://checkout.wompi.co/p/", Duration.ofSeconds(1), Duration.ofSeconds(2),
+        return gateway("pub_test_key", "prv_test_key", "test_integrity_key", EVENTS_SECRET, apiBaseUrl);
+    }
+
+    private static WompiPaymentGateway gateway(String pub, String prv, String integrity, String events, String apiBaseUrl) {
+        return new WompiPaymentGateway(pub, prv, integrity, events, apiBaseUrl, Duration.ofSeconds(1), Duration.ofSeconds(2),
                 new ObjectMapper());
     }
 }

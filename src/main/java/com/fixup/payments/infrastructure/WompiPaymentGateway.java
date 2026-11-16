@@ -18,6 +18,7 @@ import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.Set;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
@@ -42,19 +43,29 @@ import org.springframework.web.client.RestClientException;
  * </ul>
  * Los tiempos de conexión y lectura son cortos (táctica timeout): si Wompi no responde, el pago
  * queda como estaba y el pagador puede volver a verificar.
+ *
+ * <p><b>Solo sandbox (fail-closed).</b> El alcance académico autoriza únicamente el ambiente de
+ * pruebas, también en la instancia pública. El adaptador no conoce la URL de producción: se habilita
+ * solo si las cuatro llaves son de prueba ({@code pub_test_}, {@code prv_test_},
+ * {@code test_integrity_}, {@code test_events_}) y la API es la del sandbox. Una llave de producción,
+ * una mezcla de ambientes o una URL de API externa distinta del sandbox lo dejan apagado (no
+ * arranca a medias), y entonces ninguna operación sale hacia Wompi. Una URL de API local
+ * (loopback) se acepta solo para las pruebas automáticas con un Wompi falso.
  */
 @Component
 class WompiPaymentGateway implements HostedCheckoutGateway {
     private static final Logger log = LoggerFactory.getLogger(WompiPaymentGateway.class);
     private static final Pattern TRANSACTION_ID = Pattern.compile("[A-Za-z0-9-]{1,64}");
-    private static final String SANDBOX_API = "https://sandbox.wompi.co/v1";
-    private static final String PRODUCTION_API = "https://production.wompi.co/v1";
+    static final String SANDBOX_API = "https://sandbox.wompi.co/v1";
+    /** Wompi atiende el checkout de los dos ambientes en el mismo host; el ambiente sale de la llave. */
+    static final String CHECKOUT_URL = "https://checkout.wompi.co/p/";
+    private static final Set<String> LOOPBACK = Set.of("localhost", "127.0.0.1", "[::1]");
 
     private final String publicKey;
     private final String privateKey;
     private final String integritySecret;
     private final String eventsSecret;
-    private final String checkoutUrl;
+    private final boolean enabled;
     private final RestClient rest;
     private final ObjectMapper mapper;
 
@@ -63,37 +74,66 @@ class WompiPaymentGateway implements HostedCheckoutGateway {
             @Value("${fixup.payments.wompi.integrity-secret:}") String integritySecret,
             @Value("${fixup.payments.wompi.events-secret:}") String eventsSecret,
             @Value("${fixup.payments.wompi.api-base-url:}") String apiBaseUrl,
-            @Value("${fixup.payments.wompi.checkout-url:https://checkout.wompi.co/p/}") String checkoutUrl,
             @Value("${fixup.payments.wompi.connect-timeout:3s}") Duration connectTimeout,
             @Value("${fixup.payments.wompi.read-timeout:8s}") Duration readTimeout,
             ObjectMapper mapper) {
-        this.publicKey = publicKey.trim();
-        this.privateKey = privateKey.trim();
-        this.integritySecret = integritySecret.trim();
-        this.eventsSecret = eventsSecret.trim();
-        this.checkoutUrl = checkoutUrl.trim();
+        this.publicKey = publicKey == null ? "" : publicKey.trim();
+        this.privateKey = privateKey == null ? "" : privateKey.trim();
+        this.integritySecret = integritySecret == null ? "" : integritySecret.trim();
+        this.eventsSecret = eventsSecret == null ? "" : eventsSecret.trim();
         this.mapper = mapper;
+        String base = apiBaseUrl == null || apiBaseUrl.isBlank() ? SANDBOX_API : apiBaseUrl.trim();
+        this.enabled = acceptedConfiguration(base);
         var factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(connectTimeout);
         factory.setReadTimeout(readTimeout);
-        String base = apiBaseUrl == null || apiBaseUrl.isBlank()
-                ? (this.publicKey.startsWith("pub_prod_") ? PRODUCTION_API : SANDBOX_API)
-                : apiBaseUrl.trim();
-        this.rest = RestClient.builder().requestFactory(factory).baseUrl(base).build();
-        if (enabled()) {
-            log.info("Wompi habilitado en ambiente {} ({})", environment(), base);
+        // Sin configuración aceptada el cliente apunta a una dirección que no existe: aunque algún
+        // camino se saltara requireEnabled(), no habría a dónde enviar una transacción.
+        this.rest = RestClient.builder().requestFactory(factory).baseUrl(enabled ? base : "http://wompi.disabled.invalid")
+                .build();
+        if (enabled) {
+            log.info("Wompi habilitado en ambiente sandbox ({})", base);
+        }
+    }
+
+    private boolean acceptedConfiguration(String base) {
+        boolean any = !publicKey.isEmpty() || !privateKey.isEmpty() || !integritySecret.isEmpty() || !eventsSecret.isEmpty();
+        if (!any) {
+            return false;
+        }
+        var problems = new java.util.ArrayList<String>();
+        if (!publicKey.startsWith("pub_test_")) problems.add("la llave pública no es pub_test_");
+        if (!privateKey.startsWith("prv_test_")) problems.add("la llave privada no es prv_test_");
+        if (!integritySecret.startsWith("test_integrity_")) problems.add("el secreto de integridad no es test_integrity_");
+        if (!eventsSecret.startsWith("test_events_")) problems.add("el secreto de eventos no es test_events_");
+        if (!base.equals(SANDBOX_API) && !isLoopback(base)) problems.add("la URL de la API no es la del sandbox");
+        if (!problems.isEmpty()) {
+            // Nunca se registran los valores: solo qué regla falló.
+            log.error("Wompi queda deshabilitado: solo se admite el sandbox ({})", String.join("; ", problems));
+            return false;
+        }
+        return true;
+    }
+
+    private static boolean isLoopback(String base) {
+        try {
+            var uri = java.net.URI.create(base);
+            return ("http".equals(uri.getScheme()) || "https".equals(uri.getScheme()))
+                    && uri.getHost() != null && LOOPBACK.contains(uri.getHost().toLowerCase(Locale.ROOT))
+                    && uri.getRawUserInfo() == null;
+        } catch (IllegalArgumentException invalid) {
+            return false;
         }
     }
 
     @Override
     public boolean enabled() {
-        return !publicKey.isEmpty() && !privateKey.isEmpty() && !integritySecret.isEmpty()
-                && !eventsSecret.isEmpty();
+        return enabled;
     }
 
     @Override
     public String environment() {
-        return publicKey.startsWith("pub_prod_") ? "production" : "sandbox";
+        return "sandbox";
     }
 
     @Override
@@ -110,7 +150,7 @@ class WompiPaymentGateway implements HostedCheckoutGateway {
             params.put("redirect-url", request.redirectUrl());
         }
         // Igual que el formulario GET de la documentación de Wompi: nombres y valores codificados.
-        return checkoutUrl + "?" + params.entrySet().stream()
+        return CHECKOUT_URL + "?" + params.entrySet().stream()
                 .map(e -> encode(e.getKey()) + "=" + encode(e.getValue()))
                 .collect(Collectors.joining("&"));
     }
@@ -219,14 +259,22 @@ class WompiPaymentGateway implements HostedCheckoutGateway {
         if (!"transaction.updated".equals(event.path("event").asText())) {
             return Optional.empty();
         }
-        String expectedEnvironment = environment().equals("production") ? "prod" : "test";
-        if (event.hasNonNull("environment") && !expectedEnvironment.equals(event.path("environment").asText())) {
+        if (!"test".equals(event.path("environment").asText(""))) {
             log.warn("Evento de Wompi descartado: ambiente {} distinto al configurado", event.path("environment").asText());
             return Optional.empty();
         }
         JsonNode properties = event.path("signature").path("properties");
         String checksum = event.path("signature").path("checksum").asText("");
         if (!properties.isArray() || properties.isEmpty() || checksum.isEmpty() || !event.hasNonNull("timestamp")) {
+            return Optional.empty();
+        }
+        // El id que se usa debe estar firmado: sin esto, un evento auténtico podría reusarse con otro id.
+        boolean idSigned = false;
+        for (JsonNode property : properties) {
+            idSigned |= "transaction.id".equals(property.asText());
+        }
+        if (!idSigned) {
+            log.warn("Evento de Wompi descartado: la firma no cubre transaction.id");
             return Optional.empty();
         }
         var concatenated = new StringBuilder();

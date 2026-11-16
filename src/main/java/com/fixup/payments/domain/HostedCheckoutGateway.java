@@ -15,7 +15,7 @@ public interface HostedCheckoutGateway {
     /** Falso mientras falte alguna llave: la pasarela simulada sigue disponible. */
     boolean enabled();
 
-    /** {@code sandbox} o {@code production}, según las llaves configuradas. */
+    /** Siempre {@code sandbox}: el alcance académico no admite producción (ver el adaptador). */
     String environment();
 
     /** URL firmada del checkout alojado para una referencia y un monto exactos. */
