@@ -11,6 +11,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fixup.testsupport.IntegrationDatabaseCleaner;
 import java.sql.DriverManager;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -58,17 +60,15 @@ class PostgresLedgerRestrictedRuntimeIT {
 
     @DynamicPropertySource
     static void postgres(DynamicPropertyRegistry registry) throws Exception {
-        // Los roles existen antes de migrar: las migraciones los crean solo si faltan, y así el rol
-        // de ejecución puede asumirlos (SET ROLE) sin heredar sus permisos.
+        // Solo el rol habitual de peticiones se aprovisiona antes de Flyway. El auditor y su
+        // concesión al runtime deben venir de V48 y del script operativo, respectivamente.
         try (var connection = DriverManager.getConnection(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(),
                 POSTGRES.getPassword()); var statement = connection.createStatement()) {
             statement.execute("""
                     CREATE ROLE fixup_app NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
-                    CREATE ROLE fixup_ledger_auditor NOLOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE
-                        NOREPLICATION NOBYPASSRLS;
                     CREATE ROLE %s LOGIN PASSWORD '%s' NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION
                         NOBYPASSRLS;
-                    GRANT fixup_app, fixup_ledger_auditor TO %s WITH INHERIT FALSE, SET TRUE;
+                    GRANT fixup_app TO %s WITH INHERIT FALSE, SET TRUE;
                     ALTER DEFAULT PRIVILEGES IN SCHEMA public
                         GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO %s;
                     """.formatted(RUNTIME, RUNTIME_PASSWORD, RUNTIME, RUNTIME));
@@ -86,15 +86,22 @@ class PostgresLedgerRestrictedRuntimeIT {
     @Autowired JdbcTemplate runtime;
 
     private static DriverManagerDataSource administratorSource;
+    private static boolean readerProvisioned;
     private JdbcTemplate administrator;
 
     @BeforeEach
-    void cleanAsAdministrator() {
+    void cleanAsAdministrator() throws Exception {
         if (administratorSource == null) {
             administratorSource = new DriverManagerDataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(),
                     POSTGRES.getPassword());
         }
         administrator = new JdbcTemplate(administratorSource);
+        if (!readerProvisioned) {
+            assertThat(administrator.queryForObject("SELECT pg_has_role(?, 'fixup_ledger_auditor', 'MEMBER')",
+                    Boolean.class, RUNTIME)).as("Flyway no concede el lector al login de la aplicación").isFalse();
+            provisionReader(RUNTIME);
+            readerProvisioned = true;
+        }
         SecurityContextHolder.clearContext();
         new IntegrationDatabaseCleaner(administrator, new DataSourceTransactionManager(administratorSource)).clean();
     }
@@ -102,6 +109,47 @@ class PostgresLedgerRestrictedRuntimeIT {
     @AfterAll
     static void forget() {
         administratorSource = null;
+        readerProvisioned = false;
+    }
+
+    @Test
+    void provisioningIsRequiredRepeatableAndDoesNotInheritFinancialReads() throws Exception {
+        administrator.execute("REVOKE fixup_ledger_auditor FROM " + RUNTIME);
+        try {
+            assertThatThrownBy(() -> asAuditor("SELECT COUNT(*) FROM repair_payments"))
+                    .hasStackTraceContaining("permission denied");
+        } finally {
+            provisionReader(RUNTIME);
+        }
+        provisionReader(RUNTIME);
+        assertThat(administrator.queryForMap("""
+                SELECT m.inherit_option, m.set_option, m.admin_option FROM pg_auth_members m
+                JOIN pg_roles granted ON granted.oid = m.roleid
+                JOIN pg_roles member ON member.oid = m.member
+                WHERE granted.rolname = 'fixup_ledger_auditor' AND member.rolname = ?
+                """, RUNTIME)).containsEntry("inherit_option", false).containsEntry("set_option", true)
+                .containsEntry("admin_option", false);
+        assertThat(administrator.queryForObject(
+                "SELECT pg_has_role('fixup_app', 'fixup_ledger_auditor', 'MEMBER')", Boolean.class)).isFalse();
+        new LedgerFixture(administrator).seed();
+        assertThat(asAuditor("SELECT COUNT(*) FROM repair_payments")).isEqualTo(7L);
+        assertThat(runtime.queryForObject("SELECT current_user", String.class)).isEqualTo(RUNTIME);
+        assertThat(runtime.queryForObject("SELECT COUNT(*) FROM repair_payments", Long.class)).isZero();
+        assertThat(runtime.queryForObject("SELECT has_schema_privilege(current_user, 'public', 'CREATE')",
+                Boolean.class)).isFalse();
+        assertThat(administrator.queryForObject(
+                "SELECT COUNT(*) FROM pg_tables WHERE schemaname = 'public' AND tableowner = ?",
+                Integer.class, RUNTIME)).isZero();
+    }
+
+    @Test
+    void provisioningRejectsMissingUnknownAndPrivilegedLogins() {
+        for (String login : java.util.List.of("", "unknown-runtime", "fixup_app", POSTGRES.getUsername(),
+                "fixup_runtime; GRANT fixup_ledger_auditor TO fixup_app")) {
+            assertThatThrownBy(() -> provisionReader(login)).as(login).hasStackTraceContaining("PSQLException");
+        }
+        assertThat(administrator.queryForObject(
+                "SELECT pg_has_role('fixup_app', 'fixup_ledger_auditor', 'MEMBER')", Boolean.class)).isFalse();
     }
 
     @Test
@@ -190,6 +238,21 @@ class PostgresLedgerRestrictedRuntimeIT {
     }
 
     /** Corre una consulta como lo hace la conciliación: la conexión de la aplicación con SET LOCAL ROLE. */
+    private void provisionReader(String login) throws Exception {
+        String sql = Files.readString(Path.of("scripts", "provision-ledger-reader.sql"));
+        administrator.execute((org.springframework.jdbc.core.ConnectionCallback<Void>) connection -> {
+            try (var parameter = connection.prepareStatement("SELECT set_config('fixup.ledger_runtime_role', ?, false)")) {
+                parameter.setString(1, login);
+                parameter.execute();
+            }
+            try (var statement = connection.createStatement()) {
+                statement.execute(sql);
+            }
+            return null;
+        });
+    }
+
+    /** El rol se restablece al terminar la transacción y no contamina el pool. */
     private Long asAuditor(String sql) {
         return runtime.execute((org.springframework.jdbc.core.ConnectionCallback<Long>) connection -> {
             boolean autoCommit = connection.getAutoCommit();

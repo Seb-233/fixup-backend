@@ -40,7 +40,7 @@ import org.springframework.transaction.support.TransactionTemplate;
  * foto aunque entren pagos mientras tanto.
  *
  * <p>La lectura corre en un hilo propio, sin actor, y dentro de la transacción pasa al rol lector
- * fixup_ledger_auditor (V47): RLS limita a cada usuario a sus propias filas y, sin actor, un rol
+ * fixup_ledger_auditor (V48): RLS limita a cada usuario a sus propias filas y, sin actor, un rol
  * restringido no ve ninguna, así que la conciliación no puede depender de quién la pide ni de con
  * qué usuario se conecta la aplicación. Devuelve totales y hasta 20 identificadores por regla,
  * nunca datos personales.

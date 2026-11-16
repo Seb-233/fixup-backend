@@ -55,7 +55,7 @@ sandbox, así que la regla "pago aprobado sin intento aprobado" las cubre sin ca
 Las tablas del libro tienen `FORCE ROW LEVEL SECURITY`. Sin actor, un rol que no sea superusuario no
 ve filas, y una conciliación sobre cero filas diría "cuadra". Por eso la conciliación no depende del
 usuario con que se conecta la aplicación: dentro de su transacción hace
-`SET LOCAL ROLE fixup_ledger_auditor` (migración V47).
+`SET LOCAL ROLE fixup_ledger_auditor` (migración V48).
 
 - Sin login, sin herencia, sin `BYPASSRLS`. RLS le aplica: lo que ve lo decide una política
   `ledger_audit_read` por tabla del libro.
@@ -65,6 +65,34 @@ usuario con que se conecta la aplicación: dentro de su transacción hace
 - Si no puede asumir el rol o le falta un permiso, la corrida falla y responde 503.
 
 Si una regla nueva necesita otra columna, hay que concederla en una migración.
+
+### Aprovisionar un runtime distinto de Flyway
+
+V48 concede el lector al migrador (`CURRENT_USER`), siguiendo V10. Cuando la aplicación usa otro
+login, es obligatorio ejecutar **después de migrar y antes de habilitar la conciliación** el script
+administrativo `scripts/provision-ledger-reader.sql`. Es un paso de aprovisionamiento, no una
+operación del backend. No se cambian Kubernetes, `fixup_app` ni las credenciales de la aplicación.
+
+Ejemplo con un servicio libpq de administración ya configurado (sin contraseñas en la línea):
+
+```sh
+psql 'service=fixup-migrations' -X --set=ON_ERROR_STOP=1 \
+  --command="SET fixup.ledger_runtime_role = 'runtime_login';" \
+  --file=scripts/provision-ledger-reader.sql
+```
+
+Sustituir `runtime_login` por el login autorizado de ese entorno y usar el esquema de la aplicación
+en `search_path`. El script valida que sea un login diferente al administrador, sin superusuario,
+`BYPASSRLS`, creación de roles/bases, replicación, propiedad de objetos ni `CREATE` en el esquema.
+Rechaza una configuración insegura del lector o su acceso desde `fixup_app`. Solo concede
+`fixup_ledger_auditor` con `ADMIN FALSE, INHERIT FALSE, SET TRUE`; no otorga privilegios de tablas.
+Es atómico e idempotente. Sin este paso, una lectura imposible devuelve 503 y el despliegue no está
+preparado. No se debe ejecutar contra Blue/Green o bases compartidas durante las pruebas locales.
+
+`PostgresLedgerRestrictedRuntimeIT` ejecuta el mismo archivo operativo: Flyway crea el auditor
+como administrador, el runtime arranca sin su membresía, y el script la concede después. La prueba
+revoca y repone la concesión, comprueba que no hay herencia ni opción de administración y que
+`SET LOCAL ROLE` se revierte al terminar la transacción.
 
 ## Límites de operación
 
@@ -91,6 +119,17 @@ Hoy el despliegue solo expone `/actuator/health`; las métricas quedan registrad
 mismo resultado sale en el log (`Conciliación de pagos ...`, nivel WARN o ERROR si hay problema).
 
 ## Pruebas
+
+La versión del lector es **V48**: V43/V44 se reservan para Auditoría (#57), V45/V46/V47 para
+Wompi (#54). Antes de instalar en una base existente hay que comprobar que ninguna V47 de
+conciliación se haya aplicado: si existe, detener la actualización y revisar ese historial; no
+renombrar una migración aplicada ni activar `outOfOrder`. La validación aislada de esta rama no
+equivale a validar la secuencia completa #57 → #54 → #61.
+
+El contrato prueba ingresos sin pago un segundo antes de `flyway_schema_history.installed_on`
+de V41, exactamente en el corte y un segundo después. El primero sigue sumando como histórico;
+los otros dos generan `EARNING_WITHOUT_APPROVED_PAYMENT`. La comisión de un ingreso histórico
+también se valida: la excepción histórica no excluye sus importes del libro.
 
 - `LedgerReconciliationContextTest` (H2) y `PostgresLedgerReconciliationIT`: libro representativo sin
   falsos positivos, un descuadre real por cada una de las nueve reglas, autorización 401/403/200,

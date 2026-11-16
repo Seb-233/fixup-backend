@@ -15,7 +15,7 @@ import org.springframework.stereotype.Repository;
  * plano, compatible con PostgreSQL y con el H2 de las pruebas, para poder correrlas también a mano
  * desde un cliente de base de datos durante la demostración.
  *
- * <p>Solo usan las columnas que el rol fixup_ledger_auditor puede leer (V47): si una regla nueva
+ * <p>Solo usan las columnas que el rol fixup_ledger_auditor puede leer (V48): si una regla nueva
  * necesita otra columna, hay que concederla en una migración o PostgreSQL rechaza la consulta.
  */
 @Repository

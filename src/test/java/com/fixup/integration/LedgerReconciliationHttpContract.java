@@ -198,6 +198,44 @@ abstract class LedgerReconciliationHttpContract {
     // ---------- una anomalía real por cada una de las nueve reglas ----------
 
     @Test
+    void theHistoricalBoundaryComesFromTheRecordedV41AndIncludesTheExactCutover() throws Exception {
+        var ledger = seededLedger();
+        var orphan = new LedgerFixture.Case();
+        ledger.write(db -> ledger.earning(db, orphan, ledger.fixer1, 70_000, "AVAILABLE", LedgerFixture.now()));
+        String cutover = "(SELECT CAST(\"installed_on\" AS TIMESTAMP WITH TIME ZONE) "
+                + "FROM \"flyway_schema_history\" WHERE \"version\" = '41')";
+        ledger.tamper("UPDATE fixer_earnings SET created_at = " + cutover + " - INTERVAL '1' SECOND WHERE id = ?",
+                orphan.earning);
+
+        JsonNode historical = reconcile();
+        assertThat(historical.get("consistent").asBoolean()).as(historical.toPrettyString()).isTrue();
+        assertThat(historical.get("totals").get("legacyEarningsGross").asLong())
+                .isEqualTo(LedgerFixture.LEGACY_GROSS + 70_000);
+
+        for (String moment : List.of(cutover, cutover + " + INTERVAL '1' SECOND")) {
+            ledger.tamper("UPDATE fixer_earnings SET created_at = " + moment + " WHERE id = ?", orphan.earning);
+            JsonNode digital = reconcile();
+            assertBroken(digital, Map.of("EARNING_WITHOUT_APPROVED_PAYMENT", orphan.earning));
+            assertUnbalanced(digital, "EVERY_EARNING_HAS_ONE_ORIGIN");
+            assertThat(digital.get("totals").get("legacyEarningsGross").asLong())
+                    .isEqualTo(LedgerFixture.LEGACY_GROSS);
+        }
+    }
+
+    @Test
+    void historicalEarningsStillHaveTheirCommissionValidated() throws Exception {
+        var ledger = seededLedger();
+        ledger.tamper("UPDATE fixer_earnings SET commission_amount = commission_amount - 1, "
+                + "net_amount = net_amount + 1 WHERE id = ?", ledger.beforeTheLedger.earning);
+
+        JsonNode report = reconcile();
+        assertBroken(report, Map.of("EARNING_COMMISSION_MISMATCH", ledger.beforeTheLedger.earning));
+        assertUnbalanced(report);
+        assertThat(report.get("totals").get("legacyEarningsGross").asLong())
+                .isEqualTo(LedgerFixture.LEGACY_GROSS);
+    }
+
+    @Test
     void rule1AServicePaymentThatLostItsEarning() throws Exception {
         var ledger = seededLedger();
         ledger.tamper("DELETE FROM fixer_earnings WHERE id = ?", ledger.heldService.earning);

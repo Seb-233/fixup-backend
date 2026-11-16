@@ -34,6 +34,9 @@ $$;
 -- Igual que fixup_app en V10: la conexión de la aplicación puede hacer SET LOCAL ROLE sin otra
 -- contraseña ni otro datasource. Sin herencia: fuera de la conciliación, esa conexión no gana las
 -- lecturas del auditor; solo las tiene mientras dura el SET LOCAL ROLE.
+-- Si Flyway usa otro login, el administrador debe ejecutar después
+-- scripts/provision-ledger-reader.sql para el runtime restringido. CURRENT_USER solo cubre al
+-- migrador; no se presupone que sea el usuario de ejecución ni se concede este rol a fixup_app.
 GRANT fixup_ledger_auditor TO CURRENT_USER WITH INHERIT FALSE, SET TRUE;
 
 GRANT USAGE ON SCHEMA "${flyway:defaultSchema}" TO fixup_ledger_auditor;
