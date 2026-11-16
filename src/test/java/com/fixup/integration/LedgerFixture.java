@@ -44,7 +44,6 @@ final class LedgerFixture {
     static final long COMPOSED_PAYOUT = 720_000L + 180_000L;
     static final long LEGACY_PAYOUT = 82_500L;
 
-    private static final OffsetDateTime NOW = OffsetDateTime.now(ZoneOffset.UTC).withNano(0);
     private static final OffsetDateTime BEFORE_THE_LEDGER = OffsetDateTime.of(2020, 3, 1, 12, 0, 0, 0, ZoneOffset.UTC);
 
     final UUID owner1 = UUID.randomUUID();
@@ -119,21 +118,21 @@ final class LedgerFixture {
             payment(db, heldService, owner1, fixer1, 450_000, "SERVICE", "APPROVED");
             attempt(db, heldService.payment, UUID.randomUUID(), "DECLINED", owner1);
             attempt(db, heldService.payment, heldService.approvedAttempt, "APPROVED", owner1);
-            earning(db, heldService, fixer1, 450_000, "HELD", NOW);
+            earning(db, heldService, fixer1, 450_000, "HELD", now());
 
             payment(db, availableService, owner2, fixer1, 1_200_000, "SERVICE", "APPROVED");
             enrichedAttempt(db, availableService, 1_200_000, owner2);
-            earning(db, availableService, fixer1, 1_200_000, "AVAILABLE", NOW);
+            earning(db, availableService, fixer1, 1_200_000, "AVAILABLE", now());
 
             payment(db, paidOutService, owner1, fixer2, 800_000, "SERVICE", "APPROVED");
             attempt(db, paidOutService.payment, paidOutService.approvedAttempt, "APPROVED", owner1);
-            earning(db, paidOutService, fixer2, 800_000, "PAID_OUT", NOW);
+            earning(db, paidOutService, fixer2, 800_000, "PAID_OUT", now());
 
             cashSettlement(db, paidDebt, owner3, fixer2, 300_000, 100_000);
             debt(db, paidDebt, owner3, fixer2, 200_000, "PAID");
             payment(db, paidDebt, owner3, fixer2, 200_000, "OUTSTANDING_BALANCE", "APPROVED");
             attempt(db, paidDebt.payment, paidDebt.approvedAttempt, "APPROVED", owner3);
-            earning(db, paidDebt, fixer2, 200_000, "PAID_OUT", NOW);
+            earning(db, paidDebt, fixer2, 200_000, "PAID_OUT", now());
 
             payout(db, composedPayout, fixer2, COMPOSED_PAYOUT, 2, UUID.randomUUID());
             payoutEntry(db, paidOutService.earning, composedPayout, fixer2, 720_000);
@@ -141,7 +140,7 @@ final class LedgerFixture {
 
             payment(db, secondAvailableService, owner2, fixer2, 600_000, "SERVICE", "APPROVED");
             attempt(db, secondAvailableService.payment, secondAvailableService.approvedAttempt, "APPROVED", owner2);
-            earning(db, secondAvailableService, fixer2, 600_000, "AVAILABLE", NOW);
+            earning(db, secondAvailableService, fixer2, 600_000, "AVAILABLE", now());
 
             cashSettlement(db, cashInFull, owner1, fixer1, 250_000, 250_000);
 
@@ -172,8 +171,8 @@ final class LedgerFixture {
                 INSERT INTO repair_payments (id, quotation_id, request_id, owner_user_id, fixer_user_id, amount,
                     payment_method, purpose, status, created_at, updated_at, completed_at, reference)
                 VALUES (?, ?, ?, ?, ?, ?, 'TRANSFER', ?, ?, ?, ?, ?, ?)
-                """, c.payment, c.quotation, c.request, owner, fixer, amount, purpose, status, NOW, NOW,
-                status.equals("APPROVED") ? NOW : null, reference(c.payment));
+                """, c.payment, c.quotation, c.request, owner, fixer, amount, purpose, status, now(), now(),
+                status.equals("APPROVED") ? now() : null, reference(c.payment));
     }
 
     void attempt(JdbcTemplate db, UUID payment, UUID id, String outcome, UUID payer) {
@@ -181,7 +180,7 @@ final class LedgerFixture {
                 INSERT INTO simulated_payment_attempts (id, payment_id, requested_outcome, resulting_status,
                     attempted_by_user_id, attempted_at)
                 VALUES (?, ?, ?, ?, ?, ?)
-                """, id, payment, outcome, outcome, payer, NOW);
+                """, id, payment, outcome, outcome, payer, now());
     }
 
     private void enrichedAttempt(JdbcTemplate db, Case c, long amount, UUID payer) {
@@ -190,7 +189,7 @@ final class LedgerFixture {
                     attempted_by_user_id, attempted_at, operation_key, payment_reference, amount, instrument,
                     scenario, gateway_transaction_id)
                 VALUES (?, ?, 'APPROVED', 'APPROVED', ?, ?, ?, ?, ?, 'SANDBOX_PSE', 'APPROVE', ?)
-                """, c.approvedAttempt, c.payment, payer, NOW, UUID.randomUUID(), reference(c.payment), amount,
+                """, c.approvedAttempt, c.payment, payer, now(), UUID.randomUUID(), reference(c.payment), amount,
                 "TX-" + c.approvedAttempt);
     }
 
@@ -201,7 +200,7 @@ final class LedgerFixture {
                     net_amount, commission_rate_bps, status, created_at, released_at, paid_out_at, updated_at)
                 VALUES (?, ?, ?, ?, ?, ?, 1000, ?, ?, ?, ?, ?)
                 """, c.earning, c.quotation, fixer, gross, commission, gross - commission, status, createdAt,
-                status.equals("HELD") ? null : NOW, status.equals("PAID_OUT") ? NOW : null, NOW);
+                status.equals("HELD") ? null : now(), status.equals("PAID_OUT") ? now() : null, now());
     }
 
     void cashSettlement(JdbcTemplate db, Case c, UUID owner, UUID fixer, long agreed, long received) {
@@ -210,7 +209,7 @@ final class LedgerFixture {
                     agreed_amount, received_amount, outstanding_amount, settled_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, c.settlement, UUID.randomUUID(), c.quotation, c.request, owner, fixer, agreed, received,
-                agreed - received, NOW);
+                agreed - received, now());
     }
 
     void debt(JdbcTemplate db, Case c, UUID owner, UUID fixer, long amount, String status) {
@@ -218,8 +217,8 @@ final class LedgerFixture {
                 INSERT INTO owner_debts (id, owner_user_id, fixer_user_id, request_id, quotation_id, amount, status,
                     created_at, settled_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, c.debt, owner, fixer, c.request, c.quotation, amount, status, NOW,
-                status.equals("PAID") ? NOW : null);
+                """, c.debt, owner, fixer, c.request, c.quotation, amount, status, now(),
+                status.equals("PAID") ? now() : null);
     }
 
     private void payout(JdbcTemplate db, UUID id, UUID fixer, long amount, int count, UUID operationKey) {
@@ -227,7 +226,7 @@ final class LedgerFixture {
                 INSERT INTO payouts (id, fixer_user_id, amount, earning_count, status, requested_at, transferred_at,
                     operation_key)
                 VALUES (?, ?, ?, ?, 'TRANSFERRED', ?, ?, ?)
-                """, id, fixer, amount, count, NOW, NOW, operationKey);
+                """, id, fixer, amount, count, now(), now(), operationKey);
     }
 
     private void payoutEntry(JdbcTemplate db, UUID earning, UUID payout, UUID fixer, long net) {
@@ -235,8 +234,13 @@ final class LedgerFixture {
                 earning, payout, fixer, net);
     }
 
+    /**
+     * La hora de cada escritura, no una constante de la clase: el corte digital es el momento en que
+     * la base de esta prueba aplicó V41, y una hora tomada al cargar la clase queda antes de ese corte
+     * cuando otra clase de integración ya había usado este fixture con su propia base.
+     */
     static OffsetDateTime now() {
-        return NOW;
+        return OffsetDateTime.now(ZoneOffset.UTC).withNano(0);
     }
 
     private static String reference(UUID paymentId) {
