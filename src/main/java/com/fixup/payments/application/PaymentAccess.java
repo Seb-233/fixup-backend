@@ -19,6 +19,12 @@ final class PaymentAccess {
         }
     }
 
+    static void requireActiveAdmin(CurrentActor actor) {
+        if (actor.status() != UserStatus.ACTIVE || !actor.hasRole(Role.PLATFORM_ADMIN)) {
+            throw new PaymentAccessDeniedException();
+        }
+    }
+
     static void requireActiveFixer(CurrentActor actor) {
         if (actor.status() != UserStatus.ACTIVE || !actor.hasRole(Role.FIXER)) {
             throw new PaymentAccessDeniedException();

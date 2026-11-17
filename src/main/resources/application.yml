@@ -52,6 +52,10 @@ fixup:
   # INT-01: pasarela Wompi. Sin las cuatro llaves queda apagada y solo se ve la pasarela simulada.
   # El ambiente (sandbox o producción) sale del prefijo de la llave pública.
   payments:
+    # SAF-01: apagada hasta aprovisionar fixup_ledger_auditor con scripts/provision-ledger-reader.sql.
+    # Encendida, el arranque falla si el runtime no puede leer el libro (runbook en docs/saf-01-conciliacion-pagos.md).
+    reconciliation:
+      enabled: ${FIXUP_LEDGER_RECONCILIATION_ENABLED:false}
     wompi:
       public-key: ${WOMPI_PUBLIC_KEY:}
       private-key: ${WOMPI_PRIVATE_KEY:}
