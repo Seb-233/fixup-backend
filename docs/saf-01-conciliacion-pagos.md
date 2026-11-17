@@ -1,8 +1,29 @@
 # SAF-01: conciliación del libro de pagos
 
 La conciliación revisa, con la aplicación en marcha, que la plata registrada en las tablas de pagos
-se conserve entre tablas. Corre cada 10 minutos y cuando un `PLATFORM_ADMIN` la pide con
+se conserve entre tablas. Encendida, corre cada 10 minutos y cuando un `PLATFORM_ADMIN` la pide con
 `GET /administration/payments/reconciliation`. Solo lee: nunca corrige nada.
+
+**Viene apagada** (`fixup.payments.reconciliation.enabled=false`, variable
+`FIXUP_LEDGER_RECONCILIATION_ENABLED`). Se enciende por ambiente solo después de aprovisionar el
+lector; ver [Runbook](#runbook-encender-la-conciliación-en-un-ambiente).
+
+## Alcance: detecta, no garantiza
+
+SAF-01 **detecta** discrepancias en el libro de pagos; **no garantiza por sí sola que la plataforma
+no pierda plata**. En concreto:
+
+- No impide ni corrige un descuadre: lo reporta después de que ocurre, como máximo un intervalo
+  (10 min) más tarde, y solo si la conciliación está encendida y puede leer el libro.
+- Solo ve lo que está en las tablas del libro. Plata que nunca se registró (por ejemplo, un cobro
+  hecho fuera de la plataforma) o un error que deja todas las tablas de acuerdo entre sí no produce
+  hallazgos.
+- Las barreras que evitan las pérdidas son otras y van antes: triggers de inmutabilidad y
+  transiciones (V40–V42), RLS por actor, idempotencia de pagos y transferencias, y la validación
+  de eventos de Wompi (INT-01). SAF-01 es la red de detección que comprueba que esas barreras
+  sostuvieron, y su valor depende de que alguien atienda las alertas.
+- Un `200` con `consistent: true` dice que las reglas y ecuaciones conocidas se cumplen sobre las
+  filas leídas (`scanned`) en ese instante; no certifica nada fuera de esas reglas.
 
 ## Qué responde
 
@@ -10,8 +31,10 @@ se conserve entre tablas. Corre cada 10 minutos y cuando un `PLATFORM_ADMIN` la 
 |---|---|
 | `200`, `consistent: true` | El libro se leyó completo, ninguna regla tiene filas y todas las ecuaciones cuadran. |
 | `200`, `consistent: false` | El libro se leyó y hay diferencias: `findings` (regla, conteo, hasta 20 ids) y `balances` (ecuaciones con `holds: false`). |
-| `503 LEDGER_UNREADABLE` | No se pudo leer el libro (permiso, tiempo agotado, base caída). No hay resultado. |
+| `503 LEDGER_RECONCILIATION_DISABLED` | La conciliación está apagada en este ambiente (configuración por defecto). No toca la base ni las métricas. Sin `Retry-After`: reintentar no cambia nada. |
+| `503 LEDGER_UNREADABLE` | Encendida, pero no se pudo leer el libro (rol sin aprovisionar o revocado, permiso de columna, tiempo agotado, base caída). No hay resultado. Trae `Retry-After: 10`. |
 | `503 LEDGER_RECONCILIATION_BUSY` | Otra instancia está conciliando. Reintentar; trae `Retry-After: 10`. |
+| `401` / `403` | Sin token / sin `PLATFORM_ADMIN` activo. La autorización se revisa antes que el estado: quien no es administrador no sabe si está encendida. |
 
 "Sin hallazgos" y "no se pudo leer" nunca se confunden: un 200 siempre trae `scanned`, con las filas
 leídas de cada tabla. Los importes son pesos colombianos enteros. La respuesta no trae datos
@@ -66,6 +89,62 @@ usuario con que se conecta la aplicación: dentro de su transacción hace
 
 Si una regla nueva necesita otra columna, hay que concederla en una migración.
 
+### Runbook: encender la conciliación en un ambiente
+
+No ejecutar estos pasos contra Blue/Green (ni otra base compartida) sin aprobación expresa del
+responsable del ambiente. Ningún paso concede privilegios a `fixup_app` ni cambia credenciales.
+
+1. **Migrar.** Desplegar con la conciliación apagada (por defecto). Flyway aplica V48 como el
+   usuario migrador. Nada cambia en el comportamiento: el endpoint responde
+   `503 LEDGER_RECONCILIATION_DISABLED` y no hay corrida programada ni métricas.
+2. **Verificar la identidad del runtime** (como administrador, en la base y esquema del ambiente).
+   Debe salir una fila con todo en `false` y `owned_relations = 0`:
+
+   ```sql
+   SELECT r.rolname, r.rolsuper, r.rolbypassrls, r.rolcreatedb, r.rolcreaterole, r.rolreplication,
+          (SELECT COUNT(*) FROM pg_class c WHERE c.relowner = r.oid) AS owned_relations,
+          has_schema_privilege(r.oid, current_schema(), 'CREATE') AS schema_create
+   FROM pg_roles r WHERE r.rolname = 'runtime_login';
+   ```
+
+   Si el runtime es superusuario, dueño de las tablas o tiene `BYPASSRLS`, detenerse: el script lo
+   rechaza y el ambiente no cumple RNF-11/12 de todos modos.
+3. **Aislamiento entre ambientes.** Los roles de PostgreSQL son de todo el clúster, no de una base.
+   Si Blue y Green comparten clúster, la membresía en `fixup_ledger_auditor` de un login sirve en
+   cualquier base del clúster donde V48 haya concedido lecturas a ese rol. Comprobar que el login
+   de un ambiente no puede conectarse a la base del otro:
+
+   ```sql
+   SELECT datname, has_database_privilege('runtime_login', datname, 'CONNECT')
+   FROM pg_database WHERE NOT datistemplate;
+   ```
+
+   Solo debe salir `true` en la base de su ambiente; si no, `REVOKE CONNECT ... FROM PUBLIC` y
+   conceder `CONNECT` solo a su login, o usar clústeres separados.
+4. **Aprovisionar** con `scripts/provision-ledger-reader.sql` (detalle abajo).
+5. **Preflight manual** como el runtime, antes de encender. Debe devolver `fixup_ledger_auditor` y
+   no dar error:
+
+   ```sql
+   BEGIN READ ONLY;
+   SET LOCAL ROLE fixup_ledger_auditor;
+   SELECT current_user;
+   SELECT COUNT(*) FROM repair_payments;
+   ROLLBACK;
+   ```
+6. **Encender** con `FIXUP_LEDGER_RECONCILIATION_ENABLED=true` y desplegar. Al arrancar, la
+   aplicación hace el mismo preflight (`ReconcileLedger.preflight`): asume el rol y planea con
+   `LIMIT 0` todas las consultas de las reglas, sin leer filas ni tomar el turno entre réplicas.
+   **Si falla, la aplicación no arranca**: en Blue/Green la versión nueva no pasa a recibir tráfico
+   y la anterior sigue sirviendo. El error nombra este script.
+7. **Comprobar**: `GET /administration/payments/reconciliation` como `PLATFORM_ADMIN` responde
+   `200` con `scanned` distinto de cero en un ambiente con datos, y
+   `fixup.payments.ledger.unreadable` queda en 0.
+
+**Volver atrás:** `FIXUP_LEDGER_RECONCILIATION_ENABLED=false` y redesplegar. Para retirar el acceso:
+`REVOKE fixup_ledger_auditor FROM runtime_login;`. V48 puede quedarse: el rol no tiene login ni
+miembros.
+
 ### Aprovisionar un runtime distinto de Flyway
 
 V48 crea el lector y sus permisos de lectura, sin conceder membresía al migrador ni al runtime.
@@ -104,7 +183,7 @@ revoca y repone la concesión, comprueba que no hay herencia ni opción de admin
 | Tiempo máximo por corrida | 30 s (transacción y `statement_timeout`) | `fixup.payments.reconciliation.timeout` |
 | Corridas simultáneas por instancia | 1; las peticiones que llegan durante una corrida reciben ese resultado | |
 | Corridas simultáneas entre réplicas | 1; turno con `pg_try_advisory_xact_lock` | |
-| Apagar la corrida programada | | `fixup.payments.reconciliation.enabled=false` |
+| Encender (corrida programada, consulta manual, métricas y preflight de arranque) | apagada por defecto | `fixup.payments.reconciliation.enabled` (`FIXUP_LEDGER_RECONCILIATION_ENABLED`) |
 
 La lectura es una transacción de solo lectura `REPEATABLE READ`: no bloquea pagos ni espera por ellos.
 
@@ -119,23 +198,49 @@ La lectura es una transacción de solo lectura `REPEATABLE READ`: no bloquea pag
 `outcome` es `consistent`, `inconsistent`, `skipped` (otra réplica tenía el turno) o `unreadable`.
 Hoy el despliegue solo expone `/actuator/health`; las métricas quedan registradas en Micrometer y el
 mismo resultado sale en el log (`Conciliación de pagos ...`, nivel WARN o ERROR si hay problema).
+Apagada, no se registra ningún medidor: un `violations = 0` sin corridas se leería como "cuadra".
+
+### Qué no sale en logs ni métricas
+
+- Métricas: solo los tres nombres `fixup.payments.ledger.*` de arriba, con una única etiqueta
+  (`outcome`) de valores fijos. Sin importes, identificadores, usuarios ni etiquetas de alta
+  cardinalidad.
+- Log `INFO`/`WARN`: solo "sin diferencias" o los códigos de las ecuaciones que no cuadran y
+  `REGLA=conteo`. Sin importes ni identificadores de fila: esos solo están en la respuesta, que solo
+  ve un `PLATFORM_ADMIN`.
+- Log `ERROR` (`LEDGER_UNREADABLE`): el mensaje de PostgreSQL y el texto de la consulta fija que
+  falló (permiso denegado, tiempo agotado). Las consultas no llevan valores de filas.
+- `ReconcileLedgerTest.logsAndMetersCarryNoAmountsNorRowIdentifiers` lo comprueba.
 
 ## Pruebas
 
-La versión del lector es **V48**: V43/V44 se reservan para Auditoría (#57), V45/V46/V47 para
-Wompi (#54). Antes de instalar en una base existente hay que comprobar que ninguna V47 de
-conciliación se haya aplicado: si existe, detener la actualización y revisar ese historial; no
-renombrar una migración aplicada ni activar `outOfOrder`. La validación aislada de esta rama no
-equivale a validar la secuencia completa #57 → #54 → #61.
+La versión del lector es **V48**, la siguiente a la última de `develop` (V45/V46/V47 de Wompi,
+#54). Auditoría (#57) ya usa V49/V50, así que entra después sin versiones menores. Flyway corre con
+`outOfOrder` desactivado: una versión menor que la última aplicada hace fallar `validate` y el
+arranque. Antes de instalar en una base existente hay que comprobar que ninguna V47 de conciliación
+se haya aplicado (versiones viejas de esta rama): si existe, detener la actualización y revisar ese
+historial; no renombrar una migración aplicada ni activar `outOfOrder`.
 
 El contrato prueba ingresos sin pago un segundo antes de `flyway_schema_history.installed_on`
 de V41, exactamente en el corte y un segundo después. El primero sigue sumando como histórico;
 los otros dos generan `EARNING_WITHOUT_APPROVED_PAYMENT`. La comisión de un ingreso histórico
 también se valida: la excepción histórica no excluye sus importes del libro.
 
-- `LedgerReconciliationContextTest` (H2) y `PostgresLedgerReconciliationIT`: libro representativo sin
-  falsos positivos, un descuadre real por cada una de las nueve reglas, autorización 401/403/200,
-  foto coherente con pagos entrando, turno entre réplicas y libro ilegible.
-- `PostgresLedgerRestrictedRuntimeIT`: la aplicación conectada como un rol sin superusuario ni
-  `BYPASSRLS`, con filas de varios propietarios.
-- `ReconcileLedgerTest`: límites de operación sin base de datos.
+- `LedgerReconciliationContextTest` (H2) y `PostgresLedgerReconciliationIT` (encendida): libro
+  representativo sin falsos positivos, un descuadre real por cada una de las nueve reglas,
+  autorización 401/403/200 y administrador suspendido, foto coherente con pagos entrando, turno
+  entre réplicas (otra conexión con el mismo advisory lock → `503 BUSY`), libro ilegible por
+  permiso de columna (`503 UNREADABLE`) y corrida cortada por `statement_timeout` con otra
+  transacción bloqueando la tabla: sin resultado en menos de 7 s, la transacción abortada no deja la
+  conexión con el rol lector y la corrida siguiente cuadra.
+- `LedgerReconciliationDisabledContextTest` (configuración por defecto): `401`, `403` y
+  `503 LEDGER_RECONCILIATION_DISABLED` sin `Retry-After` ni totales.
+- `PostgresLedgerRestrictedRuntimeIT`: el runbook en orden (Flyway como administrador, V48 sin
+  membresías, el runtime no puede asumir el lector, script, preflight de arranque). La aplicación
+  conectada como un rol sin superusuario, `BYPASSRLS`, propiedad de tablas ni `CREATE`, con filas de
+  varios propietarios; el runtime es el único miembro del lector (`SET` sí, `INHERIT`/`ADMIN` no);
+  al revocarle el lector en caliente responde `503 UNREADABLE` y el preflight falla.
+- `PostgresDigitalPaymentMigrationIT`: upgrade real con datos de V38 → V40 → V47 (develop) → V48;
+  la única pendiente sobre V47 es V48 y `validate` pasa en cada paso.
+- `ReconcileLedgerTest`: límites de operación sin base de datos, apagada, preflight y contenido de
+  logs y métricas.

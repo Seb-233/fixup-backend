@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -78,16 +79,68 @@ class PostgresLedgerRestrictedRuntimeIT {
         registry.add("spring.datasource.password", () -> RUNTIME_PASSWORD);
         registry.add("spring.flyway.user", POSTGRES::getUsername);
         registry.add("spring.flyway.password", POSTGRES::getPassword);
+        registry.add("fixup.payments.reconciliation.enabled", () -> "true");
+        cleanInstallThenProvision();
+    }
+
+    /**
+     * El orden del runbook, antes de que arranque la aplicación: Flyway migra como administrador,
+     * se comprueba que V48 no concedió el lector a nadie y que el runtime no puede asumirlo, y solo
+     * entonces se ejecuta el script operativo. Con la conciliación encendida, el preflight del
+     * arranque exige ese aprovisionamiento.
+     */
+    private static void cleanInstallThenProvision() throws Exception {
+        var flyway = org.flywaydb.core.Flyway.configure()
+                .dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
+                .locations("classpath:db/migration", "classpath:db/migration-postgres/postgresql").load();
+        flyway.migrate();
+        flyway.validate();
+        assertThat(flyway.info().pending()).isEmpty();
+        try (var admin = DriverManager.getConnection(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(),
+                POSTGRES.getPassword())) {
+            assertThat(single(admin, "SELECT installed_by FROM flyway_schema_history WHERE version = '48' AND success"))
+                    .isEqualTo(POSTGRES.getUsername()).isNotEqualTo(RUNTIME);
+            assertThat(single(admin, """
+                    SELECT COUNT(*) FROM pg_auth_members m JOIN pg_roles r ON r.oid = m.roleid
+                    WHERE r.rolname = 'fixup_ledger_auditor'
+                    """)).as("V48 no concede el lector a ningún login, incluido Flyway").isEqualTo("0");
+        }
+        assertThatThrownBy(() -> runtimeAssumesTheReader())
+                .as("el runtime no puede asumir el lector tras una instalación limpia sin aprovisionar")
+                .hasStackTraceContaining("permission denied");
+        try (var admin = DriverManager.getConnection(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(),
+                POSTGRES.getPassword())) {
+            provision(admin, RUNTIME);
+        }
+        runtimeAssumesTheReader();
+    }
+
+    private static void runtimeAssumesTheReader() throws Exception {
+        try (var connection = DriverManager.getConnection(POSTGRES.getJdbcUrl(), RUNTIME, RUNTIME_PASSWORD)) {
+            connection.setAutoCommit(false);
+            try (var statement = connection.createStatement()) {
+                statement.execute("SET LOCAL ROLE fixup_ledger_auditor");
+            } finally {
+                connection.rollback();
+            }
+        }
+    }
+
+    private static String single(java.sql.Connection connection, String sql) throws Exception {
+        try (var statement = connection.createStatement(); var rows = statement.executeQuery(sql)) {
+            rows.next();
+            return rows.getString(1);
+        }
     }
 
     @Autowired MockMvc mvc;
     @Autowired ObjectMapper mapper;
     /** La conexión de la aplicación: fixup_runtime. */
     @Autowired JdbcTemplate runtime;
-    @Autowired org.flywaydb.core.Flyway flyway;
+
+    @Autowired com.fixup.payments.application.ReconcileLedger reconciliation;
 
     private static DriverManagerDataSource administratorSource;
-    private static boolean readerProvisioned;
     private JdbcTemplate administrator;
 
     @BeforeEach
@@ -97,25 +150,6 @@ class PostgresLedgerRestrictedRuntimeIT {
                     POSTGRES.getPassword());
         }
         administrator = new JdbcTemplate(administratorSource);
-        if (!readerProvisioned) {
-            flyway.validate();
-            assertThat(flyway.info().pending()).isEmpty();
-            assertThat(administrator.queryForObject(
-                    "SELECT installed_by FROM flyway_schema_history WHERE version = '48' AND success",
-                    String.class)).isEqualTo(POSTGRES.getUsername()).isNotEqualTo(RUNTIME);
-            assertThat(administrator.queryForObject("""
-                    SELECT COUNT(*) FROM pg_auth_members m JOIN pg_roles r ON r.oid = m.roleid
-                    WHERE r.rolname = 'fixup_ledger_auditor'
-                    """, Integer.class)).as("V48 no concede el lector a ningún login, incluido Flyway").isZero();
-            assertThat(administrator.queryForObject("SELECT pg_has_role(?, 'fixup_ledger_auditor', 'MEMBER')",
-                    Boolean.class, RUNTIME)).as("Flyway no concede el lector al login de la aplicación").isFalse();
-            assertThatThrownBy(() -> asAuditor("SELECT COUNT(*) FROM repair_payments"))
-                    .as("el runtime no puede asumir el lector tras una instalación limpia sin aprovisionar")
-                    .hasStackTraceContaining("permission denied");
-            provisionReader(RUNTIME);
-            assertThat(asAuditor("SELECT COUNT(*) FROM repair_payments")).isNotNull();
-            readerProvisioned = true;
-        }
         SecurityContextHolder.clearContext();
         new IntegrationDatabaseCleaner(administrator, new DataSourceTransactionManager(administratorSource)).clean();
     }
@@ -123,7 +157,6 @@ class PostgresLedgerRestrictedRuntimeIT {
     @AfterAll
     static void forget() {
         administratorSource = null;
-        readerProvisioned = false;
     }
 
     @Test
@@ -154,6 +187,66 @@ class PostgresLedgerRestrictedRuntimeIT {
         assertThat(administrator.queryForObject(
                 "SELECT COUNT(*) FROM pg_tables WHERE schemaname = 'public' AND tableowner = ?",
                 Integer.class, RUNTIME)).isZero();
+    }
+
+    /**
+     * Si al runtime le quitan el lector con la aplicación en marcha, la conciliación no tiene
+     * resultado (503, nunca "cuadra") y el preflight lo señala; al reponerlo, vuelve a leer.
+     */
+    @Test
+    void withoutTheReaderThereIsNoResultAndThePreflightFails() throws Exception {
+        admin();
+        new LedgerFixture(administrator).seed();
+        administrator.execute("REVOKE fixup_ledger_auditor FROM " + RUNTIME);
+        try {
+            mvc.perform(get("/administration/payments/reconciliation").with(identity()))
+                    .andExpect(status().isServiceUnavailable())
+                    .andExpect(jsonPath("$.code").value("LEDGER_UNREADABLE"))
+                    .andExpect(jsonPath("$.consistent").doesNotExist())
+                    .andExpect(jsonPath("$.totals").doesNotExist());
+            assertThatThrownBy(reconciliation::preflight)
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("scripts/provision-ledger-reader.sql")
+                    .hasStackTraceContaining("permission denied");
+        } finally {
+            provisionReader(RUNTIME);
+        }
+        reconciliation.preflight();
+        assertThat(reconcile().get("consistent").asBoolean()).isTrue();
+    }
+
+    /**
+     * Evidencia para la revisión: el runtime no es superusuario, ni dueño de tablas, ni hereda el
+     * lector, y es el único login que puede asumirlo en esta base.
+     */
+    @Test
+    void onlyTheRestrictedRuntimeCanAssumeTheReader() {
+        var identity = administrator.queryForMap("""
+                SELECT r.rolname, r.rolsuper, r.rolbypassrls, r.rolinherit, r.rolcreatedb, r.rolcreaterole,
+                       r.rolreplication,
+                       (SELECT COUNT(*) FROM pg_class c WHERE c.relowner = r.oid) AS owned_relations,
+                       has_schema_privilege(r.oid, 'public', 'CREATE') AS schema_create
+                FROM pg_roles r WHERE r.rolname = ?
+                """, RUNTIME);
+        var readers = administrator.queryForList("""
+                SELECT member.rolname, m.inherit_option, m.set_option, m.admin_option FROM pg_auth_members m
+                JOIN pg_roles granted ON granted.oid = m.roleid
+                JOIN pg_roles member ON member.oid = m.member
+                WHERE granted.rolname = 'fixup_ledger_auditor'
+                """);
+        System.out.println("SAF01-EVIDENCIA runtime=" + identity);
+        System.out.println("SAF01-EVIDENCIA miembros de fixup_ledger_auditor=" + readers);
+        System.out.println("SAF01-EVIDENCIA conexion de la aplicacion=" + runtime.queryForMap(
+                "SELECT current_user, session_user, current_database(), current_schema()"));
+
+        assertThat(identity).containsEntry("rolsuper", false).containsEntry("rolbypassrls", false)
+                .containsEntry("rolcreatedb", false).containsEntry("rolcreaterole", false)
+                .containsEntry("rolreplication", false).containsEntry("owned_relations", 0L)
+                .containsEntry("schema_create", false);
+        assertThat(readers).singleElement().satisfies(reader -> assertThat(reader)
+                .containsEntry("rolname", RUNTIME).containsEntry("inherit_option", false)
+                .containsEntry("set_option", true).containsEntry("admin_option", false));
+        assertThat(runtime.queryForObject("SELECT current_user", String.class)).isEqualTo(RUNTIME);
     }
 
     @Test
@@ -251,20 +344,31 @@ class PostgresLedgerRestrictedRuntimeIT {
                 .containsEntry("rolbypassrls", false).containsEntry("rolinherit", false);
     }
 
-    /** Corre una consulta como lo hace la conciliación: la conexión de la aplicación con SET LOCAL ROLE. */
     private void provisionReader(String login) throws Exception {
-        String sql = Files.readString(Path.of("scripts", "provision-ledger-reader.sql"));
         administrator.execute((org.springframework.jdbc.core.ConnectionCallback<Void>) connection -> {
-            try (var parameter = connection.prepareStatement("SELECT set_config('fixup.ledger_runtime_role', ?, false)")) {
-                parameter.setString(1, login);
-                parameter.execute();
-            }
-            try (var statement = connection.createStatement()) {
-                statement.execute(sql);
+            try {
+                provision(connection, login);
+            } catch (java.io.IOException unreadable) {
+                throw new IllegalStateException(unreadable);
             }
             return null;
         });
     }
+
+    /** Ejecuta el script operativo tal cual, con el login como parámetro de sesión. */
+    private static void provision(java.sql.Connection connection, String login)
+            throws java.sql.SQLException, java.io.IOException {
+        String sql = Files.readString(Path.of("scripts", "provision-ledger-reader.sql"));
+        try (var parameter = connection.prepareStatement("SELECT set_config('fixup.ledger_runtime_role', ?, false)")) {
+            parameter.setString(1, login);
+            parameter.execute();
+        }
+        try (var statement = connection.createStatement()) {
+            statement.execute(sql);
+        }
+    }
+
+    /** Corre una consulta como lo hace la conciliación: la conexión de la aplicación con SET LOCAL ROLE. */
 
     /** El rol se restablece al terminar la transacción y no contamina el pool. */
     private Long asAuditor(String sql) {

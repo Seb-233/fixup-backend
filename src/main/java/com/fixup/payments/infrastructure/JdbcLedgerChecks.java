@@ -185,14 +185,30 @@ class JdbcLedgerChecks implements LedgerChecks {
         if (!Boolean.TRUE.equals(myTurn)) {
             return false;
         }
-        jdbc.execute("SET LOCAL ROLE " + AUDITOR_ROLE);
+        assumeAuditor();
         jdbc.queryForObject("SELECT set_config('statement_timeout', ?, true)", String.class,
                 statementTimeout.toMillis() + "ms");
+        return true;
+    }
+
+    @Override
+    public void verifySystemRead() {
+        if (!postgres()) {
+            return;
+        }
+        assumeAuditor();
+        // Con LIMIT 0 PostgreSQL revisa los permisos de cada columna al iniciar la consulta, sin leer filas.
+        jdbc.queryForList("SELECT * FROM (" + TOTALS + ") t LIMIT 0");
+        jdbc.queryForList("SELECT * FROM (" + SCANNED + ") s LIMIT 0");
+        OFFENDERS.values().forEach(offenders -> jdbc.queryForList("SELECT x.id FROM (" + offenders + ") x LIMIT 0"));
+    }
+
+    private void assumeAuditor() {
+        jdbc.execute("SET LOCAL ROLE " + AUDITOR_ROLE);
         String reader = jdbc.queryForObject("SELECT current_user", String.class);
         if (!AUDITOR_ROLE.equals(reader)) {
             throw new IllegalStateException("The ledger would be read as " + reader + ", not as " + AUDITOR_ROLE);
         }
-        return true;
     }
 
     private boolean postgres() {

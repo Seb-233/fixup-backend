@@ -24,6 +24,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
@@ -38,7 +39,11 @@ import org.springframework.test.web.servlet.request.RequestPostProcessor;
  * <p>Las nueve reglas y las ecuaciones por tipo de operación se prueban sobre el libro
  * representativo de {@link LedgerFixture}: primero cuadra completo (sin falsos positivos) y luego
  * cada prueba introduce un solo descuadre y exige exactamente la regla que le corresponde.
+ *
+ * <p>La conciliación viene apagada por defecto; estos contratos la encienden. Apagada se prueba en
+ * {@link LedgerReconciliationDisabledContextTest}.
  */
+@TestPropertySource(properties = "fixup.payments.reconciliation.enabled=true")
 abstract class LedgerReconciliationHttpContract {
 
     /** 450.000 pesos: comisión 45.000, neto 405.000. */

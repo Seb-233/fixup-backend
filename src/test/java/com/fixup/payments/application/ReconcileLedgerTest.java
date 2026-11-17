@@ -25,10 +25,16 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
+import io.micrometer.core.instrument.Meter;
+import io.micrometer.core.instrument.Tag;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.transaction.PlatformTransactionManager;
+import org.slf4j.LoggerFactory;
 import org.springframework.transaction.support.SimpleTransactionStatus;
 
 /** Límites de operación de la conciliación, sin base de datos. */
@@ -156,6 +162,76 @@ class ReconcileLedgerTest {
         assertThat(ledger.scans.get()).isZero();
     }
 
+    @Test
+    void turnedOffItAnswersDisabledWithoutReadingTheLedgerOrPublishingMeters() {
+        var service = service(false, Duration.ofSeconds(5));
+
+        assertThatThrownBy(() -> service.runNow(ADMIN))
+                .isInstanceOf(LedgerReconciliationUnavailableException.class)
+                .extracting(failure -> ((LedgerReconciliationUnavailableException) failure).code())
+                .isEqualTo("LEDGER_RECONCILIATION_DISABLED");
+        service.preflightWhenEnabled();
+
+        assertThat(ledger.scans.get()).isZero();
+        assertThat(ledger.verifications.get()).isZero();
+        // Sin corridas no hay "0 violaciones" que se lea como "cuadra".
+        assertThat(meters.getMeters()).isEmpty();
+    }
+
+    @Test
+    void turnedOnWithoutTheReaderTheStartupPreflightBlocks() {
+        ledger.failure = new IllegalStateException("permission denied to set role \"fixup_ledger_auditor\"");
+        var service = service(true, Duration.ofSeconds(5));
+
+        assertThatThrownBy(service::preflightWhenEnabled)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("scripts/provision-ledger-reader.sql")
+                .hasRootCauseMessage("permission denied to set role \"fixup_ledger_auditor\"");
+        assertThat(ledger.scans.get()).isZero();
+
+        ledger.failure = null;
+        service.preflightWhenEnabled();
+        assertThat(ledger.verifications.get()).isEqualTo(2);
+        assertThat(ledger.scans.get()).isZero();
+    }
+
+    /** Logs y métricas: solo códigos, conteos y un desenlace de un conjunto cerrado. */
+    @Test
+    void logsAndMetersCarryNoAmountsNorRowIdentifiers() {
+        UUID row = UUID.fromString("0f0e0d0c-0b0a-4908-8706-050403020100");
+        var logger = (Logger) LoggerFactory.getLogger(ReconcileLedger.class);
+        var captured = new ListAppender<ILoggingEvent>();
+        captured.start();
+        logger.addAppender(captured);
+        try {
+            var service = service(true, Duration.ofSeconds(5));
+            ledger.totals = sums(1_234_567, 1_234_567);
+            assertThat(service.runNow(ADMIN).consistent()).isTrue();
+            ledger.totals = sums(7_654_321, 7_650_000);
+            ledger.finding = new LedgerChecks.Finding(1, List.of(row));
+            var report = service.runNow(ADMIN);
+            assertThat(report.consistent()).isFalse();
+            assertThat(report.findings().get(0).sample()).containsExactly(row);
+        } finally {
+            logger.detachAppender(captured);
+        }
+
+        assertThat(captured.list).hasSize(2);
+        assertThat(captured.list).extracting(ILoggingEvent::getFormattedMessage)
+                .allSatisfy(message -> assertThat(message)
+                        .doesNotContain(row.toString(), "1234567", "7654321", "7650000", "4321", "≠"))
+                .last().asString().contains("SERVICE_COLLECTED_EQUALS_SERVICE_EARNINGS")
+                .contains(LedgerInvariant.values()[0].name() + "=1");
+        assertThat(meters.getMeters()).extracting(meter -> meter.getId().getName())
+                .allMatch(name -> name.startsWith("fixup.payments.ledger."));
+        assertThat(meters.getMeters()).flatExtracting(meter -> meter.getId().getTags())
+                .extracting(Tag::getKey).containsOnly("outcome");
+        assertThat(meters.getMeters()).flatExtracting(meter -> meter.getId().getTags())
+                .extracting(Tag::getValue).isSubsetOf("consistent", "inconsistent", "skipped", "unreadable");
+        assertThat(meters.getMeters()).extracting(Meter::getId).extracting(Meter.Id::getType)
+                .doesNotContain(Meter.Type.DISTRIBUTION_SUMMARY);
+    }
+
     private ReconcileLedger service(boolean scheduled, Duration timeout) {
         return service(scheduled, timeout, 5_000);
     }
@@ -193,6 +269,8 @@ class ReconcileLedgerTest {
         Totals totals = sums(1_000, 1_000);
         final CountDownLatch started = new CountDownLatch(1);
         final AtomicInteger scans = new AtomicInteger();
+        final AtomicInteger verifications = new AtomicInteger();
+        Finding finding;
 
         @Override
         public boolean openSystemRead(Duration statementTimeout) {
@@ -203,7 +281,19 @@ class ReconcileLedgerTest {
         }
 
         @Override
+        public void verifySystemRead() {
+            verifications.incrementAndGet();
+            if (failure != null) {
+                throw failure;
+            }
+        }
+
+        @Override
         public Finding check(LedgerInvariant invariant, int sampleLimit) {
+            // Un solo hallazgo, en la primera regla, cuando la prueba lo pide.
+            if (finding != null && invariant == LedgerInvariant.values()[0]) {
+                return finding;
+            }
             return new Finding(0, List.of());
         }
 

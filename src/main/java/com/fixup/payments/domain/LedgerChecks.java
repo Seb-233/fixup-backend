@@ -19,6 +19,14 @@ public interface LedgerChecks {
      */
     boolean openSystemRead(Duration statementTimeout);
 
+    /**
+     * Preflight: dentro de la transacción actual asume el rol lector y comprueba que puede consultar
+     * cada columna que usan las reglas, sin leer filas ni tomar el turno entre réplicas.
+     *
+     * @throws RuntimeException si no puede asumir el rol o le falta un permiso
+     */
+    void verifySystemRead();
+
     /** Filas que rompen la regla: el total y hasta {@code sampleLimit} identificadores. */
     Finding check(LedgerInvariant invariant, int sampleLimit);
 

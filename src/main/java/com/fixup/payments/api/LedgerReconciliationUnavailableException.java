@@ -1,8 +1,8 @@
 package com.fixup.payments.api;
 
 /**
- * La conciliación no produjo un resultado: no es "sin hallazgos". O no se pudo leer el libro, o
- * otra instancia ya lo está conciliando.
+ * La conciliación no produjo un resultado: no es "sin hallazgos". Está apagada, no se pudo leer el
+ * libro, u otra instancia ya lo está conciliando.
  */
 public class LedgerReconciliationUnavailableException extends RuntimeException {
     private final String code;

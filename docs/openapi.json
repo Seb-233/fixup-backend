@@ -7694,7 +7694,7 @@
             }
           },
           "503" : {
-            "description" : "No result: LEDGER_UNREADABLE (the ledger could not be read) or LEDGER_RECONCILIATION_BUSY (another instance is reconciling). Never means 'no findings'",
+            "description" : "No result: LEDGER_RECONCILIATION_DISABLED (turned off until the ledger reader is provisioned; no Retry-After), LEDGER_UNREADABLE (the ledger could not be read) or LEDGER_RECONCILIATION_BUSY (another instance is reconciling). Never means 'no findings'",
             "content" : {
               "application/json" : {
                 "schema" : {
@@ -11223,16 +11223,16 @@
             "format" : "int32",
             "minimum" : 0
           },
-          "size" : {
-            "type" : "integer",
-            "format" : "int32",
-            "minimum" : 1
-          },
           "sort" : {
             "type" : "array",
             "items" : {
               "type" : "string"
             }
+          },
+          "size" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 1
           }
         }
       },

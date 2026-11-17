@@ -26,6 +26,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -54,17 +56,26 @@ import org.springframework.transaction.support.TransactionTemplate;
  *   <li>Cada corrida tiene un tiempo máximo. Si se agota o la lectura falla, no hay resultado: 503 y
  *       contador de fallos, nunca "sin diferencias".</li>
  * </ul>
+ *
+ * <p>Viene apagada ({@code fixup.payments.reconciliation.enabled=false}): ni corrida programada, ni
+ * métricas, y la consulta manual responde 503 LEDGER_RECONCILIATION_DISABLED. Solo se enciende
+ * después de aprovisionar el lector con scripts/provision-ledger-reader.sql. Encendida, el arranque
+ * verifica antes que el runtime pueda leer el libro como ese rol y, si no puede, no arranca (ver
+ * {@link #preflight()}).
+ *
+ * <p>Detecta descuadres; no los corrige ni impide por sí sola que ocurran.
  */
 @Service
 public class ReconcileLedger {
     private static final Logger log = LoggerFactory.getLogger(ReconcileLedger.class);
     private static final int SAMPLE_LIMIT = 20;
     private static final String RUNS = "fixup.payments.ledger.reconciliation.runs";
+    public static final String DISABLED = "LEDGER_RECONCILIATION_DISABLED";
 
     private final LedgerChecks checks;
     private final Clock clock;
     private final TransactionTemplate snapshot;
-    private final boolean scheduled;
+    private final boolean enabled;
     private final Duration timeout;
     private final long graceMillis;
     private final MeterRegistry meters;
@@ -82,25 +93,26 @@ public class ReconcileLedger {
     @Autowired
     ReconcileLedger(LedgerChecks checks, Clock clock, PlatformTransactionManager transactions,
             ObjectProvider<MeterRegistry> meters,
-            @Value("${fixup.payments.reconciliation.enabled:true}") boolean scheduled,
+            @Value("${fixup.payments.reconciliation.enabled:false}") boolean enabled,
             @Value("${fixup.payments.reconciliation.timeout:PT30S}") Duration timeout) {
-        this(checks, clock, transactions, meters, scheduled, timeout, 5_000);
+        this(checks, clock, transactions, meters, enabled, timeout, 5_000);
     }
 
     /** {@code graceMillis}: margen sobre el tiempo máximo para recibir el error de la transacción. */
     ReconcileLedger(LedgerChecks checks, Clock clock, PlatformTransactionManager transactions,
-            ObjectProvider<MeterRegistry> meters, boolean scheduled, Duration timeout, long graceMillis) {
+            ObjectProvider<MeterRegistry> meters, boolean enabled, Duration timeout, long graceMillis) {
         this.graceMillis = graceMillis;
         this.checks = checks;
         this.clock = clock;
-        this.scheduled = scheduled;
+        this.enabled = enabled;
         this.timeout = timeout;
         this.meters = meters.getIfAvailable();
         this.snapshot = new TransactionTemplate(transactions);
         snapshot.setReadOnly(true);
         snapshot.setIsolationLevel(TransactionDefinition.ISOLATION_REPEATABLE_READ);
         snapshot.setTimeout(Math.toIntExact(Math.max(1, timeout.toSeconds())));
-        if (this.meters != null) {
+        // Apagada no publica medidores: un "0 violaciones" sin corridas se leería como "cuadra".
+        if (this.meters != null && enabled) {
             Gauge.builder("fixup.payments.ledger.violations", latest,
                             ref -> ref.get() == null ? 0 : ref.get().violations())
                     .description("Filas y ecuaciones que no cuadran en la última conciliación que leyó el libro")
@@ -111,10 +123,36 @@ public class ReconcileLedger {
         }
     }
 
+    /** Con la corrida programada encendida, un runtime sin aprovisionar no llega a recibir tráfico. */
+    @EventListener(ApplicationReadyEvent.class)
+    void preflightWhenEnabled() {
+        if (enabled) {
+            preflight();
+        }
+    }
+
+    /**
+     * Preflight bloqueante: comprueba, sin leer filas ni tomar el turno entre réplicas, que el
+     * runtime puede asumir fixup_ledger_auditor y que ese rol tiene todas las columnas que usan las
+     * reglas.
+     *
+     * @throws IllegalStateException si falta el aprovisionamiento o algún permiso
+     */
+    public void preflight() {
+        try {
+            snapshot.executeWithoutResult(status -> checks.verifySystemRead());
+        } catch (RuntimeException failure) {
+            throw new IllegalStateException("SAF-01 preflight failed: the runtime cannot read the payment ledger as "
+                    + "fixup_ledger_auditor. Run scripts/provision-ledger-reader.sql for this runtime login "
+                    + "(docs/saf-01-conciliacion-pagos.md) or keep fixup.payments.reconciliation.enabled=false",
+                    failure);
+        }
+    }
+
     @Scheduled(initialDelayString = "${fixup.payments.reconciliation.initial-delay:PT1M}",
             fixedDelayString = "${fixup.payments.reconciliation.interval:PT10M}")
     void scheduledRun() {
-        if (!scheduled) {
+        if (!enabled) {
             return;
         }
         try {
@@ -129,11 +167,15 @@ public class ReconcileLedger {
     /**
      * Corre una conciliación nueva y la devuelve. Solo PLATFORM_ADMIN.
      *
-     * @throws LedgerReconciliationUnavailableException si el libro no se pudo leer o si otra
-     *         instancia ya está conciliando
+     * @throws LedgerReconciliationUnavailableException si está apagada, si el libro no se pudo leer
+     *         o si otra instancia ya está conciliando
      */
     public LedgerReconciliation runNow(CurrentActor actor) {
         PaymentAccess.requireActiveAdmin(actor);
+        if (!enabled) {
+            throw new LedgerReconciliationUnavailableException(DISABLED,
+                    "Ledger reconciliation is disabled until its reader is provisioned", null);
+        }
         return await(submit()).orElseThrow(() -> new LedgerReconciliationUnavailableException(
                 "LEDGER_RECONCILIATION_BUSY", "Another instance is reconciling the ledger; retry shortly", null));
     }
@@ -197,16 +239,18 @@ public class ReconcileLedger {
         return Optional.of(report);
     }
 
+    /**
+     * El log lleva solo códigos y conteos: ni importes ni identificadores de fila. Esos quedan en la
+     * respuesta, que solo ve un PLATFORM_ADMIN.
+     */
     private static void logOutcome(LedgerReconciliation report) {
-        var totals = report.totals();
         if (report.consistent()) {
-            log.info("Conciliación de pagos sin diferencias: cobrado={} comisión={} neto={} transferido={}",
-                    totals.collected(), totals.commission(), totals.net(), totals.payouts());
+            log.info("Conciliación de pagos sin diferencias");
             return;
         }
         log.warn("Conciliación de pagos con diferencias: ecuaciones={} reglas={}",
                 report.balances().stream().filter(balance -> !balance.holds())
-                        .map(balance -> balance.code() + "(" + balance.expected() + "≠" + balance.actual() + ")")
+                        .map(LedgerReconciliation.Balance::code)
                         .collect(Collectors.joining(", ")),
                 report.findings().stream().map(f -> f.code() + "=" + f.count())
                         .collect(Collectors.joining(", ")));

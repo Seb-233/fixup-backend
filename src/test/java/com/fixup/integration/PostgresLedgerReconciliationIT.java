@@ -9,6 +9,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.sql.DriverManager;
+import java.time.Duration;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
@@ -45,6 +46,7 @@ class PostgresLedgerReconciliationIT extends LedgerReconciliationHttpContract {
         registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
         registry.add("spring.datasource.username", POSTGRES::getUsername);
         registry.add("spring.datasource.password", POSTGRES::getPassword);
+        registry.add("fixup.payments.reconciliation.timeout", () -> "PT2S");
     }
 
     @Override
@@ -144,6 +146,39 @@ class PostgresLedgerReconciliationIT extends LedgerReconciliationHttpContract {
                     .andExpect(jsonPath("$.totals").doesNotExist());
         } finally {
             jdbc.execute("GRANT SELECT (gross_amount) ON fixer_earnings TO fixup_ledger_auditor");
+        }
+        mvc.perform(get("/administration/payments/reconciliation").with(root()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.consistent").value(true));
+    }
+
+    /**
+     * Una corrida que no termina a tiempo (aquí la bloquea otra transacción) no tiene resultado: el
+     * statement_timeout la corta y su transacción abortada no deja la conexión con el rol lector ni
+     * el turno tomado. La siguiente corrida lee el libro normalmente.
+     */
+    @Test
+    void aRunThatHitsItsTimeLimitHasNoResultAndTheNextOneRecovers() throws Exception {
+        admin();
+        new LedgerFixture(jdbc).seed();
+        try (var otherSession = DriverManager.getConnection(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(),
+                POSTGRES.getPassword())) {
+            otherSession.setAutoCommit(false);
+            try (var lock = otherSession.createStatement()) {
+                lock.execute("LOCK TABLE fixer_earnings IN ACCESS EXCLUSIVE MODE");
+            }
+            long started = System.nanoTime();
+            mvc.perform(get("/administration/payments/reconciliation").with(root()))
+                    .andExpect(status().isServiceUnavailable())
+                    .andExpect(jsonPath("$.code").value("LEDGER_UNREADABLE"))
+                    .andExpect(jsonPath("$.consistent").doesNotExist())
+                    .andExpect(jsonPath("$.totals").doesNotExist());
+            // Límite de 2 s más el margen de 5 s para recibir el error de la transacción.
+            assertThat(Duration.ofNanos(System.nanoTime() - started)).isLessThan(Duration.ofSeconds(7));
+            otherSession.rollback();
+        }
+        for (int connection = 0; connection < 5; connection++) {
+            assertThat(jdbc.queryForObject("SELECT current_user", String.class)).isEqualTo(POSTGRES.getUsername());
         }
         mvc.perform(get("/administration/payments/reconciliation").with(root()))
                 .andExpect(status().isOk())
