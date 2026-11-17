@@ -77,6 +77,7 @@ class OpenApiContractTest {
                 "/administration/sla-board/requests", "/administration/sla-board/requests/{id}/reassign",
                 "/administration/sla-board/requests/{id}/acknowledge",
                 "/administration/payments/reconciliation",
+                "/administration/audit/status-changes",
                 "/properties/{propertyId}/publish", "/properties/{propertyId}/unpublish",
                 "/properties/{propertyId}/manager", "/properties/managers", "/properties/catalog",
                 "/properties/{propertyId}/listing",

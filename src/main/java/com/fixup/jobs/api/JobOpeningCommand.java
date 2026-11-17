@@ -5,7 +5,14 @@ import java.util.Objects;
 import java.util.UUID;
 
 public record JobOpeningCommand(UUID requestId, UUID quotationId, UUID fixerUserId,
-        UUID ownerUserId, String paymentMethod, long agreedAmount, Instant occurredAt) {
+        UUID ownerUserId, String paymentMethod, long agreedAmount, Instant occurredAt,
+        UUID changedByUserId, String changedBySubject) {
+    public JobOpeningCommand(UUID requestId, UUID quotationId, UUID fixerUserId,
+            UUID ownerUserId, String paymentMethod, long agreedAmount, Instant occurredAt) {
+        this(requestId, quotationId, fixerUserId, ownerUserId, paymentMethod, agreedAmount,
+                occurredAt, ownerUserId, "SYSTEM");
+    }
+
     public JobOpeningCommand {
         Objects.requireNonNull(requestId, "requestId must not be null");
         Objects.requireNonNull(quotationId, "quotationId must not be null");
@@ -19,5 +26,6 @@ public record JobOpeningCommand(UUID requestId, UUID quotationId, UUID fixerUser
             throw new IllegalArgumentException("agreedAmount must be positive");
         }
         Objects.requireNonNull(occurredAt, "occurredAt must not be null");
+        Objects.requireNonNull(changedBySubject, "changedBySubject must not be null");
     }
 }

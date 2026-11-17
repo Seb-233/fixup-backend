@@ -1,5 +1,8 @@
 package com.fixup.requests.application;
 
+import com.fixup.audit.api.AuditedResourceType;
+import com.fixup.audit.api.StatusAuditTrail;
+import com.fixup.audit.api.StatusChangeCommand;
 import com.fixup.identityaccess.api.CurrentActor;
 import com.fixup.requests.api.RepairRequestAccessDeniedException;
 import com.fixup.requests.api.RepairRequestNotFoundException;
@@ -13,9 +16,11 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class CancelRepairRequest {
     private final RepairRequests requests;
+    private final StatusAuditTrail auditTrail;
 
-    CancelRepairRequest(RepairRequests requests) {
+    CancelRepairRequest(RepairRequests requests, StatusAuditTrail auditTrail) {
         this.requests = requests;
+        this.auditTrail = auditTrail;
     }
 
     @Transactional
@@ -25,8 +30,12 @@ public class CancelRepairRequest {
         if (!request.involves(actor.internalUserId())) {
             throw new RepairRequestAccessDeniedException();
         }
-        var cancelled = request.cancel(Instant.now());
+        var now = Instant.now();
+        var cancelled = request.cancel(now);
         requests.update(cancelled);
+        auditTrail.record(StatusChangeCommand.user(AuditedResourceType.REPAIR_REQUEST, cancelled.id(),
+                request.status().name(), cancelled.status().name(), actor.internalUserId(),
+                actor.externalSubject(), now));
         return RepairRequestSummary.of(cancelled);
     }
 }

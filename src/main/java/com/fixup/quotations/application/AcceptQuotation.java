@@ -102,7 +102,8 @@ public class AcceptQuotation {
         rejected.forEach(offer -> quotations.update(offer.reject(now)));
 
         // 9. Assign the request.
-        requests.assign(requestId, accepted.fixerUserId());
+        requests.assign(requestId, accepted.fixerUserId(), actor.internalUserId(),
+                actor.externalSubject(), now);
 
         contexts.capture(new com.fixup.payments.api.PaymentContext(accepted.id(), requestId, property.id(),
                 request.ownerUserId(), accepted.fixerUserId(), property.managerUserId(),
@@ -112,13 +113,14 @@ public class AcceptQuotation {
         if (request.paymentMethod() == PaymentMethod.TRANSFER) {
             paymentId = paymentInitiation.initiate(new PaymentInitiationCommand(accepted.id(),
                     accepted.requestId(), request.ownerUserId(), accepted.fixerUserId(),
-                    accepted.amount(), request.paymentMethod().name(), now)).paymentId();
+                    accepted.amount(), request.paymentMethod().name(), now, actor.internalUserId(),
+                    actor.externalSubject())).paymentId();
         }
 
         // 10. Publish event.
         events.publishEvent(new QuotationAccepted(accepted.id(), accepted.requestId(),
                 accepted.fixerUserId(), request.ownerUserId(), accepted.amount(), now,
-                request.paymentMethod()));
+                request.paymentMethod(), actor.internalUserId(), actor.externalSubject()));
 
         notifyDecision(request, accepted, rejected);
         return new AcceptedQuotation(accepted.id(), accepted.requestId(), request.paymentMethod(), paymentId);

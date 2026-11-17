@@ -1,5 +1,8 @@
 package com.fixup.requests.web;
 
+import com.fixup.audit.api.AuditedResourceType;
+import com.fixup.audit.api.StatusAuditTrail;
+import com.fixup.audit.api.StatusChangeCommand;
 import com.fixup.fixers.api.Specialty;
 import com.fixup.identityaccess.api.CurrentActorProvider;
 import com.fixup.identityaccess.api.Role;
@@ -55,12 +58,14 @@ class SlaBoardController {
     private final RepairRequests requests;
     private final ListSlaBoardRequests listSlaBoardRequests;
     private final CurrentActorProvider currentActorProvider;
+    private final StatusAuditTrail auditTrail;
 
     SlaBoardController(RepairRequests requests, CurrentActorProvider currentActorProvider,
-            ListSlaBoardRequests listSlaBoardRequests) {
+            ListSlaBoardRequests listSlaBoardRequests, StatusAuditTrail auditTrail) {
         this.requests = requests;
         this.listSlaBoardRequests = listSlaBoardRequests;
         this.currentActorProvider = currentActorProvider;
+        this.auditTrail = auditTrail;
     }
 
     private void requirePlatformAdmin() {
@@ -97,6 +102,12 @@ class SlaBoardController {
             updated = updated.withStatus(RepairRequestStatus.ASSIGNED, now);
         }
         requests.update(updated);
+        if (request.status() != updated.status()) {
+            var actor = currentActorProvider.currentActor();
+            auditTrail.record(StatusChangeCommand.user(AuditedResourceType.REPAIR_REQUEST, updated.id(),
+                    request.status().name(), updated.status().name(), actor.internalUserId(),
+                    actor.externalSubject(), now));
+        }
         return SlaBoardItemResponse.of(updated);
     }
 

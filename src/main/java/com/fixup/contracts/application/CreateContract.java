@@ -1,5 +1,8 @@
 package com.fixup.contracts.application;
 
+import com.fixup.audit.api.AuditedResourceType;
+import com.fixup.audit.api.StatusAuditTrail;
+import com.fixup.audit.api.StatusChangeCommand;
 import com.fixup.contracts.api.ContractAccessDeniedException;
 import com.fixup.contracts.api.ContractCreated;
 import com.fixup.contracts.api.ContractNotFoundException;
@@ -29,15 +32,17 @@ public class CreateContract {
     private final ApplicationEventPublisher eventPublisher;
     private final PropertyDirectory properties;
     private final UserDirectory users;
+    private final StatusAuditTrail auditTrail;
 
     public CreateContract(RentalContracts contracts, CurrentActorProvider currentActorProvider,
                           ApplicationEventPublisher eventPublisher, PropertyDirectory properties,
-                          UserDirectory users) {
+                          UserDirectory users, StatusAuditTrail auditTrail) {
         this.contracts = contracts;
         this.currentActorProvider = currentActorProvider;
         this.eventPublisher = eventPublisher;
         this.properties = properties;
         this.users = users;
+        this.auditTrail = auditTrail;
     }
 
     public ContractResponse execute(CreateContractRequest request) {
@@ -67,6 +72,9 @@ public class CreateContract {
         );
 
         RentalContract saved = contracts.save(contract);
+        auditTrail.record(StatusChangeCommand.user(AuditedResourceType.RENTAL_CONTRACT, saved.id(),
+                null, saved.status().name(), actor.internalUserId(), actor.externalSubject(),
+                saved.createdAt()));
         eventPublisher.publishEvent(new ContractCreated(
             saved.id(), saved.propertyId(), saved.ownerUserId(), saved.tenantUserId()
         ));

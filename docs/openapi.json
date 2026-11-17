@@ -7677,32 +7677,39 @@
         } ]
       }
     },
-    "/administration/payments/reconciliation" : {
+    "/administration/audit/status-changes" : {
       "get" : {
-        "tags" : [ "ledger-reconciliation-controller" ],
-        "summary" : "Run the payment ledger reconciliation now and return its result",
-        "operationId" : "reconciliation",
+        "tags" : [ "status-audit-controller" ],
+        "summary" : "List audited status changes",
+        "description" : "Administrative trace of state transitions across requests, contracts, payments and jobs.",
+        "operationId" : "list_1",
+        "parameters" : [ {
+          "name" : "resourceType",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "enum" : [ "REPAIR_REQUEST", "RENTAL_CONTRACT", "REPAIR_PAYMENT", "JOB" ]
+          }
+        }, {
+          "name" : "resourceId",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        }, {
+          "name" : "limit",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "default" : 100
+          }
+        } ],
         "responses" : {
-          "200" : {
-            "description" : "The ledger was read: totals in whole COP, rows scanned per table, every conservation equation and every broken invariant with a sample of row ids",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/LedgerReconciliation"
-                }
-              }
-            }
-          },
-          "503" : {
-            "description" : "No result: LEDGER_RECONCILIATION_DISABLED (turned off until the ledger reader is provisioned; no Retry-After), LEDGER_UNREADABLE (the ledger could not be read) or LEDGER_RECONCILIATION_BUSY (another instance is reconciling). Never means 'no findings'",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
           "401" : {
             "description" : "Missing or invalid bearer token",
             "content" : {
@@ -7714,7 +7721,7 @@
             }
           },
           "403" : {
-            "description" : "Missing PLATFORM_ADMIN role or inactive account",
+            "description" : "Missing PLATFORM_ADMIN role",
             "content" : {
               "application/json" : {
                 "schema" : {
@@ -11218,10 +11225,10 @@
       "Pageable" : {
         "type" : "object",
         "properties" : {
-          "page" : {
+          "size" : {
             "type" : "integer",
             "format" : "int32",
-            "minimum" : 0
+            "minimum" : 1
           },
           "sort" : {
             "type" : "array",
@@ -11229,10 +11236,10 @@
               "type" : "string"
             }
           },
-          "size" : {
+          "page" : {
             "type" : "integer",
             "format" : "int32",
-            "minimum" : 1
+            "minimum" : 0
           }
         }
       },
@@ -11319,209 +11326,6 @@
           },
           "sorted" : {
             "type" : "boolean"
-          }
-        }
-      },
-      "LedgerBalance" : {
-        "type" : "object",
-        "properties" : {
-          "code" : {
-            "type" : "string"
-          },
-          "description" : {
-            "type" : "string"
-          },
-          "expected" : {
-            "type" : "integer",
-            "format" : "int64"
-          },
-          "actual" : {
-            "type" : "integer",
-            "format" : "int64"
-          },
-          "holds" : {
-            "type" : "boolean"
-          }
-        }
-      },
-      "LedgerFinding" : {
-        "type" : "object",
-        "properties" : {
-          "code" : {
-            "type" : "string"
-          },
-          "description" : {
-            "type" : "string"
-          },
-          "count" : {
-            "type" : "integer",
-            "format" : "int64"
-          },
-          "sample" : {
-            "type" : "array",
-            "items" : {
-              "type" : "string",
-              "format" : "uuid"
-            }
-          }
-        }
-      },
-      "LedgerReconciliation" : {
-        "type" : "object",
-        "properties" : {
-          "checkedAt" : {
-            "type" : "string",
-            "format" : "date-time"
-          },
-          "consistent" : {
-            "type" : "boolean"
-          },
-          "balanced" : {
-            "type" : "boolean"
-          },
-          "totals" : {
-            "$ref" : "#/components/schemas/LedgerTotals"
-          },
-          "scanned" : {
-            "$ref" : "#/components/schemas/LedgerScanned"
-          },
-          "balances" : {
-            "type" : "array",
-            "items" : {
-              "$ref" : "#/components/schemas/LedgerBalance"
-            }
-          },
-          "findings" : {
-            "type" : "array",
-            "items" : {
-              "$ref" : "#/components/schemas/LedgerFinding"
-            }
-          }
-        }
-      },
-      "LedgerScanned" : {
-        "type" : "object",
-        "properties" : {
-          "payments" : {
-            "type" : "integer",
-            "format" : "int64"
-          },
-          "paymentAttempts" : {
-            "type" : "integer",
-            "format" : "int64"
-          },
-          "earnings" : {
-            "type" : "integer",
-            "format" : "int64"
-          },
-          "payouts" : {
-            "type" : "integer",
-            "format" : "int64"
-          },
-          "payoutEntries" : {
-            "type" : "integer",
-            "format" : "int64"
-          },
-          "debts" : {
-            "type" : "integer",
-            "format" : "int64"
-          },
-          "cashSettlements" : {
-            "type" : "integer",
-            "format" : "int64"
-          }
-        }
-      },
-      "LedgerTotals" : {
-        "type" : "object",
-        "properties" : {
-          "collected" : {
-            "type" : "integer",
-            "format" : "int64"
-          },
-          "serviceCollected" : {
-            "type" : "integer",
-            "format" : "int64"
-          },
-          "debtCollected" : {
-            "type" : "integer",
-            "format" : "int64"
-          },
-          "earningsGross" : {
-            "type" : "integer",
-            "format" : "int64"
-          },
-          "serviceEarningsGross" : {
-            "type" : "integer",
-            "format" : "int64"
-          },
-          "debtEarningsGross" : {
-            "type" : "integer",
-            "format" : "int64"
-          },
-          "legacyEarningsGross" : {
-            "type" : "integer",
-            "format" : "int64"
-          },
-          "commission" : {
-            "type" : "integer",
-            "format" : "int64"
-          },
-          "net" : {
-            "type" : "integer",
-            "format" : "int64"
-          },
-          "heldNet" : {
-            "type" : "integer",
-            "format" : "int64"
-          },
-          "availableNet" : {
-            "type" : "integer",
-            "format" : "int64"
-          },
-          "paidOutNet" : {
-            "type" : "integer",
-            "format" : "int64"
-          },
-          "payouts" : {
-            "type" : "integer",
-            "format" : "int64"
-          },
-          "composedPayouts" : {
-            "type" : "integer",
-            "format" : "int64"
-          },
-          "legacyPayouts" : {
-            "type" : "integer",
-            "format" : "int64"
-          },
-          "payoutEntriesNet" : {
-            "type" : "integer",
-            "format" : "int64"
-          },
-          "legacyPaidOutNet" : {
-            "type" : "integer",
-            "format" : "int64"
-          },
-          "paidDebts" : {
-            "type" : "integer",
-            "format" : "int64"
-          },
-          "outstandingDebts" : {
-            "type" : "integer",
-            "format" : "int64"
-          },
-          "cashAgreed" : {
-            "type" : "integer",
-            "format" : "int64"
-          },
-          "cashReceived" : {
-            "type" : "integer",
-            "format" : "int64"
-          },
-          "cashOutstanding" : {
-            "type" : "integer",
-            "format" : "int64"
           }
         }
       }

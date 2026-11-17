@@ -1,5 +1,6 @@
 package com.fixup.requests.web;
 
+import com.fixup.audit.api.StatusAuditTrail;
 import com.fixup.fixers.api.Specialty;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fixup.requests.api.RepairRequestStatus;
@@ -58,6 +59,7 @@ class SlaBoardControllerTest {
     @Autowired MockMvc mvc;
     @Autowired ObjectMapper mapper;
     @MockBean RepairRequests requests;
+    @MockBean StatusAuditTrail auditTrail;
     @MockBean(name = "clock") Clock clock;
     @MockBean CurrentActorProvider actors;
 

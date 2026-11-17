@@ -1,5 +1,8 @@
 package com.fixup.requests.application;
 
+import com.fixup.audit.api.AuditedResourceType;
+import com.fixup.audit.api.StatusAuditTrail;
+import com.fixup.audit.api.StatusChangeCommand;
 import com.fixup.notifications.api.NotificationRequested;
 import com.fixup.notifications.api.NotificationType;
 import com.fixup.requests.api.RepairRequestStatus;
@@ -27,12 +30,14 @@ public class SlaCheckScheduler {
     private final RepairRequests requests;
     private final ApplicationEventPublisher eventPublisher;
     private final Clock clock;
+    private final StatusAuditTrail auditTrail;
 
     public SlaCheckScheduler(RepairRequests requests, ApplicationEventPublisher eventPublisher,
-            java.util.Optional<Clock> clock) {
+            java.util.Optional<Clock> clock, StatusAuditTrail auditTrail) {
         this.requests = requests;
         this.eventPublisher = eventPublisher;
         this.clock = clock.orElse(Clock.systemUTC());
+        this.auditTrail = auditTrail;
     }
 
     @Scheduled(fixedRate = 5 * 60 * 1000)
@@ -59,6 +64,8 @@ public class SlaCheckScheduler {
                         .withStatus(RepairRequestStatus.SLA_BREACHED, now)
                         .withLastEscalationNotifiedAt(now);
                 requests.update(updated);
+                auditTrail.record(StatusChangeCommand.system(AuditedResourceType.REPAIR_REQUEST,
+                        updated.id(), request.status().name(), updated.status().name(), now));
                 eventPublisher.publishEvent(new SlaBreached(
                         updated.id(), updated.propertyId(), updated.ownerUserId(), remainingMinutes));
                 notifyEscalation(updated, NotificationType.REQUEST_SLA_BREACHED, "SLA incumplido",
@@ -67,6 +74,8 @@ public class SlaCheckScheduler {
                     && request.status() != RepairRequestStatus.SLA_BREACHED) {
                 RepairRequest updated = request.withStatus(RepairRequestStatus.SLA_WARNING, now);
                 requests.update(updated);
+                auditTrail.record(StatusChangeCommand.system(AuditedResourceType.REPAIR_REQUEST,
+                        updated.id(), request.status().name(), updated.status().name(), now));
                 eventPublisher.publishEvent(new SlaWarningRaised(
                         updated.id(), updated.propertyId(), updated.ownerUserId(), remainingMinutes));
                 notifyEscalation(updated, NotificationType.REQUEST_SLA_WARNING, "SLA por vencer",
