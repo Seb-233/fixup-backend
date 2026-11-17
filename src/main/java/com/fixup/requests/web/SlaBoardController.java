@@ -15,6 +15,7 @@ import com.fixup.requests.application.Page;
 import com.fixup.requests.application.SlaBoardPageable;
 import com.fixup.requests.domain.RepairRequest;
 import com.fixup.requests.domain.RepairRequests;
+import com.fixup.requests.domain.SlaPolicy;
 import com.fixup.shared.errors.ErrorResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -52,8 +53,6 @@ import org.springframework.web.bind.annotation.RestController;
             content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
 })
 class SlaBoardController {
-
-    private static final Duration WARNING_THRESHOLD = Duration.ofMinutes((long) (48L * 60L * 0.20));
 
     private final RepairRequests requests;
     private final ListSlaBoardRequests listSlaBoardRequests;
@@ -171,24 +170,7 @@ class SlaBoardController {
         }
 
         private static SlaState computeSlaState(RepairRequest request) {
-            if (request.slaDeadline() == null) {
-                return SlaState.NONE;
-            }
-            if (request.status() == RepairRequestStatus.SLA_BREACHED) {
-                return SlaState.BREACHED;
-            }
-            if (request.status() == RepairRequestStatus.SLA_WARNING) {
-                return SlaState.WARNING;
-            }
-            Instant now = Instant.now();
-            if (request.slaDeadline().isBefore(now)) {
-                return SlaState.BREACHED;
-            }
-            Duration remaining = Duration.between(now, request.slaDeadline());
-            if (remaining.compareTo(WARNING_THRESHOLD) <= 0) {
-                return SlaState.WARNING;
-            }
-            return SlaState.ON_TRACK;
+            return SlaPolicy.stateOf(request.status(), request.slaDeadline(), Instant.now());
         }
     }
 }

@@ -3,6 +3,8 @@ package com.fixup.requests.application;
 import com.fixup.audit.api.AuditedResourceType;
 import com.fixup.audit.api.StatusAuditTrail;
 import com.fixup.audit.api.StatusChangeCommand;
+import com.fixup.identityaccess.api.Role;
+import com.fixup.identityaccess.api.UserDirectory;
 import com.fixup.notifications.api.NotificationRequested;
 import com.fixup.notifications.api.NotificationType;
 import com.fixup.requests.api.RepairRequestStatus;
@@ -10,6 +12,7 @@ import com.fixup.requests.api.SlaBreached;
 import com.fixup.requests.api.SlaWarningRaised;
 import com.fixup.requests.domain.RepairRequest;
 import com.fixup.requests.domain.RepairRequests;
+import com.fixup.requests.domain.SlaPolicy;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -17,27 +20,30 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.LinkedHashSet;
 import java.util.Set;
+import java.util.UUID;
 
 @Component
 public class SlaCheckScheduler {
 
-    private static final Duration WARNING_THRESHOLD = Duration.ofMinutes((long) (48L * 60L * 0.20));
-    private static final Set<RepairRequestStatus> TERMINAL_SLA_STATUSES = Set.of(
-            RepairRequestStatus.SLA_WARNING, RepairRequestStatus.SLA_BREACHED,
-            RepairRequestStatus.COMPLETED, RepairRequestStatus.CANCELLED);
+    private static final Set<RepairRequestStatus> FINAL_SLA_STATUSES = Set.of(
+            RepairRequestStatus.SLA_BREACHED, RepairRequestStatus.COMPLETED,
+            RepairRequestStatus.CANCELLED);
 
     private final RepairRequests requests;
     private final ApplicationEventPublisher eventPublisher;
     private final Clock clock;
     private final StatusAuditTrail auditTrail;
+    private final UserDirectory userDirectory;
 
     public SlaCheckScheduler(RepairRequests requests, ApplicationEventPublisher eventPublisher,
-            java.util.Optional<Clock> clock, StatusAuditTrail auditTrail) {
+            java.util.Optional<Clock> clock, StatusAuditTrail auditTrail, UserDirectory userDirectory) {
         this.requests = requests;
         this.eventPublisher = eventPublisher;
         this.clock = clock.orElse(Clock.systemUTC());
         this.auditTrail = auditTrail;
+        this.userDirectory = userDirectory;
     }
 
     @Scheduled(fixedRate = 5 * 60 * 1000)
@@ -49,13 +55,13 @@ public class SlaCheckScheduler {
             if (request.slaDeadline() == null) {
                 continue;
             }
-            if (TERMINAL_SLA_STATUSES.contains(request.status())) {
+            if (FINAL_SLA_STATUSES.contains(request.status())) {
                 continue;
             }
 
             Duration remaining = Duration.between(now, request.slaDeadline());
             boolean isBreached = remaining.isNegative() || remaining.isZero();
-            boolean isWarning = !isBreached && remaining.compareTo(WARNING_THRESHOLD) <= 0;
+            boolean isWarning = !isBreached && remaining.compareTo(SlaPolicy.WARNING_THRESHOLD) <= 0;
 
             long remainingMinutes = Math.max(0, remaining.toMinutes());
 
@@ -84,9 +90,14 @@ public class SlaCheckScheduler {
         }
     }
 
-    /** RNF-07: el aviso previo y el escalamiento llegan a quien decide y a quien ejecuta. */
+    /**
+     * RNF-07: el aviso previo y el escalamiento llegan a quien decide, a quien ejecuta y, al
+     * administrador de la plataforma, que es quien garantiza el compromiso de las 48 horas. Los
+     * destinatarios se deduplican por identificador porque una misma persona puede coincidir en
+     * varios papeles.
+     */
     private void notifyEscalation(RepairRequest request, NotificationType type, String title, String body) {
-        var recipients = new java.util.LinkedHashSet<java.util.UUID>();
+        var recipients = new LinkedHashSet<UUID>();
         recipients.add(request.ownerUserId());
         if (request.managerUserId() != null) {
             recipients.add(request.managerUserId());
@@ -94,7 +105,10 @@ public class SlaCheckScheduler {
         if (request.assignedFixerUserId() != null) {
             recipients.add(request.assignedFixerUserId());
         }
-        for (var recipient : recipients) {
+        userDirectory.activeUsersWithRole(Role.PLATFORM_ADMIN).stream()
+                .map(UserDirectory.UserCard::id)
+                .forEach(recipients::add);
+        for (UUID recipient : recipients) {
             eventPublisher.publishEvent(NotificationRequested.of(recipient, type, title, body,
                     "/requests/" + request.id(), request.id(), "REQUEST"));
         }

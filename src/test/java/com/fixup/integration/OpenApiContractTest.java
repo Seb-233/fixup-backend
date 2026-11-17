@@ -381,6 +381,9 @@ class OpenApiContractTest {
         String json = mapper.writerWithDefaultPrettyPrinter().writeValueAsString(contract) + System.lineSeparator();
         Files.writeString(Path.of("target", "openapi-runtime.json"), json);
         var documented = mapper.readTree(Path.of("docs", "openapi.json").toFile());
+        assertThat(OpenApiCompatibility.findBreakingChanges(documented, contract))
+                .as("The deployed OpenAPI v1 contract must remain backward compatible")
+                .isEmpty();
         documented.at("/components/schemas").fields().forEachRemaining(previous -> {
             if(java.util.Set.of("SimulationRequest","PaymentSimulationOutcome").contains(previous.getKey())) return;
             var actual=contract.at("/components/schemas/"+previous.getKey());
@@ -414,6 +417,8 @@ class OpenApiContractTest {
         ((com.fasterxml.jackson.databind.node.ObjectNode)contract).put("x-integration-status","FR-UC-05.4: full runtime contract checked against previously reconciled routes, responses and security; PostgreSQL 17.");
         String exported=mapper.writerWithDefaultPrettyPrinter().writeValueAsString(contract)+System.lineSeparator();
         Files.writeString(Path.of("target","openapi.json"),exported);
-        Files.writeString(Path.of("docs","openapi.json"),exported);
+        if (Boolean.getBoolean("fixup.openapi.update-snapshot")) {
+            Files.writeString(Path.of("docs", "openapi.json"), exported);
+        }
     }
 }
