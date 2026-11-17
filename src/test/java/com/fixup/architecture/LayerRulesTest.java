@@ -26,7 +26,7 @@ class LayerRulesTest {
                     "com.fixup.quotations..", "com.fixup.jobs..", "com.fixup.notifications..",
                     "com.fixup.messaging..", "com.fixup.payments..", "com.fixup.contracts..",
                     "com.fixup.analytics..", "com.fixup.remodelings..", "com.fixup.visits..",
-                    "com.fixup.ratings..");
+                    "com.fixup.ratings..", "com.fixup.audit..");
 
     static final ArchRule webMustNotAccessPersistence = noClasses().that()
             .resideInAPackage("..web..")

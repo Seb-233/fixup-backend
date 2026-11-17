@@ -20,8 +20,16 @@ import java.util.UUID;
  * ningún método crea un earning durante la aceptación.
  */
 public record QuotationAccepted(UUID quotationId, UUID requestId, UUID fixerUserId, UUID ownerUserId,
-        long amount, Instant acceptedAt, PaymentMethod paymentMethod) {
+        long amount, Instant acceptedAt, PaymentMethod paymentMethod, UUID decidedByUserId,
+        String decidedBySubject) {
+    public QuotationAccepted(UUID quotationId, UUID requestId, UUID fixerUserId, UUID ownerUserId,
+            long amount, Instant acceptedAt, PaymentMethod paymentMethod) {
+        this(quotationId, requestId, fixerUserId, ownerUserId, amount, acceptedAt, paymentMethod,
+                ownerUserId, "SYSTEM");
+    }
+
     public QuotationAccepted {
         Objects.requireNonNull(paymentMethod, "paymentMethod must not be null");
+        Objects.requireNonNull(decidedBySubject, "decidedBySubject must not be null");
     }
 }

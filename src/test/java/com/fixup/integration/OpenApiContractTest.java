@@ -76,6 +76,7 @@ class OpenApiContractTest {
                 "/contracts/{id}/terminate", "/contracts/expiring", "/contracts/tenant-lookup",
                 "/administration/sla-board/requests", "/administration/sla-board/requests/{id}/reassign",
                 "/administration/sla-board/requests/{id}/acknowledge",
+                "/administration/audit/status-changes",
                 "/properties/{propertyId}/publish", "/properties/{propertyId}/unpublish",
                 "/properties/{propertyId}/manager", "/properties/managers", "/properties/catalog",
                 "/properties/{propertyId}/listing",

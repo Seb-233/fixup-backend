@@ -25,6 +25,7 @@ class OpenJobOnPaymentApproved {
             return;
         }
         jobs.open(new JobOpeningCommand(event.requestId(), event.quotationId(), event.fixerUserId(),
-                event.ownerUserId(), "TRANSFER", event.amount(), event.approvedAt()));
+                event.ownerUserId(), "TRANSFER", event.amount(), event.approvedAt(),
+                event.approvedByUserId(), event.approvedBySubject()));
     }
 }

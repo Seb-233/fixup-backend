@@ -1,5 +1,8 @@
 package com.fixup.payments.application;
 
+import com.fixup.audit.api.AuditedResourceType;
+import com.fixup.audit.api.StatusAuditTrail;
+import com.fixup.audit.api.StatusChangeCommand;
 import com.fixup.identityaccess.api.CurrentActor;
 import com.fixup.payments.api.DebtNotFoundException;
 import com.fixup.payments.api.PaymentConflictException;
@@ -20,12 +23,15 @@ public class InitiateDebtPayment {
     private final RepairPayments payments;
     private final Clock clock;
     private final PaymentAuthorization authorization;
+    private final StatusAuditTrail auditTrail;
 
-    InitiateDebtPayment(OwnerDebts debts, RepairPayments payments, Clock clock, PaymentAuthorization authorization) {
+    InitiateDebtPayment(OwnerDebts debts, RepairPayments payments, Clock clock,
+            PaymentAuthorization authorization, StatusAuditTrail auditTrail) {
         this.debts = debts;
         this.payments = payments;
         this.clock = clock;
         this.authorization = authorization;
+        this.auditTrail = auditTrail;
     }
 
     @Transactional
@@ -51,10 +57,13 @@ public class InitiateDebtPayment {
             }
             return PaymentDetail.from(payment);
         }
+        var createdAt = clock.instant();
         var payment = RepairPayment.pending(UUID.randomUUID(), debt.quotationId(),
                 debt.requestId(), debt.ownerUserId(), debt.fixerUserId(), debt.amount(),
-                RepairPaymentMethod.TRANSFER, PaymentPurpose.OUTSTANDING_BALANCE, clock.instant());
+                RepairPaymentMethod.TRANSFER, PaymentPurpose.OUTSTANDING_BALANCE, createdAt);
         payments.create(payment);
+        auditTrail.record(StatusChangeCommand.user(AuditedResourceType.REPAIR_PAYMENT, payment.id(), null,
+                payment.status().name(), actor.internalUserId(), actor.externalSubject(), createdAt));
         return PaymentDetail.from(payment);
     }
 }

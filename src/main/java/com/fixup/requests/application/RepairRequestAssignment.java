@@ -1,5 +1,8 @@
 package com.fixup.requests.application;
 
+import com.fixup.audit.api.AuditedResourceType;
+import com.fixup.audit.api.StatusAuditTrail;
+import com.fixup.audit.api.StatusChangeCommand;
 import com.fixup.requests.api.ProjectRepairRequestSnapshot;
 import com.fixup.requests.api.RepairRequestDirectory;
 import com.fixup.requests.api.RepairRequestCompletionCommand;
@@ -21,6 +24,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import org.springframework.beans.factory.annotation.Autowired;
 
 /**
  * FR-UC-18: contrato que quotations consume para leer y cerrar una solicitud. La asignación exige
@@ -31,10 +35,18 @@ import java.util.stream.Collectors;
 class RepairRequestAssignment implements RepairRequestDirectory {
     private final RepairRequests requests;
     private final RequestInvitations invitations;
+    private final StatusAuditTrail auditTrail;
 
-    RepairRequestAssignment(RepairRequests requests, RequestInvitations invitations) {
+    @Autowired
+    RepairRequestAssignment(RepairRequests requests, RequestInvitations invitations,
+            StatusAuditTrail auditTrail) {
         this.requests = requests;
         this.invitations = invitations;
+        this.auditTrail = auditTrail;
+    }
+
+    RepairRequestAssignment(RepairRequests requests, RequestInvitations invitations) {
+        this(requests, invitations, command -> { });
     }
 
     @Override
@@ -78,11 +90,16 @@ class RepairRequestAssignment implements RepairRequestDirectory {
 
     @Override
     @Transactional(propagation = Propagation.MANDATORY)
-    public void assign(UUID requestId, UUID fixerUserId) {
+    public void assign(UUID requestId, UUID fixerUserId, UUID changedByUserId, String changedBySubject,
+            Instant changedAt) {
         // Lock the row: two owners accepting different quotations at once must not both win.
         var request = requests.findByIdForUpdate(requestId)
                 .orElseThrow(RepairRequestNotFoundException::new);
-        requests.update(request.assign(fixerUserId, Instant.now()));
+        var updated = request.assign(fixerUserId, changedAt);
+        requests.update(updated);
+        auditTrail.record(StatusChangeCommand.user(AuditedResourceType.REPAIR_REQUEST, updated.id(),
+                request.status().name(), updated.status().name(), changedByUserId, changedBySubject,
+                changedAt));
     }
 
     @Override
@@ -105,6 +122,10 @@ class RepairRequestAssignment implements RepairRequestDirectory {
             throw new RepairRequestConflictException("REQUEST_NOT_ASSIGNED",
                     "Only an assigned request can be completed");
         }
-        requests.update(request.complete(command.completedAt()));
+        var completed = request.complete(command.completedAt());
+        requests.update(completed);
+        auditTrail.record(StatusChangeCommand.user(AuditedResourceType.REPAIR_REQUEST, completed.id(),
+                request.status().name(), completed.status().name(), command.changedByUserId(),
+                command.changedBySubject(), command.completedAt()));
     }
 }

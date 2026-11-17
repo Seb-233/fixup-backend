@@ -1,5 +1,8 @@
 package com.fixup.jobs.application;
 
+import com.fixup.audit.api.AuditedResourceType;
+import com.fixup.audit.api.StatusAuditTrail;
+import com.fixup.audit.api.StatusChangeCommand;
 import com.fixup.fixers.api.FixerEligibility;
 import com.fixup.identityaccess.api.CurrentActor;
 import com.fixup.jobs.api.JobCompleted;
@@ -15,6 +18,7 @@ import com.fixup.requests.api.RepairRequestDirectory;
 import com.fixup.requests.api.RepairRequestCompletionCommand;
 import java.time.Instant;
 import java.util.UUID;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,10 +37,12 @@ public class CompleteJob {
     private final PropertyWorkHistory workHistory;
     private final JobNotices notices;
     private final ApplicationEventPublisher events;
+    private final StatusAuditTrail auditTrail;
 
+    @Autowired
     CompleteJob(Jobs jobs, JobRecords records, FixerEligibility eligibility, RepairRequestDirectory requests,
             PaymentSettlement settlement, PropertyWorkHistory workHistory, JobNotices notices,
-            ApplicationEventPublisher events) {
+            ApplicationEventPublisher events, StatusAuditTrail auditTrail) {
         this.jobs = jobs;
         this.records = records;
         this.eligibility = eligibility;
@@ -45,6 +51,14 @@ public class CompleteJob {
         this.workHistory = workHistory;
         this.notices = notices;
         this.events = events;
+        this.auditTrail = auditTrail;
+    }
+
+    CompleteJob(Jobs jobs, JobRecords records, FixerEligibility eligibility, RepairRequestDirectory requests,
+            PaymentSettlement settlement, PropertyWorkHistory workHistory, JobNotices notices,
+            ApplicationEventPublisher events) {
+        this(jobs, records, eligibility, requests, settlement, workHistory, notices, events,
+                command -> { });
     }
 
     @Transactional
@@ -74,10 +88,15 @@ public class CompleteJob {
                     "Transfer jobs do not accept a cash received amount");
         }
 
-        var completed = job.complete(note, Instant.now());
+        var completedAt = Instant.now();
+        var previousStatus = job.status().name();
+        var completed = job.complete(note, completedAt);
         jobs.update(completed);
         records.log(new JobLogEntry(UUID.randomUUID(), jobId, completed.status(), completed.progressNote(),
                 actor.internalUserId(), completed.completedAt()));
+        auditTrail.record(StatusChangeCommand.user(AuditedResourceType.JOB, jobId, previousStatus,
+                completed.status().name(), actor.internalUserId(), actor.externalSubject(),
+                completed.completedAt()));
 
         // Preserve lock/write order: job, financial settlement, then repair request.
         settlement.settle(new PaymentSettlementCommand(completed.id(), completed.quotationId(),

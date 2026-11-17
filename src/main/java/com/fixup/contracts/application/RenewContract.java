@@ -1,5 +1,8 @@
 package com.fixup.contracts.application;
 
+import com.fixup.audit.api.AuditedResourceType;
+import com.fixup.audit.api.StatusAuditTrail;
+import com.fixup.audit.api.StatusChangeCommand;
 import com.fixup.contracts.api.ContractAccessDeniedException;
 import com.fixup.contracts.domain.RentalContract;
 import com.fixup.contracts.domain.RentalContracts;
@@ -20,12 +23,14 @@ public class RenewContract {
     private final RentalContracts contracts;
     private final CurrentActorProvider currentActorProvider;
     private final ApplicationEventPublisher eventPublisher;
+    private final StatusAuditTrail auditTrail;
 
     public RenewContract(RentalContracts contracts, CurrentActorProvider currentActorProvider,
-                         ApplicationEventPublisher eventPublisher) {
+                         ApplicationEventPublisher eventPublisher, StatusAuditTrail auditTrail) {
         this.contracts = contracts;
         this.currentActorProvider = currentActorProvider;
         this.eventPublisher = eventPublisher;
+        this.auditTrail = auditTrail;
     }
 
     public ContractResponse execute(UUID id, LocalDate newEndDate) {
@@ -43,8 +48,12 @@ public class RenewContract {
             }
         }
 
+        var previousStatus = contract.status().name();
         contract.renew(newEndDate);
         RentalContract saved = contracts.save(contract);
+        auditTrail.record(StatusChangeCommand.user(AuditedResourceType.RENTAL_CONTRACT, saved.id(),
+                previousStatus, saved.status().name(), actor.internalUserId(), actor.externalSubject(),
+                saved.updatedAt()));
 
         eventPublisher.publishEvent(new com.fixup.contracts.api.ContractCreated(
             saved.id(), saved.propertyId(), saved.ownerUserId(), saved.tenantUserId()

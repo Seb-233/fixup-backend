@@ -35,7 +35,7 @@ de dominio. Los futuros casos de uso de trabajos deben invocar FixerEligibility.
 
 ## Verificación
 
-ModularityTest exige los 17 módulos y ejecuta ApplicationModules.verify().
+ModularityTest exige los 18 módulos y ejecuta ApplicationModules.verify().
 LayerRulesTest impide dependencias de shared hacia negocio y dependencias de web/api
 hacia JPA, Spring Data o infrastructure. Las pruebas funcionales se ejecutan con
 migraciones y se repiten contra PostgreSQL con el perfil Maven postgres-it.
