@@ -10,6 +10,7 @@ import java.util.Optional;
 import java.util.UUID;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class ListStatusChanges {
@@ -21,6 +22,13 @@ public class ListStatusChanges {
         this.users = users;
     }
 
+    /**
+     * La consulta debe correr dentro de una transaccion: RlsSessionTransactionManager publica las
+     * variables de sesion (app.current_user_id/app.current_user_roles) al abrir la transaccion, y
+     * sin transaccion activa la politica SELECT de V50 recibe un rol vacio y niega todas las filas.
+     * Mismo limite transaccional que el resto de casos de uso de lectura del proyecto.
+     */
+    @Transactional(readOnly = true)
     public List<StatusChangeView> execute(com.fixup.identityaccess.api.CurrentActor actor,
             Optional<AuditedResourceType> resourceType, Optional<UUID> resourceId, int limit) {
         if (actor == null || !actor.hasRole(Role.PLATFORM_ADMIN)) {

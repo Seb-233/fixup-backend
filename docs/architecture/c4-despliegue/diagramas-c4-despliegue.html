@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>C4 y despliegue</title>
+<style>
+  :root { --ink: #1d2433; --muted: #5b6475; --line: #d9dee7; --bg: #f6f7f9; --card: #ffffff; --accent: #1f5fae; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 1180px; margin: 0 auto; padding: 24px 16px 64px; }
+  h1 { font-size: 24px; margin: 0 0 4px; }
+  .lead { color: var(--muted); margin: 0 0 24px; max-width: 75ch; }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 18px; margin: 0 0 20px; }
+  h2 { font-size: 17px; margin: 0 0 4px; }
+  .cap { color: var(--muted); margin: 0 0 12px; font-size: 14px; max-width: 90ch; }
+  .tools { display: flex; gap: 8px; margin: 0 0 12px; flex-wrap: wrap; }
+  button { font: inherit; font-size: 13px; padding: 6px 12px; border-radius: 6px; border: 1px solid var(--line); background: #fff; color: var(--ink); cursor: pointer; }
+  button:hover { border-color: var(--accent); color: var(--accent); }
+  .fig { overflow-x: auto; background: #fff; }
+  .fig svg { max-width: 100%; height: auto; }
+  details { margin-top: 10px; font-size: 13px; }
+  details pre { white-space: pre-wrap; background: var(--bg); padding: 10px; border-radius: 6px; }
+  .err { color: #a3261b; font-weight: 600; }
+</style>
+</head>
+<body>
+<main>
+  <h1>C4 y despliegue actualizados (E2-S2)</h1>
+  <p class="lead">Figuras 1, 3 y 11 a 14 del SAD v2. Versión del 15/11/2026, corregida tras la revisión del PR #55. Se hicieron a partir de <code>develop</code> del backend (<code>6094e9b</code>), de <code>main</code> del backend (<code>0f0e84d</code>: manifiestos Green y CD de Green y Blue) y de <code>develop</code> del frontend (<code>1c6dd21</code>). Los nodos se nombran por su función (<code>VM-FRONTEND</code>, <code>VM-BACKEND</code>, <code>API-GATEWAY</code>, <code>SERVICE-GREEN</code>), sin direcciones ni endpoints internos. Cada figura se descarga en SVG o PNG y el código Mermaid está debajo. La página necesita internet para cargar Mermaid.</p>
+  <div id="figs"></div>
+</main>
+
+<script type="text/plain" data-n="1" data-slug="figura-1-contexto" data-title="Figura 1. Diagrama C4 de contexto (Figura 2 del SAD)" data-cap="Cinco tipos de usuario y los sistemas externos con los que FixUp habla hoy. Auth0 solo autentica: los roles se leen de la base de FixUp. La pasarela de pagos sigue simulada en main; la integración con Wompi en sandbox (INT-01) está en revisión y no forma parte de main. El push no tiene proveedor.">
+flowchart TB
+  OWN["Propietario<br/>[Persona]"]:::person
+  TEN["Arrendatario<br/>[Persona]"]:::person
+  FIX["Técnico (Fixer)<br/>[Persona]"]:::person
+  MGR["Inmobiliaria<br/>[Persona]"]:::person
+  ADM["Administrador de la plataforma<br/>[Persona]"]:::person
+  FX["FixUp<br/>[Sistema de software]<br/>Reparaciones, arriendos, cotizaciones,<br/>pagos y portafolio de técnicos"]:::core
+  AUTH0["Auth0<br/>[Sistema externo: OIDC, JWT RS256]"]:::sys
+  OSM["OpenStreetMap<br/>[Sistema externo: teselas y geocodificación]"]:::sys
+  MKT["Proveedor de indicadores de mercado<br/>[Sistema externo: REST; sintético en dev]"]:::sys
+  PAY["Pasarela de pagos<br/>[Simulada en main; Wompi sandbox en revisión]"]:::sys
+  OWN --> FX
+  TEN --> FX
+  FIX --> FX
+  MGR --> FX
+  ADM --> FX
+  FX -->|"valida tokens [HTTPS]"| AUTH0
+  FX -->|"mapas y geocodificación [HTTPS]"| OSM
+  FX -->|"consulta indicadores con caché [HTTPS]"| MKT
+  FX -.->|"cobro de reparaciones"| PAY
+  classDef person fill:#c9dcf2,stroke:#08427b,stroke-width:2px,color:#08273f
+  classDef core fill:#a9c8ec,stroke:#10233f,stroke-width:2px,color:#10233f
+  classDef cont fill:#dbe8f7,stroke:#1f5fae,color:#10233f
+  classDef blue fill:#dbe8f7,stroke:#1f5fae,color:#10233f
+  classDef green fill:#dff3e4,stroke:#2e7d4f,color:#123b22
+  classDef prop fill:#ffffff,stroke:#2e7d4f,color:#123b22,stroke-dasharray:5 4
+  classDef pend fill:#fff6e0,stroke:#a86b00,color:#4a3000,stroke-dasharray:5 4
+  classDef node fill:#eef1f5,stroke:#5b6475,color:#1d2433
+  classDef sys fill:#f1f1f1,stroke:#8a8f99,color:#1d2433,stroke-dasharray:4 3
+</script>
+
+<script type="text/plain" data-n="3" data-slug="figura-3-contenedores" data-title="Figura 3. Diagrama C4 de contenedores (actualizada)" data-cap="Cambios frente al SAD 1.0: nginx sirve la PWA y hace de proxy de /api hacia la API por la red privada, así el navegador habla con un solo origen. La interfaz ya no usa Ionic. Las fotos y documentos viajan directo entre el navegador y el almacenamiento con URL firmada de vigencia corta. RLS forzada en 23 tablas. La observabilidad se limita al agente Alloy, cuyo estado y destino están por verificar.">
+flowchart TB
+  USR["Usuarios (5 roles)<br/>[Persona]"]:::person
+  subgraph FXS["FixUp [Sistema de software]"]
+    direction TB
+    WEB["Aplicación web PWA y Android<br/>[Contenedor: Angular 22, TypeScript, Service Worker;<br/>Capacitor 8 en Android]<br/>Menú y pantallas por rol"]:::cont
+    NGX["Servidor web y proxy<br/>[Contenedor: nginx]<br/>Sirve la PWA, cabeceras de seguridad,<br/>reenvía /api/"]:::cont
+    API["API de aplicación<br/>[Contenedor: Java 21, Spring Boot 3.5,<br/>Spring Modulith]<br/>Monolito modular de 15 módulos"]:::cont
+    DB[("Base de datos<br/>[Contenedor: PostgreSQL 17]<br/>RLS forzada en 23 tablas,<br/>rol de aplicación sin BYPASSRLS")]:::cont
+    S3["Almacenamiento de objetos<br/>[Contenedor: MinIO, API S3]<br/>Bucket privado"]:::cont
+    OBS["Agente de observabilidad<br/>[Grafana Alloy]<br/>Estado por verificar"]:::pend
+  end
+  AUTH0["Auth0<br/>[Sistema externo]"]:::sys
+  OSM["OpenStreetMap<br/>[Sistema externo]"]:::sys
+  MKT["Indicadores de mercado<br/>[Sistema externo]"]:::sys
+  USR -->|"usa [HTTPS]"| WEB
+  WEB -->|"descarga la app y llama /api/ [HTTPS]"| NGX
+  NGX -->|"REST/JSON con JWT [red privada]"| API
+  WEB -->|"inicia sesión, obtiene JWT [OIDC]"| AUTH0
+  WEB -->|"sube y descarga con URL firmada [HTTPS]"| S3
+  WEB -->|"teselas y búsqueda de direcciones"| OSM
+  API -->|"JDBC con el usuario en la sesión (RLS)"| DB
+  API -->|"firma URL, verifica objetos [S3]"| S3
+  API -->|"claves públicas JWKS [HTTPS]"| AUTH0
+  API -->|"REST con timeout y reintento"| MKT
+  OBS -.->|"métricas y logs"| API
+  classDef person fill:#c9dcf2,stroke:#08427b,stroke-width:2px,color:#08273f
+  classDef core fill:#a9c8ec,stroke:#10233f,stroke-width:2px,color:#10233f
+  classDef cont fill:#dbe8f7,stroke:#1f5fae,color:#10233f
+  classDef blue fill:#dbe8f7,stroke:#1f5fae,color:#10233f
+  classDef green fill:#dff3e4,stroke:#2e7d4f,color:#123b22
+  classDef prop fill:#ffffff,stroke:#2e7d4f,color:#123b22,stroke-dasharray:5 4
+  classDef pend fill:#fff6e0,stroke:#a86b00,color:#4a3000,stroke-dasharray:5 4
+  classDef node fill:#eef1f5,stroke:#5b6475,color:#1d2433
+  classDef sys fill:#f1f1f1,stroke:#8a8f99,color:#1d2433,stroke-dasharray:4 3
+</script>
+
+<script type="text/plain" data-n="11" data-slug="figura-11-desarrollo" data-title="Figura 11. Despliegue: ambiente de desarrollo" data-cap="Cada desarrollador levanta base, almacenamiento y API con compose.development.yml, todo publicado solo en la interfaz local del equipo. El frontend corre con ng serve y su proxy envía /api a la API local. El perfil demo carga la semilla de Colombia y habilita el ingreso de demostración; el perfil dev usa PostgreSQL y Auth0 real.">
+flowchart LR
+  subgraph PC["Equipo del desarrollador [macOS o Linux]"]
+    direction LR
+    NG["ng serve<br/>[Node 22, Angular 22]<br/>proxy /api"]:::cont
+    subgraph DC["Docker Compose (compose.development.yml), solo interfaz local"]
+      direction TB
+      BE["backend<br/>[Spring Boot, perfil dev o demo]"]:::cont
+      PG[("database<br/>[PostgreSQL 17]")]:::cont
+      MN["minio<br/>[API S3]"]:::cont
+    end
+    AND["Emulador Android<br/>[Capacitor, adb reverse]"]:::cont
+  end
+  AUTH0["Auth0 (tenant de desarrollo)"]:::sys
+  NG -->|"HTTP local"| BE
+  AND -->|"HTTP por adb reverse"| BE
+  BE --> PG
+  BE --> MN
+  NG -->|"OIDC"| AUTH0
+  BE -->|"JWKS"| AUTH0
+  classDef person fill:#c9dcf2,stroke:#08427b,stroke-width:2px,color:#08273f
+  classDef core fill:#a9c8ec,stroke:#10233f,stroke-width:2px,color:#10233f
+  classDef cont fill:#dbe8f7,stroke:#1f5fae,color:#10233f
+  classDef blue fill:#dbe8f7,stroke:#1f5fae,color:#10233f
+  classDef green fill:#dff3e4,stroke:#2e7d4f,color:#123b22
+  classDef prop fill:#ffffff,stroke:#2e7d4f,color:#123b22,stroke-dasharray:5 4
+  classDef pend fill:#fff6e0,stroke:#a86b00,color:#4a3000,stroke-dasharray:5 4
+  classDef node fill:#eef1f5,stroke:#5b6475,color:#1d2433
+  classDef sys fill:#f1f1f1,stroke:#8a8f99,color:#1d2433,stroke-dasharray:4 3
+</script>
+
+<script type="text/plain" data-n="12" data-slug="figura-12-ci-cd" data-title="Figura 12. Despliegue: integración y entrega continuas" data-cap="CI corre en runners alojados por GitHub en cada push y PR. El CD de Green es automático: cuando el Backend CI de un push a main termina bien, un runner alojado por GitHub construye y publica la imagen de ese commit en GHCR con su digest SHA-256, y un runner restringido, sin Docker ni secretos de Blue y con permiso solo sobre el Deployment Green, la despliega por digest y verifica el rollout. El CD de Blue solo corre a mano desde main, para recuperación. El frontend se despliega con su propio CD tras el CI de main.">
+flowchart LR
+  DEV["Desarrollador<br/>push o PR"]:::person
+  subgraph GH["GitHub Actions"]
+    direction TB
+    CI["Backend CI y Frontend CI<br/>[runners alojados por GitHub]<br/>pruebas, Testcontainers, OpenAPI,<br/>lint, build, ZAP pasivo"]:::cont
+    PUB["Publicación de la imagen<br/>[runner alojado por GitHub]<br/>commit exacto → etiqueta con el SHA completo<br/>y digest SHA-256"]:::cont
+    BLUECD["CD de Blue<br/>[manual desde main, recuperación]"]:::node
+  end
+  GHCR["GHCR<br/>[registro de imágenes]"]:::sys
+  subgraph RUNG["Runner restringido de Green"]
+    DEP["Despliegue por digest<br/>verifica que main no avanzó y que no<br/>tiene permiso sobre Blue; RollingUpdate,<br/>2 réplicas listas; si falla, restaura el digest anterior"]:::green
+  end
+  GREEN["VM-BACKEND · Green<br/>Deployment fixup-backend-green"]:::green
+  BLUE["VM-BACKEND · Blue<br/>Deployment fixup-backend"]:::blue
+  DEV --> CI
+  CI -->|"push a main y CI en verde"| PUB
+  PUB -->|"push"| GHCR
+  PUB -->|"digest"| DEP
+  DEP -->|"kubectl con RBAC solo de Green"| GREEN
+  GREEN -->|"pull por digest"| GHCR
+  BLUECD -.->|"solo si hay que recuperar Blue"| BLUE
+  classDef person fill:#c9dcf2,stroke:#08427b,stroke-width:2px,color:#08273f
+  classDef core fill:#a9c8ec,stroke:#10233f,stroke-width:2px,color:#10233f
+  classDef cont fill:#dbe8f7,stroke:#1f5fae,color:#10233f
+  classDef blue fill:#dbe8f7,stroke:#1f5fae,color:#10233f
+  classDef green fill:#dff3e4,stroke:#2e7d4f,color:#123b22
+  classDef prop fill:#ffffff,stroke:#2e7d4f,color:#123b22,stroke-dasharray:5 4
+  classDef pend fill:#fff6e0,stroke:#a86b00,color:#4a3000,stroke-dasharray:5 4
+  classDef node fill:#eef1f5,stroke:#5b6475,color:#1d2433
+  classDef sys fill:#f1f1f1,stroke:#8a8f99,color:#1d2433,stroke-dasharray:4 3
+</script>
+
+<script type="text/plain" data-n="13" data-slug="figura-13-produccion-blue-green" data-title="Figura 13. Despliegue: producción (Blue con tráfico, Green desplegado sin tráfico)" data-cap="Azul: Blue, namespace fixup, que hoy atiende el tráfico productivo. Verde: Green, namespace fixup-green en el mismo nodo, desplegado y probado según operación (15/11): 2 réplicas listas, HPA de 2 a 4, PDB minAvailable 1, base y almacenamiento propios, NetworkPolicy que lo aísla de Blue. Green no recibe tráfico productivo: SERVICE-GREEN solo reparte entre sus dos réplicas. Naranja punteado: lo previsto, que es la conmutación del 100 % del tráfico a Green tras su aprobación.">
+flowchart TB
+  USR["Usuarios<br/>[navegador o Android]"]:::person
+  DOM["Dominio público<br/>de la plataforma<br/>[HTTPS]"]:::sys
+  AUTH0["Auth0"]:::sys
+  subgraph VF["VM-FRONTEND · k3s"]
+    direction LR
+    IFE["Ingress<br/>[TLS]"]:::node
+    FE["Aplicación web<br/>[Deployment, 1 réplica]<br/>nginx: PWA + proxy /api/"]:::blue
+  end
+  subgraph VB["VM-BACKEND · k3s (un nodo)"]
+    direction TB
+    GW["API-GATEWAY<br/>[Ingress]"]:::node
+    subgraph BLUE["BLUE · fixup (con tráfico)"]
+      direction TB
+      BE["API Blue<br/>[Deployment, 1 réplica, RollingUpdate]"]:::blue
+      PG[("PostgreSQL<br/>[StatefulSet + volumen]")]:::blue
+      MN["MinIO<br/>[StatefulSet + volumen]"]:::blue
+    end
+    subgraph GREEN["GREEN · fixup-green (sin tráfico)"]
+      direction TB
+      SG["SERVICE-GREEN<br/>[Service interno, 2 endpoints]"]:::green
+      GBE["API Green<br/>[2 réplicas, HPA 2–4, PDB minAvailable 1,<br/>imagen por digest, Flyway apagado]"]:::green
+      GPG[("PostgreSQL Green<br/>[propio]")]:::green
+      GMN["MinIO Green<br/>[propio]"]:::green
+      GNP["NetworkPolicy: niega todo por defecto,<br/>sin salida hacia Blue"]:::green
+    end
+    OBS["Agente Alloy<br/>[estado por verificar]"]:::pend
+  end
+  USR -->|"HTTPS"| DOM
+  DOM --> IFE
+  IFE --> FE
+  FE -->|"/api/ [red privada]"| GW
+  GW --> BE
+  GW -.->|"previsto: 100 % a Green tras aprobación;<br/>Blue queda sin tráfico para rollback"| SG
+  BE --> PG
+  BE --> MN
+  SG --> GBE
+  GBE --> GPG
+  GBE --> GMN
+  BE -->|"JWKS"| AUTH0
+  GBE -->|"JWKS"| AUTH0
+  OBS -.-> BE
+  classDef person fill:#c9dcf2,stroke:#08427b,stroke-width:2px,color:#08273f
+  classDef core fill:#a9c8ec,stroke:#10233f,stroke-width:2px,color:#10233f
+  classDef cont fill:#dbe8f7,stroke:#1f5fae,color:#10233f
+  classDef blue fill:#dbe8f7,stroke:#1f5fae,color:#10233f
+  classDef green fill:#dff3e4,stroke:#2e7d4f,color:#123b22
+  classDef prop fill:#ffffff,stroke:#2e7d4f,color:#123b22,stroke-dasharray:5 4
+  classDef pend fill:#fff6e0,stroke:#a86b00,color:#4a3000,stroke-dasharray:5 4
+  classDef node fill:#eef1f5,stroke:#5b6475,color:#1d2433
+  classDef sys fill:#f1f1f1,stroke:#8a8f99,color:#1d2433,stroke-dasharray:4 3
+</script>
+
+<script type="text/plain" data-n="14" data-slug="figura-14-paso-a-green" data-title="Figura 14. Paso de Blue a Green: hecho, pendiente y previsto" data-cap="Estado al 15/11/2026. Verde sólido: hecho (según el repositorio y lo reportado por operación). Naranja punteado: pendiente antes de aprobar Green. Blanco punteado: previsto. El tráfico productivo todavía no se ha conmutado a Green.">
+flowchart LR
+  A["Fundación y datos Green<br/>namespace, cuota, NetworkPolicy,<br/>PostgreSQL y MinIO propios<br/>Estado: hecho"]:::green
+  B["Backend Green<br/>2 réplicas, HPA 2–4, PDB,<br/>Flyway apagado<br/>Estado: desplegado"]:::green
+  C["CD automático por digest<br/>CI en verde → GHCR → runner restringido<br/>Estado: validado"]:::green
+  D["Evidencia<br/>rollout correcto, 30/30 HTTP por port-forward,<br/>10/10 por el Service interno<br/>Estado: reportado"]:::green
+  E["Pérdida de un pod con tráfico continuo;<br/>versionar la cuota ampliada<br/>Estado: pendiente"]:::pend
+  F["Conmutación<br/>100 % del tráfico a Green tras aprobación;<br/>Blue desplegado sin tráfico ordinario<br/>Estado: previsto"]:::prop
+  A --> B --> C --> D --> E --> F
+  F -.->|"rollback: el tráfico vuelve a Blue"| A
+  classDef person fill:#c9dcf2,stroke:#08427b,stroke-width:2px,color:#08273f
+  classDef core fill:#a9c8ec,stroke:#10233f,stroke-width:2px,color:#10233f
+  classDef cont fill:#dbe8f7,stroke:#1f5fae,color:#10233f
+  classDef blue fill:#dbe8f7,stroke:#1f5fae,color:#10233f
+  classDef green fill:#dff3e4,stroke:#2e7d4f,color:#123b22
+  classDef prop fill:#ffffff,stroke:#2e7d4f,color:#123b22,stroke-dasharray:5 4
+  classDef pend fill:#fff6e0,stroke:#a86b00,color:#4a3000,stroke-dasharray:5 4
+  classDef node fill:#eef1f5,stroke:#5b6475,color:#1d2433
+  classDef sys fill:#f1f1f1,stroke:#8a8f99,color:#1d2433,stroke-dasharray:4 3
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.min.js"></script>
+<script>
+  mermaid.initialize({
+    startOnLoad: false,
+    theme: 'neutral',
+    securityLevel: 'strict',
+    htmlLabels: false,
+    flowchart: { htmlLabels: false, curve: 'basis', nodeSpacing: 40, rankSpacing: 55, subGraphTitleMargin: { top: 12, bottom: 18 } },
+    sequence: { useMaxWidth: false, mirrorActors: false, wrap: true, width: 170 },
+    class: { htmlLabels: false }
+  });
+
+  const container = document.getElementById('figs');
+  const sources = [...document.querySelectorAll('script[type="text/plain"][data-n]')];
+
+  function download(name, blob) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  }
+
+  function svgText(svg) {
+    const copy = svg.cloneNode(true);
+    copy.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+    const box = svg.getBBox();
+    const w = Math.ceil(svg.viewBox.baseVal?.width || box.width);
+    const h = Math.ceil(svg.viewBox.baseVal?.height || box.height);
+    copy.setAttribute('width', w);
+    copy.setAttribute('height', h);
+    copy.style.maxWidth = 'none';
+    return { text: new XMLSerializer().serializeToString(copy), w, h };
+  }
+
+  function toPng(svg, name) {
+    const { text, w, h } = svgText(svg);
+    const img = new Image();
+    img.onload = () => {
+      const scale = 2;
+      const canvas = document.createElement('canvas');
+      canvas.width = w * scale;
+      canvas.height = h * scale;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      canvas.toBlob(blob => download(name, blob), 'image/png');
+    };
+    img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(text);
+  }
+
+  (async () => {
+    for (const src of sources) {
+      const n = src.dataset.n;
+      const sec = document.createElement('section');
+      const slug = src.dataset.slug || 'figura-' + n;
+      sec.innerHTML = `<h2>${src.dataset.title}</h2><p class="cap">${src.dataset.cap}</p>
+        <div class="tools"><button data-k="svg">Descargar SVG</button><button data-k="png">Descargar PNG</button></div>
+        <div class="fig"></div><details><summary>Código Mermaid</summary><pre></pre></details>`;
+      sec.querySelector('pre').textContent = src.textContent.trim();
+      container.append(sec);
+      const fig = sec.querySelector('.fig');
+      try {
+        const { svg } = await mermaid.render('m' + n, src.textContent.trim());
+        fig.innerHTML = svg;
+        const el = fig.querySelector('svg');
+        sec.querySelector('[data-k=svg]').onclick = () => download(slug + '.svg', new Blob([svgText(el).text], { type: 'image/svg+xml' }));
+        sec.querySelector('[data-k=png]').onclick = () => toPng(el, slug + '.png');
+      } catch (e) {
+        fig.innerHTML = `<p class="err">No se pudo dibujar: ${String(e.message || e).slice(0, 300)}</p>`;
+        console.error('figura', n, e);
+      }
+    }
+  })();
+</script>
+</body>
+</html>

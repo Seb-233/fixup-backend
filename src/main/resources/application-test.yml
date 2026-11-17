@@ -11,6 +11,12 @@ spring:
           audiences: https://api.example.test
           jwk-set-uri: https://issuer.example.test/.well-known/jwks.json
 fixup:
+  payments:
+    # Apagada como en producción. Los contratos de SAF-01 la encienden; la corrida programada no
+    # llega a correr durante las pruebas: cada contrato la invoca cuando la necesita.
+    reconciliation:
+      enabled: false
+      initial-delay: PT24H
   cors:
     allowed-origins: http://localhost:4200
   geocoding:

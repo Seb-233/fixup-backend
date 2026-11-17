@@ -6,6 +6,8 @@ import com.fixup.payments.api.PaymentNotFoundException;
 import com.fixup.payments.api.DebtNotFoundException;
 import com.fixup.payments.api.CashSettlementNotFoundException;
 import com.fixup.payments.api.InvalidPaymentQueryException;
+import com.fixup.payments.api.LedgerReconciliationUnavailableException;
+import com.fixup.payments.application.ReconcileLedger;
 import com.fixup.shared.errors.ErrorResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseEntity;
@@ -50,10 +52,30 @@ class PaymentErrorHandler {
                 exception.getMessage(), request.getRequestURI()));
     }
 
+    @ExceptionHandler(com.fixup.payments.api.PaymentGatewayUnavailableException.class)
+    ResponseEntity<ErrorResponse> gatewayUnavailable(com.fixup.payments.api.PaymentGatewayUnavailableException exception,
+            HttpServletRequest request) {
+        return ResponseEntity.status(503).body(new ErrorResponse(503, exception.code(),
+                exception.getMessage(), request.getRequestURI()));
+    }
+
     @ExceptionHandler(PaymentConflictException.class)
     ResponseEntity<ErrorResponse> conflict(PaymentConflictException exception,
             HttpServletRequest request) {
         return ResponseEntity.status(409).body(new ErrorResponse(409, exception.code(),
                 exception.getMessage(), request.getRequestURI()));
+    }
+
+    /** No hay resultado de conciliación: nunca se responde 200 con un libro que no se leyó. */
+    @ExceptionHandler(LedgerReconciliationUnavailableException.class)
+    ResponseEntity<ErrorResponse> ledgerUnavailable(LedgerReconciliationUnavailableException exception,
+            HttpServletRequest request) {
+        var response = ResponseEntity.status(503);
+        // Apagada no es transitorio: reintentar no cambia nada hasta que un operador la encienda.
+        if (!ReconcileLedger.DISABLED.equals(exception.code())) {
+            response.header("Retry-After", "10");
+        }
+        return response.body(new ErrorResponse(503, exception.code(), exception.getMessage(),
+                request.getRequestURI()));
     }
 }

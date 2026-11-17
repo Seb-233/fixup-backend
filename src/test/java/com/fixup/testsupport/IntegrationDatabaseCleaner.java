@@ -32,6 +32,9 @@ public class IntegrationDatabaseCleaner {
         // fixup_app because of some earlier, unrelated test's leftover actor.
         DatabaseActorContext.clear();
         transactionTemplate.executeWithoutResult(status -> {
+            // Append-only bitacora de transiciones (RNF-05): sin FK hacia los recursos auditados, asi
+            // que se vacia antes que ellos para que cada prueba arranque sin entradas heredadas.
+            jdbc.update("DELETE FROM status_change_log");
             jdbc.update("DELETE FROM service_ratings");
             jdbc.update("DELETE FROM visit_checklist_items");
             jdbc.update("DELETE FROM technical_visits");
@@ -44,6 +47,7 @@ public class IntegrationDatabaseCleaner {
             jdbc.update("DELETE FROM user_devices");
             jdbc.update("DELETE FROM chat_messages");
             jdbc.update("DELETE FROM simulated_payment_attempts");
+            jdbc.update("DELETE FROM wompi_checkouts");
             jdbc.update("DELETE FROM cash_settlements");
             jdbc.update("DELETE FROM owner_debts");
             jdbc.update("DELETE FROM repair_payments");

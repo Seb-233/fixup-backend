@@ -60,10 +60,21 @@ class PostgresDigitalPaymentMigrationIT {
         var historicalEarning=jdbc.queryForMap("SELECT * FROM fixer_earnings");
         var historicalPayout=jdbc.queryForMap("SELECT * FROM payouts");
         var historicalJob=jdbc.queryForMap("SELECT * FROM jobs");
+        // V41-V42 (cutover) y V45-V47 (INT-01, Wompi checkouts): el esquema que tenia develop
+        // antes de SAF-01 y de la bitacora de estados.
+        var develop = configuration.target("47").load();
+        assertThat(develop.migrate().migrationsExecuted).isEqualTo(5);
+        develop.validate();
+        assertThat(develop.info().applied()).hasSize(44);
+        // V48 (SAF-01, lector de conciliacion) y V49-V50 (bitacora de estados): tres versiones
+        // nuevas, ninguna por debajo de 47.
         var latest = configuration.target("latest").load();
-        assertThat(latest.migrate().migrationsExecuted).isEqualTo(4);
+        assertThat(latest.info().pending()).extracting(migration -> migration.getVersion().getVersion())
+                .containsExactly("48", "49", "50");
+        assertThat(latest.migrate().migrationsExecuted).isEqualTo(3);
         latest.validate();
-        assertThat(latest.info().applied()).hasSize(43);
+        assertThat(latest.info().applied()).hasSize(47);
+        assertThat(latest.info().pending()).isEmpty();
         assertThat(jdbc.queryForList("SELECT version, checksum FROM flyway_schema_history WHERE installed_rank <= 39 ORDER BY installed_rank")).isEqualTo(v40History);
         assertThat(jdbc.queryForMap("SELECT * FROM fixer_earnings")).isEqualTo(historicalEarning);
         assertThat(jdbc.queryForMap("SELECT * FROM payouts")).containsAllEntriesOf(historicalPayout).containsEntry("operation_key",null);
