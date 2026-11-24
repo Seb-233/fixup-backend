@@ -5,6 +5,8 @@ import com.fixup.identityaccess.api.UserStatus;
 import com.fixup.identityaccess.domain.IdentityProblem;
 import com.fixup.identityaccess.domain.UserAccount;
 import com.fixup.identityaccess.domain.UserAccounts;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Repository;
 import java.util.Collection;
@@ -15,6 +17,8 @@ import java.util.UUID;
 @Repository
 class JpaUserAccounts implements UserAccounts {
     private final UserJpaRepository repository;
+    @PersistenceContext
+    private EntityManager entityManager;
 
     JpaUserAccounts(UserJpaRepository repository) {
         this.repository = repository;
@@ -56,6 +60,19 @@ class JpaUserAccounts implements UserAccounts {
 
     @Override
     public UserAccount save(UserAccount user) {
-        return repository.saveAndFlush(UserEntity.from(user)).toDomain();
+        // RoleAssignments holds the user row lock. Add only missing roles, without merging the
+        // account or deleting/recreating its collection (which would require excessive privileges).
+        var current = repository.findById(user.id()).orElseThrow().toDomain();
+        for (var role : user.roles()) {
+            if (!current.roles().contains(role)) {
+                entityManager.createNativeQuery("INSERT INTO user_roles(user_id, role) VALUES (:id, :role)")
+                        .setParameter("id", user.id()).setParameter("role", role.name()).executeUpdate();
+            }
+        }
+        entityManager.createNativeQuery("UPDATE users SET updated_at = :updated WHERE id = :id")
+                .setParameter("updated", user.updatedAt()).setParameter("id", user.id()).executeUpdate();
+        var entity = repository.getReferenceById(user.id());
+        entityManager.refresh(entity);
+        return entity.toDomain();
     }
 }

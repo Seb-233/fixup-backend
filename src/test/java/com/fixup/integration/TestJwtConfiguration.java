@@ -20,6 +20,7 @@ import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 
 /** Ephemeral keys are generated in memory; no Auth0 credentials or private key fixtures. */
 @TestConfiguration(proxyBeanMethods = false)
+@org.springframework.context.annotation.Import(PostgresIdentityTestConfiguration.class)
 public class TestJwtConfiguration {
     static final String ISSUER = "https://issuer.example.test/";
     static final String AUDIENCE = "https://api.example.test";

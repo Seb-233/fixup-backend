@@ -30,7 +30,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @ActiveProfiles({"test", "demo"})
 @DirtiesContext
 @Testcontainers
-@Import(TestStorageConfiguration.class)
+@Import({TestStorageConfiguration.class, PostgresIdentityTestConfiguration.class})
 class DemoSecurityContextTest {
     @Container
     static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:17-alpine");
