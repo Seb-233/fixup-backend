@@ -7,6 +7,7 @@ import com.fixup.identityaccess.application.UserLookup;
 import com.fixup.shared.security.DatabaseActorContext;
 import java.util.stream.Collectors;
 import org.springframework.stereotype.Component;
+import org.springframework.security.access.AccessDeniedException;
 
 @Component
 class SecurityContextCurrentActorProvider implements CurrentActorProvider {
@@ -20,7 +21,15 @@ class SecurityContextCurrentActorProvider implements CurrentActorProvider {
 
     @Override
     public CurrentActor currentActor() {
-        var user = lookup.bySubject(identity.currentSubject());
+        var subject = identity.currentSubject();
+        var context = DatabaseActorContext.current();
+        // The interceptor resolved the identity before business transactions. Subsequent reads
+        // revalidate the account under actor RLS, without borrowing a second connection.
+        var user = context.isPresent() ? lookup.byId(context.get().userId()) : lookup.bySubject(subject);
+        if (!user.externalSubject().equals(subject)) {
+            DatabaseActorContext.clear();
+            throw new AccessDeniedException("Actor subject mismatch");
+        }
         var actor = new CurrentActor(user.id(), user.externalSubject(), user.roles(), user.status());
         // FR-UC-25: publish it so the transaction manager can activate Row-Level Security for the
         // transactions this request opens. Roles come straight from the database, never the token.

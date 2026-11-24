@@ -8,19 +8,21 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-@Transactional(readOnly = true)
 public class UserLookup {
     private final UserAccounts accounts;
+    private final IdentitySession session;
 
-    public UserLookup(UserAccounts accounts) {
+    public UserLookup(UserAccounts accounts, IdentitySession session) {
         this.accounts = accounts;
+        this.session = session;
     }
 
     public UserAccount bySubject(String subject) {
-        return active(accounts.findBySubject(subject)
-                .orElseThrow(() -> new IdentityProblem(IdentityProblem.Reason.USER_NOT_PROVISIONED)));
+        return session.read(subject, () -> active(accounts.findBySubject(subject)
+                .orElseThrow(() -> new IdentityProblem(IdentityProblem.Reason.USER_NOT_PROVISIONED))));
     }
 
+    @Transactional(readOnly = true)
     public UserAccount byId(UUID id) {
         return active(accounts.findById(id)
                 .orElseThrow(() -> new IdentityProblem(IdentityProblem.Reason.USER_NOT_PROVISIONED)));

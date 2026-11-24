@@ -46,13 +46,16 @@ final class DatabaseActorContextInterceptor implements HandlerInterceptor {
      */
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) {
+        DatabaseActorContext.clear();
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         if (auth instanceof JwtAuthenticationToken && auth.isAuthenticated()) {
-            // Resolving currentActor() as a side effect populates DatabaseActorContext; the returned
-            // value is discarded here because controllers will call it again through their own path.
-            // The second call is a no-op at the provider level: the context is already set, and
-            // UserLookup goes through the same transaction-less Spring Security machinery.
-            currentActorProvider.currentActor();
+            try {
+                currentActorProvider.currentActor();
+            } catch (RuntimeException failure) {
+                // MVC does not call afterCompletion when this interceptor's preHandle throws.
+                DatabaseActorContext.clear();
+                throw failure;
+            }
         }
         return true;
     }

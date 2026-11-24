@@ -38,7 +38,7 @@ class DemoUserBootstrapService implements DemoUserBootstrap {
                         "Demo Platform Admin")
         );
         for (DemoUserSpec spec : users) {
-            BootstrapResult result = registration.register(
+            BootstrapResult result = registration.registerInSession(
                     new ExternalIdentity(spec.subject(), spec.email(), spec.displayName()));
             if (result.created()) {
                 created++;
@@ -53,7 +53,7 @@ class DemoUserBootstrapService implements DemoUserBootstrap {
             }
         }
         int granted = 0;
-        BootstrapResult superOwner = registration.register(
+        BootstrapResult superOwner = registration.registerInSession(
                 new ExternalIdentity("auth0|demo-superuser", "demo-superuser@fixup.app",
                         "Demo Super-User (todos los roles)"));
         if (superOwner.created()) {

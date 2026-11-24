@@ -20,7 +20,7 @@ import static org.mockito.Mockito.*;
 class SelectInitialRoleTest {
     private final RoleAssignments assignments = mock(RoleAssignments.class);
     private final UserAccounts accounts = mock(UserAccounts.class);
-    private final UserLookup lookup = new UserLookup(accounts);
+    private final UserLookup lookup = new UserLookup(accounts, mock(IdentitySession.class));
     private final UUID userId = UUID.randomUUID();
     private final CurrentActor actor = new CurrentActor(userId, "auth0|roles", Set.of(), UserStatus.ACTIVE);
 
